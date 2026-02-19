@@ -999,12 +999,22 @@ elif command == "deploy":
 
 ### Image Build Strategy
 
-For Lambda container images, the deploy command:
+For Lambda container images, all steps share a single Docker image. The deploy command:
 
-1. Reads each step's Dockerfile from `lokki-build/lambdas/<step>/`
-2. Builds the image locally using `docker build`
-3. Tags with `<ecr_repo_prefix>/<step>:<image_tag>`
-4. Pushes to ECR using `docker push`
+1. Builds a single Docker image from `lokki-build/lambdas/Dockerfile`
+2. Tags with `<ecr_repo_prefix>/lokki:<image_tag>`
+3. Pushes to ECR using `docker push`
+4. Each Lambda function in CloudFormation references the same image URI
+
+**Handler Dispatch:**
+The shared Docker image contains a single handler that dispatches to the correct step function based on environment variables:
+- `LOKKI_STEP_NAME`: Name of the step function to invoke
+- `LOKKI_MODULE_NAME`: Python module name containing the flow (e.g., `birds_flow`)
+
+The handler imports the module dynamically and calls the appropriate step function. This allows a single image to serve all steps in a flow.
+
+**Dependencies:**
+The user's flow project must include `lokki` in its `pyproject.toml` dependencies. The Lambda image installs all dependencies from the user's `pyproject.toml` using `uv pip install`.
 
 This requires Docker to be installed and running on the developer's machine.
 

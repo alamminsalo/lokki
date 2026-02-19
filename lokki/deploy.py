@@ -104,37 +104,26 @@ class Deployer:
         if not lambdas_dir.exists():
             raise DeployError(f"Lambda directory not found: {lambdas_dir}")
 
-        step_dirs = sorted(lambdas_dir.iterdir())
-        total = len(step_dirs)
+        dockerfile_path = lambdas_dir / "Dockerfile"
+        if not dockerfile_path.exists():
+            raise DeployError(f"Dockerfile not found: {dockerfile_path}")
 
         is_local = not ecr_repo_prefix
 
         if is_local:
-            print(
-                f"Building {total} local Docker images (ECR prefix not configured)..."
-            )
+            image_name = "lokki"
+            image_uri = f"{image_name}:{self.image_tag}"
+            print(f"Building local Docker image: {image_uri}...")
+            self._build_image(lambdas_dir, image_uri)
+            print(f"Successfully built local image: {image_uri}")
         else:
             self._login_to_ecr()
-            print(f"Building and pushing {total} images to ECR...")
-
-        for i, step_dir in enumerate(step_dirs, 1):
-            step_name = step_dir.name
-            if is_local:
-                image_uri = f"{step_name}:{self.image_tag}"
-            else:
-                image_uri = f"{ecr_repo_prefix}/{step_name}:{self.image_tag}"
-
-            print(f"[{i}/{total}] Building {step_name}...")
-
-            self._build_image(step_dir, image_uri)
-
-            if not is_local:
-                self._push_image(image_uri)
-
-        if is_local:
-            print(f"Successfully built {total} local images")
-        else:
-            print(f"Successfully pushed {total} images to ECR")
+            image_name = "lokki"
+            image_uri = f"{ecr_repo_prefix}/{image_name}:{self.image_tag}"
+            print(f"Building and pushing shared Docker image: {image_uri}...")
+            self._build_image(lambdas_dir, image_uri)
+            self._push_image(image_uri)
+            print(f"Successfully pushed image: {image_uri}")
 
     def _login_to_ecr(self) -> None:
         try:

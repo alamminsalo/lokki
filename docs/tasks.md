@@ -198,14 +198,17 @@ _Depends on: M5_
 
 _Depends on: M3, M2_
 
-**T8.1** Implement `generate_lambda_dir(step_node, graph, config, build_dir)`:
-- Creates `<build_dir>/lambdas/<step_name>/` directory
-- Writes the `Dockerfile` (multi-stage, using AWS Lambda Python base image, installing deps from `pyproject.toml` via `uv`, copying `lokki/` source and the generated `handler.py`)
-- Writes the auto-generated `handler.py` that imports the user's step function and binds it to `make_handler`
+**T8.1** Implement `generate_shared_lambda_files(graph, config, build_dir)`:
+- Creates `<build_dir>/lambdas/` directory (shared, not per-step)
+- Writes the shared `Dockerfile` (multi-stage, using AWS Lambda Python base image, installing deps from user's `pyproject.toml` via `uv`, copying the generated `handler.py`)
+- Writes the auto-generated `handler.py` that dynamically imports the step function based on `LOKKI_STEP_NAME` and `LOKKI_MODULE_NAME` environment variables
 
-**T8.2** Implement Dockerfile template as a string constant or Jinja2-style template, parameterised on the Python base image tag from `lambda.image_tag`.
+**T8.2** Implement shared Dockerfile template:
+- Single template for all steps (not per-step)
+- Parameterised on the Python base image tag from `lambda.image_tag`
+- Installs dependencies from user's `pyproject.toml` (which must include `lokki`)
 
-**T8.3** Write tests asserting the generated `Dockerfile` contains the expected `FROM`, `COPY`, `RUN uv pip install`, and `CMD` lines; and that `handler.py` imports the correct function name.
+**T8.3** Write tests asserting the generated `Dockerfile` contains the expected `FROM`, `COPY`, `RUN uv pip install`, and `CMD` lines; and that `handler.py` reads `LOKKI_STEP_NAME` and `LOKKI_MODULE_NAME` env vars.
 
 ---
 
@@ -334,10 +337,16 @@ _Depends on: M11, M12_
 - `_deploy_stack(config)` - deploy CloudFormation stack
 
 **T14.2** Implement Docker image build and push:
-- For each step in `lokki-build/lambdas/<step>/`, run `docker build`
-- Tag images with `<ecr_repo_prefix>/<step>:<image_tag>`
+- Build a single shared Docker image from `lokki-build/lambdas/Dockerfile`
+- Tag image with `<ecr_repo_prefix>/lokki:<image_tag>`
 - Push to ECR using `docker push`
 - Handle Docker not installed error gracefully
+
+**T14.2a** Update CloudFormation to use shared image with env vars:
+- Each Lambda function references the same Docker image URI
+- Use `PackageType: Image` with `ImageUri` pointing to shared image (`lokki:<image_tag>`)
+- Pass `LOKKI_STEP_NAME` and `LOKKI_MODULE_NAME` environment variables per function
+- Handler dispatches to correct step based on these env vars
 
 **T14.2b** Support empty `ecr_repo_prefix` for local testing:
 - When `aws.ecr_repo_prefix` is empty, skip ECR push entirely

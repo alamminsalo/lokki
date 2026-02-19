@@ -6,11 +6,10 @@ import json
 from pathlib import Path
 
 from lokki.builder.cloudformation import build_template
-from lokki.builder.lambda_pkg import generate_lambda_dir
+from lokki.builder.lambda_pkg import generate_shared_lambda_files
 from lokki.builder.state_machine import build_state_machine
 from lokki.config import LokkiConfig
-from lokki.decorators import StepNode
-from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+from lokki.graph import FlowGraph
 
 
 class Builder:
@@ -23,25 +22,7 @@ class Builder:
         lambdas_dir = build_dir / "lambdas"
         lambdas_dir.mkdir(parents=True, exist_ok=True)
 
-        step_names_generated: set[str] = set()
-
-        for entry in graph.entries:
-            if isinstance(entry, TaskEntry):
-                _generate_lambda(
-                    entry.node, graph, config, build_dir, step_names_generated
-                )
-            elif isinstance(entry, MapOpenEntry):
-                _generate_lambda(
-                    entry.source, graph, config, build_dir, step_names_generated
-                )
-                for step in entry.inner_steps:
-                    _generate_lambda(
-                        step, graph, config, build_dir, step_names_generated
-                    )
-            elif isinstance(entry, MapCloseEntry):
-                _generate_lambda(
-                    entry.agg_step, graph, config, build_dir, step_names_generated
-                )
+        generate_shared_lambda_files(graph, config, build_dir)
 
         state_machine = build_state_machine(graph, config)
         state_machine_path = build_dir / "statemachine.json"
@@ -55,17 +36,3 @@ class Builder:
         print(f"  - Lambda packages: {lambdas_dir}")
         print(f"  - State machine: {state_machine_path}")
         print(f"  - CloudFormation template: {template_path}")
-
-
-def _generate_lambda(
-    step_node: StepNode,
-    graph: FlowGraph,
-    config: LokkiConfig,
-    build_dir: Path,
-    step_names_generated: set[str],
-) -> None:
-    """Generate Lambda package if not already generated."""
-    step_name = step_node.name
-    if step_name not in step_names_generated:
-        step_names_generated.add(step_name)
-        generate_lambda_dir(step_node, graph, config, build_dir)

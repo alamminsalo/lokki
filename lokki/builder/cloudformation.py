@@ -62,29 +62,31 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
         },
     }
 
+    module_name = _get_module_name(graph)
+
     step_names = _get_step_names(graph)
     for step_name in step_names:
+        env_vars = {
+            "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
+            "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
+            "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
+            "LOKKI_STEP_NAME": step_name,
+            "LOKKI_MODULE_NAME": module_name,
+        }
+        env_vars.update(config.lambda_cfg.env)
+
         resources[_to_pascal(step_name) + "Function"] = {
             "Type": "AWS::Lambda::Function",
             "Properties": {
                 "FunctionName": "{{Param:FlowName}}-" + step_name,
                 "PackageType": "Image",
                 "Code": {
-                    "ImageUri": "{{Param:ECRRepoPrefix}}/"
-                    + step_name
-                    + ":{{Param:ImageTag}}"
+                    "ImageUri": "{{Param:ECRRepoPrefix}}/lokki:{{Param:ImageTag}}"
                 },
                 "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
                 "Timeout": config.lambda_cfg.timeout,
                 "MemorySize": config.lambda_cfg.memory,
-                "Environment": {
-                    "Variables": {
-                        "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
-                        "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
-                        "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
-                        **config.lambda_cfg.env,
-                    }
-                },
+                "Environment": {"Variables": env_vars},
             },
         }
 
@@ -164,3 +166,8 @@ def _get_step_names(graph: FlowGraph) -> set[str]:
 def _to_pascal(name: str) -> str:
     """Convert snake_case to PascalCase."""
     return "".join(word.capitalize() for word in name.split("_"))
+
+
+def _get_module_name(graph: FlowGraph) -> str:
+    """Get the module name from the flow graph name."""
+    return f"{graph.name.replace('-', '_')}_flow"
