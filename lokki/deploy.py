@@ -209,6 +209,11 @@ class Deployer:
                 )["Stacks"][0]
             except self.cf_client.exceptions.StackNotFoundException:
                 pass
+            except self.cf_client.exceptions.ClientError as e:
+                if "does not exist" in str(e):
+                    pass
+                else:
+                    raise
 
             if existing_stack:
                 print(f"Updating stack '{self.stack_name}'...")

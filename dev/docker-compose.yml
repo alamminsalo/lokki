@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: lokki-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam
+      - DEBUG=1
+      - DEFAULT_REGION=us-east-1
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pypiserver:
+    image: pypiserver/pypiserver:latest
+    container_name: lokki-pypiserver
+    ports:
+      - "8080:8080"
+    volumes:
+      - pypi_packages:/data/packages
+    command: run -p 8080 -P . -a . /data/packages
+
+volumes:
+  localstack_data:
+  pypi_packages:
