@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -10,7 +11,7 @@ GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.yml"
 LOCAL_CONFIG_PATH = Path.cwd() / "lokki.yml"
 
 
-def _load_yaml(path: Path) -> dict:
+def _load_yaml(path: Path) -> dict[str, Any]:
     """Load a YAML file, returning empty dict if not found."""
     if path.exists():
         with path.open() as f:
@@ -18,8 +19,11 @@ def _load_yaml(path: Path) -> dict:
     return {}
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
-    """Merge override into base. Lists and scalars are replaced; dicts are merged recursively."""
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge override into base.
+
+    Lists and scalars are replaced; dicts are merged recursively.
+    """
     result = base.copy()
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
@@ -53,12 +57,13 @@ class LokkiConfig:
     artifact_bucket: str = ""
     ecr_repo_prefix: str = ""
     build_dir: str = "lokki-build"
+    flow_name: str = ""
     roles: RolesConfig = field(default_factory=RolesConfig)
     lambda_env: dict[str, str] = field(default_factory=dict)
     lambda_defaults: LambdaDefaultsConfig = field(default_factory=LambdaDefaultsConfig)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "LokkiConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "LokkiConfig":
         """Create a LokkiConfig from a dictionary."""
         roles = RolesConfig(
             pipeline=d.get("roles", {}).get("pipeline", ""),
@@ -73,6 +78,7 @@ class LokkiConfig:
             artifact_bucket=d.get("artifact_bucket", ""),
             ecr_repo_prefix=d.get("ecr_repo_prefix", ""),
             build_dir=d.get("build_dir", "lokki-build"),
+            flow_name=d.get("flow_name", ""),
             roles=roles,
             lambda_env=d.get("lambda_env", {}),
             lambda_defaults=lambda_defaults,
@@ -80,7 +86,10 @@ class LokkiConfig:
 
 
 def load_config() -> LokkiConfig:
-    """Load and merge configuration from global and local YAML files with env overrides."""
+    """Load and merge configuration from global and local YAML files.
+
+    Applies environment variable overrides.
+    """
     global_cfg = _load_yaml(GLOBAL_CONFIG_PATH)
     local_cfg = _load_yaml(LOCAL_CONFIG_PATH)
     merged = _deep_merge(global_cfg, local_cfg)

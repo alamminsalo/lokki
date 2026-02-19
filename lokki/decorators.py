@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from lokki.graph import FlowGraph
@@ -11,16 +12,16 @@ if TYPE_CHECKING:
 class StepNode:
     """Represents a single step in the pipeline."""
 
-    def __init__(self, fn: Callable) -> None:
+    def __init__(self, fn: Callable[..., Any]) -> None:
         self.fn = fn
         self.name = fn.__name__
-        self._default_args: tuple = ()
-        self._default_kwargs: dict = {}
+        self._default_args: tuple[Any, ...] = ()
+        self._default_kwargs: dict[str, Any] = {}
         self._next: StepNode | None = None
         self._map_block: MapBlock | None = None
         self._closes_map_block: bool = False
 
-    def __call__(self, *args, **kwargs) -> StepNode:
+    def __call__(self, *args: Any, **kwargs: Any) -> StepNode:
         """Record default args and return self for chaining."""
         self._default_args = args
         self._default_kwargs = kwargs
@@ -48,6 +49,18 @@ class MapBlock:
         self.inner_tail = inner_head
         self._next: StepNode | None = None
 
+    @property
+    def inner_steps(self) -> list[StepNode]:
+        """Get all inner steps as a list."""
+        steps = []
+        current: StepNode | None = self.inner_head
+        while current is not None:
+            steps.append(current)
+            if current is self.inner_tail:
+                break
+            current = current._next
+        return steps
+
     def map(self, step_node: StepNode) -> MapBlock:
         """Add another step to the inner chain of the Map block."""
         self.inner_tail._next = step_node
@@ -62,18 +75,32 @@ class MapBlock:
         return step_node
 
 
-def step(fn: Callable) -> StepNode:
+def step(fn: Callable[..., Any]) -> StepNode:
     """Decorate a function as a pipeline step."""
     return StepNode(fn)
 
 
-def flow(fn: Callable) -> Callable[..., FlowGraph]:
+def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
     """Decorate a function as a pipeline flow."""
 
-    def wrapper(*args, **kwargs) -> FlowGraph:
+    def wrapper(*args: Any, **kwargs: Any) -> FlowGraph:
         from lokki.graph import FlowGraph
 
         head = fn(*args, **kwargs)
+
+        if head is None:
+            raise ValueError(
+                f"@flow function '{fn.__name__}' returned None. "
+                "Did you forget to return the chain? "
+                "Example: return step1().map(step2)"
+            )
+
+        if not isinstance(head, (StepNode, MapBlock)):
+            raise ValueError(
+                f"@flow function '{fn.__name__}' must return a step chain "
+                "(e.g., step1().map(step2)), but returned {type(head).__name__}"
+            )
+
         return FlowGraph(name=fn.__name__.replace("_", "-").lower(), head=head)
 
     wrapper._is_flow = True  # type: ignore[attr-defined]

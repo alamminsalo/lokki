@@ -1,6 +1,5 @@
 """Unit tests for lokki public API exports."""
 
-import pytest
 
 from lokki.decorators import StepNode
 from lokki.graph import FlowGraph

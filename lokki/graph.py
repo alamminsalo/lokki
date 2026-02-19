@@ -112,8 +112,8 @@ class FlowGraph:
 
     def _resolve_map_block(self, block: MapBlock) -> None:
         """Resolve a MapBlock into MapOpenEntry and MapCloseEntry."""
-        inner_steps = []
-        step = block.inner_head
+        inner_steps: list[StepNode] = []
+        step: StepNode | None = block.inner_head
         while step is not None:
             inner_steps.append(step)
             if step is block.inner_tail:

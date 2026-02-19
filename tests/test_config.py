@@ -1,14 +1,11 @@
 """Unit tests for lokki configuration module."""
 
-import os
 from pathlib import Path
 
 import pytest
 import yaml
 
 from lokki.config import (
-    GLOBAL_CONFIG_PATH,
-    LOCAL_CONFIG_PATH,
     LambdaDefaultsConfig,
     LokkiConfig,
     RolesConfig,
