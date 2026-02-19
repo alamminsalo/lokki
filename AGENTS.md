@@ -121,6 +121,39 @@ lambda_defaults:
 - Prefer composition over inheritance
 - Test locally with `python flow_script.py run` before building
 
+### Mandatory Unit Testing
+
+**For each task completed, you MUST:**
+
+1. Create a unit test file in `tests/` directory (e.g., `tests/test_config.py`, `tests/test_decorators.py`)
+2. Write comprehensive tests covering:
+   - Normal/expected behavior
+   - Edge cases and error conditions
+   - All public functions and classes
+3. Run the tests immediately after writing:
+   ```bash
+   uv run pytest tests/test_<module>.py -v
+   ```
+4. Ensure all tests pass before marking a task complete
+5. If tests fail, fix the code or tests until they pass
+
+**Test file naming convention:** `tests/test_<module>.py`
+
+**Run commands:**
+```bash
+# Run all tests
+uv run pytest
+
+# Run single test file
+uv run pytest tests/test_config.py -v
+
+# Run specific test function
+uv run pytest tests/test_config.py::test_deep_merge -v
+
+# Run with coverage
+uv run pytest --cov=lokki
+```
+
 ## Repository Structure
 
 ```
