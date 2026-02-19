@@ -48,6 +48,71 @@ def birds_flow():
     return get_birds().map(flap_bird).agg(join_birds)
 ```
 
+### Simple Chaining with `.next()`
+
+In addition to `.map()` and `.agg()`, steps can be chained sequentially using `.next()`:
+
+```python
+@step
+def get_data() -> list[int]:
+    return [1, 2, 3]
+
+@step
+def process(items: list[int]) -> int:
+    return sum([item * 2 for item in items])
+
+@step
+def save(result: int) -> str:
+    return f"Result: {result}"
+
+@flow
+def linear_flow():
+    # Simple sequential chain: A → B → C
+    return get_data().next(process).next(save)
+```
+
+**Behavior:**
+- `.next(step)` chains a step after the current one without parallelism
+- The output of the previous step becomes the input to the next step
+- This is equivalent to a simple linear pipeline without map/aggregation
+- Multiple `.next()` calls create a linear chain: `A.next(B).next(C)` → A → B → C
+- Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section until `.agg(step)` is called:
+
+```python
+@step
+def get_data() -> list[int]:
+    return [1, 2, 3]
+
+@step
+def mult_item(item: int) -> int:
+    return item * 2
+
+@step
+def pow_item(item: int) -> int:
+    return item ** item
+
+@step
+def collect(result: list[int]) -> str:
+    sum = sum(result)
+    return f"Sum: {sum}"
+
+@flow
+def complex_flow():
+    # Chain A -> Map(B -> C) -> Agg(D)
+    return get_data().map(mult_item).next(pow_item).agg(collect)
+```
+- The flow must raise an exception if the flow ends with an open Map block.
+- Nested .map() calls is not supported and should raise an exception.
+
+
+**Comparison:**
+
+| Method | Input | Output | Use Case |
+|--------|-------|--------|------------|
+| `.map(step)` | list | list (per-item) | Parallel processing |
+| `.agg(step)` | list | single value | Aggregation |
+| `.next(step)` | any | any | Sequential/linear chain |
+
 ---
 
 ## CLI Interface
