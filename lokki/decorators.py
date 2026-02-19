@@ -18,6 +18,7 @@ class StepNode:
         self._default_args: tuple[Any, ...] = ()
         self._default_kwargs: dict[str, Any] = {}
         self._next: StepNode | None = None
+        self._prev: StepNode | None = None
         self._map_block: MapBlock | None = None
         self._closes_map_block: bool = False
 
@@ -32,6 +33,12 @@ class StepNode:
         block = MapBlock(source=self, inner_head=step_node)
         self._map_block = block
         return block
+
+    def next(self, step_node: StepNode) -> StepNode:
+        """Chain a step after the current one sequentially."""
+        step_node._prev = self
+        self._next = step_node
+        return step_node
 
     def agg(self, step_node: StepNode) -> StepNode:
         """Raises TypeError - agg() must be called on MapBlock."""
@@ -63,6 +70,14 @@ class MapBlock:
 
     def map(self, step_node: StepNode) -> MapBlock:
         """Add another step to the inner chain of the Map block."""
+        step_node._prev = self.inner_tail
+        self.inner_tail._next = step_node
+        self.inner_tail = step_node
+        return self
+
+    def next(self, step_node: StepNode) -> MapBlock:
+        """Add a step to the inner chain of the Map block (before agg)."""
+        step_node._prev = self.inner_tail
         self.inner_tail._next = step_node
         self.inner_tail = step_node
         return self

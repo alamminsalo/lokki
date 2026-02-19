@@ -282,6 +282,45 @@ lokki/
 
 ---
 
+## New Feature — .next() Chaining
+
+Implemented sequential chaining with `.next()` method:
+
+### T3.7 — `.next()` on StepNode ✅
+- Added `next(step_node)` method to `StepNode` class
+- Chains a step after the current one sequentially
+- Sets `_prev` pointer for proper data flow
+
+### T3.8 — `.next()` on MapBlock ✅
+- Added `next(step_node)` method to `MapBlock` class
+- Appends step to inner chain (before `.agg()`)
+
+### T3.9 — FlowGraph resolution for sequential chaining ✅
+- Updated `_resolve()` to follow `_next` pointers
+- Linear chain `A.next(B).next(C)` produces: TaskEntry(A), TaskEntry(B), TaskEntry(C)
+
+### T3.10 — Error handling ✅
+- Flow ending with open Map block raises `ValueError`
+- Nested `.map()` calls detected and raise `ValueError`
+
+### T3.11 — Unit tests ✅
+- Added tests for linear chaining, chaining after `.map()`, error conditions
+
+### T3.12 — LocalRunner for multiple inner Map steps ✅
+- Updated `_run_map()` to run sequential steps inside Map
+- Each step's output becomes input to next step in chain
+
+### T3.13 — State machine generation for `.next()` in Map ✅
+- Updated `_map_state()` to generate nested state machine
+- Inner chain B → C gets proper `Next` pointers
+
+### Test Results
+- **Total tests:** 83
+- **All tests pass**
+- **Linting:** All checks pass
+
+---
+
 ## Test Results
 
 - **Total tests:** 61
