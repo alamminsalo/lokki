@@ -213,3 +213,50 @@ _Depends on: M8, M9, M10_
 **T12.4** Add a `--help` flag to the CLI that prints available commands and a short description.
 
 **T12.5** Write a `README.md` covering: installation, quickstart with the birds example, `lokki.yml` configuration reference, `build` and `run` commands, and deploying the CloudFormation stack.
+
+---
+
+## Milestone 13 — Logging & Observability
+
+_Depends on: M2, M6_
+
+**T13.1** Implement `LoggingConfig` dataclass in `config.py`:
+- `level`: str = "INFO" (DEBUG, INFO, WARNING, ERROR)
+- `format`: str = "human" (human or json)
+- `progress_interval`: int = 10
+- `show_timestamps`: bool = True
+
+Add environment variable override: `LOKKI_LOG_LEVEL`.
+
+**T13.2** Implement `lokki/logging.py`:
+- `get_logger(name, config)` factory function
+- `StepLogger` class with `start()`, `complete(duration)`, `fail(duration, error)` methods
+- `MapProgressLogger` class with `start(total_items)`, `update(status)`, `complete()` methods
+- `HumanFormatter` and `JsonFormatter` classes
+
+**T13.3** Implement human-readable formatter:
+- Step start: `[INFO] Step 'step_name' started at 2024-01-15T10:30:00`
+- Step complete: `[INFO] Step 'step_name' completed in 2.345s (status=success)`
+- Step fail: `[ERROR] Step 'step_name' failed after 1.234s: ValueError: invalid input`
+- Progress bar: `[=====>                    ] 30/100 (30%) completed`
+
+**T13.4** Implement JSON formatter:
+- Each log line is a JSON object with: level, ts, event, step, duration, status, message
+- Example: `{"level": "INFO", "ts": "2024-01-15T10:30:00.123Z", "event": "step_start", "step": "get_data"}`
+
+**T13.5** Integrate logging into `LocalRunner`:
+- Wrap `_run_task()` with step start/complete/fail logging
+- Wrap `_run_map()` with map progress tracking
+- Wrap `_run_agg()` with step logging
+
+**T13.6** Write unit tests for logging module:
+- Test `StepLogger` output formats
+- Test `MapProgressLogger` progress updates
+- Test JSON formatter output
+- Test configuration loading from lokki.yml
+
+**T13.7** Integrate logging into Lambda runtime handler:
+- Log function invocation
+- Log input processing
+- Log execution duration
+- Log errors with stack traces

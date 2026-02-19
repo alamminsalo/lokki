@@ -106,6 +106,96 @@ Running `python flow_script.py run` executes the full pipeline locally:
 
 ---
 
+## Logging & Observability
+
+### Overview
+
+The lokki library provides structured logging to help developers track pipeline execution. Logging is designed to be human-readable by default (suitable for development/CLI use) with optional structured JSON output for production environments.
+
+### Log Levels
+
+| Level | When Used |
+|-------|-----------|
+| `DEBUG` | Detailed execution information (disabled by default) |
+| `INFO` | Step start/completion, map progress updates |
+| `WARNING` | Non-fatal issues (e.g., retry warnings) |
+| `ERROR` | Step failures, exceptions |
+
+The default log level is `INFO`. It can be configured via:
+- Environment variable: `LOKKI_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR)
+- Config file: `lokki.yml` under `logging.level`
+
+### Step Execution Logging
+
+For each step, lokki logs:
+
+1. **Step Start**
+   ```
+   [INFO] Step 'step_name' started at 2024-01-15T10:30:00
+   ```
+
+2. **Step Completion**
+   ```
+   [INFO] Step 'step_name' completed in 2.345s (status=success)
+   ```
+   
+   Or on failure:
+   ```
+   [ERROR] Step 'step_name' failed after 1.234s: ValueError: invalid input
+   ```
+
+### Map Task Progress
+
+For `.map()` blocks, detailed progress is logged showing individual item status:
+
+```
+[INFO] Map 'process_items' started (100 items)
+[INFO]   [=====>                    ] 30/100 (30%) completed
+[INFO]   [=============>             ] 60/100 (60%) completed
+[INFO]   [=========================>] 100/100 (100%) completed
+[INFO] Map 'process_items' completed in 4.567s
+```
+
+Individual item statuses:
+- `pending` — queued for execution
+- `running` — currently being processed
+- `completed` — finished successfully
+- `failed` — raised an exception
+
+Progress updates occur at configurable intervals (default: every 10% or every 10 items, whichever is more frequent).
+
+### Configuration Options
+
+```yaml
+# lokki.yml
+logging:
+  level: INFO              # DEBUG, INFO, WARNING, ERROR
+  format: human           # "human" (default) or "json"
+  progress_interval: 10    # Update every N items or 10% (whichever is smaller)
+  show_timestamps: true   # Include ISO timestamps in log output
+```
+
+### JSON Structured Logging
+
+When `format: json` is set, each log line is a JSON object:
+
+```json
+{"level": "INFO", "ts": "2024-01-15T10:30:00.123Z", "event": "step_start", "step": "get_data", "run_id": "abc123"}
+{"level": "INFO", "ts": "2024-01-15T10:30:02.456Z", "event": "step_complete", "step": "get_data", "duration": 2.333, "status": "success"}
+{"level": "INFO", "ts": "2024-01-15T10:30:02.789Z", "event": "map_progress", "step": "process", "total": 100, "completed": 50, "failed": 0}
+```
+
+### Runtime Handler Logging
+
+In AWS Lambda, logs are emitted to CloudWatch. The handler logs:
+- Function invocation (cold start, warm)
+- Input URL processing
+- Step execution duration
+- Output upload confirmation
+- Any errors with stack traces
+
+---
+
 ## Data & S3 Abstraction
 
 - All inter-step data is serialised using **gzip-compressed pickle** and stored in S3 under a structured key prefix (e.g. `s3://<bucket>/lokki/<run_id>/<step_name>/output.pkl.gz`).
@@ -152,6 +242,13 @@ lambda_defaults:
   timeout: 900          # seconds
   memory: 512           # MB
   image_tag: latest
+
+# Logging configuration
+logging:
+  level: INFO           # DEBUG, INFO, WARNING, ERROR
+  format: human        # "human" or "json"
+  progress_interval: 10  # Update every N items or 10% (whichever is smaller)
+  show_timestamps: true # Include ISO timestamps in log output
 ```
 
 **Merge behaviour**: when both files are present, they are deep-merged. Any field present in the local `lokki.yml` overrides the corresponding field in the global file. Fields absent from the local file inherit the global value. List values (e.g. under `lambda_env`) are replaced entirely by the local file, not concatenated.

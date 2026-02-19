@@ -16,6 +16,7 @@
 12. [Runtime Wrapper (Lambda Handler)](#12-runtime-wrapper-lambda-handler)
 13. [Configuration](#13-configuration)
 14. [Data Flow Walkthrough](#14-data-flow-walkthrough)
+15. [Logging & Observability](#15-logging--observability)
 
 ---
 
@@ -649,4 +650,170 @@ StepFunctions execution starts
 │
 StepFunctions execution completes
 Final output: { "result_url": "s3://bucket/lokki/birds_flow/<run_id>/join_birds/output.pkl.gz" }
+```
+
+---
+
+## 15. Logging & Observability
+
+### Design Goals
+
+- **Human-readable by default** — useful for local development and CLI
+- **Optional structured JSON** — for production log aggregation
+- **Minimal overhead** — logging should not significantly impact execution time
+- **Consistent format** — predictable log structure across all components
+
+### Logger Module
+
+`lokki/logging.py` provides the logging infrastructure:
+
+```python
+# lokki/logging.py (simplified)
+
+import logging
+import sys
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any
+
+class LogFormat(Enum):
+    HUMAN = "human"
+    JSON = "json"
+
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    format: LogFormat = LogFormat.HUMAN
+    progress_interval: int = 10
+    show_timestamps: bool = True
+
+def get_logger(name: str, config: LoggingConfig) -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(getattr(logging, config.level))
+    
+    handler = logging.StreamHandler(sys.stdout)
+    if config.format == LogFormat.JSON:
+        handler.setFormatter(JsonFormatter(config))
+    else:
+        handler.setFormatter(HumanFormatter(config))
+    
+    logger.addHandler(handler)
+    return logger
+```
+
+### Step Lifecycle Events
+
+The local runner logs step execution events:
+
+```
+[INFO] Step 'get_birds' started at 2024-01-15T10:30:00
+[INFO] Step 'get_birds' completed in 0.123s (status=success)
+[ERROR] Step 'process_data' failed after 2.456s: ValueError: invalid input
+```
+
+### Map Progress Tracking
+
+For `.map()` blocks, progress is tracked per item:
+
+```python
+class MapProgressLogger:
+    def __init__(self, step_name: str, total_items: int, config: LoggingConfig):
+        self.step_name = step_name
+        self.total_items = total_items
+        self.completed = 0
+        self.failed = 0
+        self._last_pct = -1
+    
+    def update(self, status: str):
+        """Call when an item completes: status = 'completed' or 'failed'"""
+        if status == "completed":
+            self.completed += 1
+        elif status == "failed":
+            self.failed += 1
+        
+        pct = int(100 * self.completed / self.total_items)
+        if pct >= self._last_pct + 10:
+            self._last_pct = pct
+            self._log_progress()
+    
+    def _log_progress(self):
+        bar_len = 20
+        filled = int(bar_len * self.completed / self.total_items)
+        bar = "=" * filled + ">" + " " * (bar_len - filled)
+        logger.info(f"  [{bar}] {self.completed}/{self.total_items} ({pct}%)")
+```
+
+Output:
+```
+[INFO] Map 'process_items' started (100 items)
+[INFO]   [=====>                    ] 30/100 (30%)
+[INFO]   [=============>             ] 60/100 (60%)
+[INFO]   [=========================>] 100/100 (100%)
+[INFO] Map 'process_items' completed in 4.567s
+```
+
+### JSON Structured Logging
+
+When `format: json` is configured, each log line is a JSON object:
+
+```python
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        return json.dumps({
+            "level": record.levelname,
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "event": getattr(record, "event", "log"),
+            "step": getattr(record, "step", ""),
+            "duration": getattr(record, "duration", None),
+            "status": getattr(record, "status", ""),
+            "message": record.getMessage(),
+        })
+```
+
+Example output:
+```json
+{"level": "INFO", "ts": "2024-01-15T10:30:00.123Z", "event": "step_start", "step": "get_data", "run_id": "abc123"}
+{"level": "INFO", "ts": "2024-01-15T10:30:02.456Z", "event": "step_complete", "step": "get_data", "duration": 2.333, "status": "success"}
+{"level": "INFO", "ts": "2024-01-15T10:30:02.789Z", "event": "map_progress", "step": "process", "total": 100, "completed": 50, "failed": 0}
+```
+
+### Configuration Integration
+
+Logging configuration is added to the existing config system:
+
+```python
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    format: str = "human"  # "human" or "json"
+    progress_interval: int = 10
+    show_timestamps: bool = True
+
+@dataclass
+class LokkiConfig:
+    # ... existing fields ...
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+```
+
+Environment variable override: `LOKKI_LOG_LEVEL`
+
+### Integration Points
+
+1. **LocalRunner** — wraps `_run_task()`, `_run_map()`, `_run_agg()` with logging
+2. **Runtime Handler** — logs Lambda invocation, input processing, duration, errors
+3. **Builder** — optional build progress logging (less critical)
+
+### Thread Safety
+
+The `MapProgressLogger` uses simple counters which are thread-safe in Python due to the GIL. For more complex scenarios, a `threading.Lock` can be used.
+
+### CloudWatch Integration
+
+In Lambda, logs automatically go to CloudWatch. The JSON format is particularly useful for CloudWatch Logs Insights queries:
+
+```sql
+fields @timestamp, event, step, duration
+| filter level = 'ERROR'
+| sort @timestamp desc
 ```
