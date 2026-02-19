@@ -39,14 +39,20 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             source_name = _to_pascal(entry.source.name)
             inner_states = {}
 
-            for _i, step_node in enumerate(entry.inner_steps):
+            step_names = [_to_pascal(step_node.name) for step_node in entry.inner_steps]
+
+            for i, step_node in enumerate(entry.inner_steps):
                 step_name = _to_pascal(step_node.name)
                 inner_states[step_name] = {
                     "Type": "Task",
                     "Resource": _lambda_arn(config, step_node.name, graph.name),
                     "ResultPath": "$.result",
-                    "End": True,
                 }
+
+                if i < len(entry.inner_steps) - 1:
+                    inner_states[step_name]["Next"] = step_names[i + 1]
+                else:
+                    inner_states[step_name]["End"] = True  # type: ignore[assignment]
 
             map_state = {
                 "Type": "Map",

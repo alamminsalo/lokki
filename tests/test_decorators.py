@@ -78,6 +78,45 @@ class TestStepNode:
 
         assert ".agg() must be called on the result of .map()" in str(exc_info.value)
 
+    def test_step_node_next_chains_sequentially(self) -> None:
+        """Test that .next() chains a step sequentially."""
+
+        @step
+        def first() -> str:
+            return "a"
+
+        @step
+        def second(x: str) -> str:
+            return x + "b"
+
+        result = first.next(second)
+
+        assert isinstance(result, StepNode)
+        assert result is second
+        assert first._next is second
+
+    def test_step_node_next_allows_further_chaining(self) -> None:
+        """Test that .next() returns StepNode allowing further chaining."""
+
+        @step
+        def first() -> str:
+            return "a"
+
+        @step
+        def second(x: str) -> str:
+            return x + "b"
+
+        @step
+        def third(x: str) -> str:
+            return x + "c"
+
+        chain = first.next(second).next(third)
+
+        assert isinstance(chain, StepNode)
+        assert chain is third
+        assert first._next is second
+        assert second._next is third
+
 
 class TestMapBlock:
     """Tests for MapBlock class."""
@@ -166,6 +205,51 @@ class TestMapBlock:
 
         assert isinstance(result_node, StepNode)
         assert result_node is agg
+
+    def test_map_block_next_adds_to_inner_chain(self) -> None:
+        """Test that .next() adds a step to the inner chain."""
+
+        @step
+        def source() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def step1(item: str) -> str:
+            return item.upper()
+
+        @step
+        def step2(item: str) -> str:
+            return item + "!"
+
+        block = source.map(step1).next(step2)
+
+        assert isinstance(block, MapBlock)
+        assert step1._next is step2
+
+    def test_map_block_next_multiple_steps(self) -> None:
+        """Test chaining multiple steps via .next() inside Map block."""
+
+        @step
+        def source() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def step1(item: str) -> str:
+            return item.upper()
+
+        @step
+        def step2(item: str) -> str:
+            return item + "1"
+
+        @step
+        def step3(item: str) -> str:
+            return item + "2"
+
+        chain = source.map(step1).next(step2).next(step3)
+
+        assert isinstance(chain, MapBlock)
+        assert step1._next is step2
+        assert step2._next is step3
 
 
 class TestFlowDecorator:
@@ -333,10 +417,89 @@ class TestFlowGraph:
         def second(item: str) -> str:
             return item.upper()
 
+        @step
+        def agg(items: list[str]) -> str:
+            return ", ".join(items)
+
         @flow
         def flow_with_map_head():
-            return first().map(second)
+            return first().map(second).agg(agg)
 
         graph = flow_with_map_head()
 
         assert len(graph.entries) >= 1
+
+    def test_flow_graph_linear_chain_with_next(self) -> None:
+        """Test FlowGraph with .next() linear chaining."""
+
+        @step
+        def first() -> str:
+            return "a"
+
+        @step
+        def second(x: str) -> str:
+            return x + "b"
+
+        @step
+        def third(x: str) -> str:
+            return x + "c"
+
+        @flow
+        def linear_flow():
+            return first().next(second).next(third)
+
+        graph = linear_flow()
+
+        assert len(graph.entries) == 3
+        assert isinstance(graph.entries[0], TaskEntry)
+        assert graph.entries[0].node.name == "first"
+        assert isinstance(graph.entries[1], TaskEntry)
+        assert graph.entries[1].node.name == "second"
+        assert isinstance(graph.entries[2], TaskEntry)
+        assert graph.entries[2].node.name == "third"
+
+    def test_flow_graph_open_map_block_raises(self) -> None:
+        """Test that flow ending with open Map block raises ValueError."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def process(item: str) -> str:
+            return item.upper()
+
+        @flow
+        def open_map_flow():
+            return get_items().map(process)
+
+        with pytest.raises(ValueError) as exc_info:
+            open_map_flow()
+
+        assert "open Map block" in str(exc_info.value)
+
+    def test_flow_graph_nested_map_raises(self) -> None:
+        """Test that nested .map() calls raise ValueError."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def inner1(item: str) -> str:
+            return item.upper()
+
+        @step
+        def inner2(item: str) -> str:
+            return item + "!"
+
+        @flow
+        def nested_map_flow():
+            return get_items().map(inner1).map(inner2)
+
+        with pytest.raises(ValueError) as exc_info:
+            nested_map_flow()
+
+        assert "Nested .map()" in str(exc_info.value) or "open Map block" in str(
+            exc_info.value
+        )

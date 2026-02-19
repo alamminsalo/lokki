@@ -71,6 +71,50 @@ _Depends on: M1_
 
 **T3.6** Write unit tests for the decorator and graph covering: single task, linear chain, `.map().agg()`, chaining after `.agg()`, calling `.agg()` directly on a `StepNode` raises `TypeError`, flow name derivation from function name.
 
+### T3.7 — Implement `.next()` method on StepNode
+
+- Add `next(step_node)` method to `StepNode` class in `decorators.py`
+- Chains a step after the current one without parallelism
+- Returns the next `StepNode` to allow further chaining
+- Sets internal `_next` pointer to the new step
+
+### T3.8 — Implement `.next()` method on MapBlock
+
+- Add `next(step_node)` method to `MapBlock` class
+- Appends step to the inner chain (before `.agg()`)
+- Returns the added `StepNode` to allow further chaining
+- Allows chaining multiple steps inside a Map block: `A.map(B).next(C).next(D).agg(E)`
+
+### T3.9 — Update FlowGraph resolution for sequential chaining
+
+- Update `_resolve(head)` in `graph.py` to handle `._next` pointers
+- Collect sequential steps into the entries list in order
+- Linear chain `A.next(B).next(C)` should produce: `TaskEntry(A)`, `TaskEntry(B)`, `TaskEntry(C)`
+
+### T3.10 — Add error handling for invalid flows
+
+- Flow ending with an open Map block (without `.agg()`) must raise `ValueError`
+- Nested `.map()` calls (Map inside Map) should raise `ValueError`
+- Add validation in `FlowGraph._resolve()` before returning entries
+
+### T3.11 — Update unit tests for `.next()`
+
+- Add tests for linear chaining: `A.next(B).next(C)`
+- Add tests for chaining after `.map()`: `A.map(B).next(C).agg(D)`
+- Add tests for error conditions: open Map block, nested `.map()`
+
+### T3.12 — Update LocalRunner for multiple inner Map steps
+
+- Update `_run_map()` to handle multiple sequential steps inside a Map block
+- Inner chain `B.next(C).next(D)` should run B, then C, then D for each item
+- Pass output of each inner step as input to the next
+
+### T3.13 — Update state machine generation for `.next()` in Map
+
+- Update `state_machine.py` to generate nested state machine for inner chain
+- `Map(B.next(C))` should generate nested states: B → C with proper `Next` chaining
+- Ensure aggregation step receives collected results from the final inner step
+
 ---
 
 ## Milestone 4 — CLI Entry Point

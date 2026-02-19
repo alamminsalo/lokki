@@ -44,71 +44,53 @@ class FlowGraph:
         """Find the true start of the chain by following back-references."""
         if isinstance(node, MapBlock):
             return node.source
-        if isinstance(node, StepNode) and node._map_block is not None:
-            return node._map_block.source
+        if isinstance(node, StepNode):
+            current = node
+            visited: set[int] = set()
+            while current is not None:
+                if id(current) in visited:
+                    break
+                visited.add(id(current))
+                if hasattr(current, "_prev") and current._prev is not None:
+                    current = current._prev
+                elif current._map_block is not None:
+                    current = current._map_block.source
+                else:
+                    break
+            return current
         return node
 
     def _resolve_from_head(self, head: StepNode) -> None:
         """Walk the chain from the head and populate entries in execution order."""
-        current: StepNode | MapBlock | None = head
-        processed_blocks: set[int] = set()
         processed_nodes: set[int] = set()
+        processed_blocks: set[int] = set()
+
+        current: StepNode | None = head
 
         while current is not None:
-            if isinstance(current, StepNode) and id(current) in processed_nodes:
-                current = current._next
-                continue
-
-            if isinstance(current, MapBlock):
-                if id(current) not in processed_blocks:
-                    processed_blocks.add(id(current))
-                    self._resolve_map_block(current)
-                current = current._next
-            elif isinstance(current, StepNode):
-                processed_nodes.add(id(current))
-                if (
-                    current._map_block is not None
-                    and id(current._map_block) not in processed_blocks
-                ):
-                    # This step is a source of a Map block
-                    self.entries.append(TaskEntry(node=current))
-                    processed_blocks.add(id(current._map_block))
-                    self._resolve_map_block(current._map_block)
-                    current = current._map_block._next
-                else:
-                    self.entries.append(TaskEntry(node=current))
-                    current = current._next
-            else:
+            if id(current) in processed_nodes:
                 break
+
             processed_nodes.add(id(current))
 
-            if isinstance(current, MapBlock):
-                if id(current) not in processed_blocks:
-                    processed_blocks.add(id(current))
-                    # Source step should already be added; add Map entries now
-                    self._resolve_map_block(current)
-                current = current._next
-            elif isinstance(current, StepNode):
-                if current._map_block is not None:
-                    # This step has a Map block - add source as TaskEntry first
-                    if (
-                        id(current) not in processed_nodes
-                        or current._map_block.source is current
-                    ):
-                        if id(current) not in processed_nodes:
-                            self.entries.append(TaskEntry(node=current))
-                        # Then process the Map block
-                        if id(current._map_block) not in processed_blocks:
-                            processed_blocks.add(id(current._map_block))
-                            self._resolve_map_block(current._map_block)
-                        current = current._map_block._next
-                    else:
-                        current = current._next
-                else:
-                    self.entries.append(TaskEntry(node=current))
-                    current = current._next
+            if (
+                current._map_block is not None
+                and id(current._map_block) not in processed_blocks
+            ):
+                processed_blocks.add(id(current._map_block))
+                self.entries.append(TaskEntry(node=current))
+                self._resolve_map_block(current._map_block)
+                if (
+                    current._map_block._next is not None
+                    and current._map_block._next._closes_map_block
+                ):
+                    processed_nodes.add(id(current._map_block._next))
+                current = current._map_block._next
             else:
-                break
+                self.entries.append(TaskEntry(node=current))
+                current = current._next
+
+        self._validate()
 
     def _resolve_map_block(self, block: MapBlock) -> None:
         """Resolve a MapBlock into MapOpenEntry and MapCloseEntry."""
@@ -124,3 +106,27 @@ class FlowGraph:
 
         if block._next is not None and block._next._closes_map_block:
             self.entries.append(MapCloseEntry(agg_step=block._next))
+
+    def _validate(self) -> None:
+        """Validate the resolved graph for common errors."""
+        open_map_blocks: dict[int, MapBlock] = {}
+
+        for entry in self.entries:
+            if isinstance(entry, MapOpenEntry):
+                if entry.source._map_block is not None:
+                    open_map_blocks[id(entry.source._map_block)] = (
+                        entry.source._map_block
+                    )
+
+            if isinstance(entry, MapCloseEntry):
+                if entry.agg_step._map_block is not None:
+                    block_id = id(entry.agg_step._map_block)
+                    if block_id in open_map_blocks:
+                        del open_map_blocks[block_id]
+
+        if open_map_blocks:
+            block = list(open_map_blocks.values())[0]
+            raise ValueError(
+                f"Flow ends with an open Map block from step '{block.source.name}'. "
+                "Use .agg() to close the Map block before ending the flow."
+            )

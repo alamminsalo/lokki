@@ -79,7 +79,57 @@ class TestLocalRunner:
 
         runner = LocalRunner()
         result = runner.run(test_flow())
-        assert result == 12
+        assert result == 18
+
+    def test_run_map_with_next(self) -> None:
+        """Test running a flow with .map().next().agg() pattern."""
+
+        @step
+        def get_items() -> list[int]:
+            return [1, 2, 3]
+
+        @step
+        def add_one(x: int) -> int:
+            return x + 1
+
+        @step
+        def double(x: int) -> int:
+            return x * 2
+
+        @step
+        def sum_all(items: list[int]) -> int:
+            return sum(items)
+
+        @flow
+        def test_flow() -> Any:
+            return get_items().map(add_one).next(double).agg(sum_all)
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result == 18
+
+    def test_run_linear_next_chain(self) -> None:
+        """Test running a flow with .next() linear chaining."""
+
+        @step
+        def step_a() -> int:
+            return 1
+
+        @step
+        def step_b(x: int) -> int:
+            return x + 10
+
+        @step
+        def step_c(x: int) -> int:
+            return x * 2
+
+        @flow
+        def test_flow() -> Any:
+            return step_a().next(step_b).next(step_c)
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result == 22
 
     def test_run_with_default_args(self) -> None:
         @step

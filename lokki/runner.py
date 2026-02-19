@@ -111,10 +111,26 @@ class LocalRunner:
 
         start_time = datetime.now()
         try:
-            if node._default_args or node._default_kwargs:
+            result = None
+            if node._prev is not None:
+                prev_path = store._get_path(
+                    flow_name, run_id, node._prev.name, "output.pkl.gz"
+                )
+                if prev_path.exists():
+                    result = store.read(str(prev_path))
+
+            if result is not None:
+                if node._default_args or node._default_kwargs:
+                    result = node.fn(
+                        result, *node._default_args, **node._default_kwargs
+                    )
+                else:
+                    result = node.fn(result)
+            elif node._default_args or node._default_kwargs:
                 result = node.fn(*node._default_args, **node._default_kwargs)
             else:
                 result = node.fn()
+
             duration = (datetime.now() - start_time).total_seconds()
 
             store.write(flow_name, run_id, step_name, result)
@@ -150,43 +166,41 @@ class LocalRunner:
         )
         map_logger.start()
 
-        def run_step_with_logging(
-            fn: Callable[[Any], Any], rp: Path, it: Any, ml: MapProgressLogger
-        ) -> tuple[str, Path, Any, str]:
-            try:
-                res = fn(it)
-                rp.parent.mkdir(parents=True, exist_ok=True)
-                data = gzip.compress(
-                    pickle.dumps(res, protocol=pickle.HIGHEST_PROTOCOL)
-                )
-                rp.write_bytes(data)
-                ml.update("completed")
-                return "", rp, res, "success"
-            except Exception:
-                ml.update("failed")
-                raise
+        def run_step_for_item(
+            fn: Callable[[Any], Any], item_data: Any, item_idx: int
+        ) -> Any:
+            result = fn(item_data)
+            return item_idx, result
 
-        with ThreadPoolExecutor() as executor:
-            futures = {}
-            for item in manifest:
-                item_idx = item["index"]
-                item_data = item["item"]
+        item_data_by_idx = {item["index"]: item["item"] for item in manifest}
+        current_results: dict[int, Any] = dict(item_data_by_idx)
 
-                for step_node in inner_steps:
-                    step_name = step_node.name
-                    result_path = store._get_path(
+        for _step_idx, step_node in enumerate(inner_steps):
+            step_name = step_node.name
+            fn = step_node.fn
+
+            with ThreadPoolExecutor() as executor:
+                futures = {}
+                for item_idx, item_data in current_results.items():
+                    future = executor.submit(run_step_for_item, fn, item_data, item_idx)
+                    futures[future] = item_idx
+
+                new_results: dict[int, Any] = {}
+                for future in as_completed(futures):
+                    item_idx, result = future.result()
+                    new_results[item_idx] = result
+
+                    item_result_path = store._get_path(
                         flow_name, run_id, f"{step_name}/{item_idx}", "output.pkl.gz"
                     )
-
-                    fn = step_node.fn
-
-                    future = executor.submit(
-                        run_step_with_logging, fn, result_path, item_data, map_logger
+                    item_result_path.parent.mkdir(parents=True, exist_ok=True)
+                    data = gzip.compress(
+                        pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
                     )
-                    futures[future] = (step_name, result_path)
+                    item_result_path.write_bytes(data)
+                    map_logger.update("completed")
 
-            for future in as_completed(futures):
-                future.result()
+            current_results = new_results
 
         map_logger.complete()
         step_logger.complete(0.0)

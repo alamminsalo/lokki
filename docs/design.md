@@ -162,6 +162,59 @@ def flow(fn):
 
 `.map(b)` always returns a `MapBlock`, not a `StepNode`. `.agg(c)` closes the `MapBlock` and returns a `StepNode` (the aggregation step), allowing further chaining after the fan-in. This means the chain `a().map(b).agg(c).map(d).agg(e)` is valid and produces nested Map blocks.
 
+### `.next()` method for linear chaining
+
+In addition to `.map()` and `.agg()`, steps can be chained sequentially using `.next()`:
+
+```python
+@step
+def get_data():
+    return [1, 2, 3]
+
+@step
+def process(items):
+    return sum(item * 2 for item in items)
+
+@step
+def save(result):
+    return f"Result: {result}"
+
+@flow
+def linear_flow():
+    return get_data().next(process).next(save)
+```
+
+**Behavior:**
+- `.next(step)` chains a step after the current one without parallelism
+- Returns the next `StepNode` to allow further chaining
+- Multiple `.next()` calls create a linear chain: `A.next(B).next(C)` → A → B → C
+
+**Chaining after `.map()`:**
+Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section:
+
+```python
+@flow
+def complex_flow():
+    # Chain A -> Map(B -> C) -> Agg(D)
+    return get_data().map(mult_item).next(pow_item).agg(collect)
+```
+
+The `.next()` method is implemented on both `StepNode` and `MapBlock`:
+- On `StepNode`: chains to the next step directly
+- On `MapBlock`: adds the step to the inner chain (before `.agg()`)
+
+**Comparison:**
+
+| Method | Input | Output | Use Case |
+|--------|-------|--------|------------|
+| `.map(step)` | list | list (per-item) | Parallel processing |
+| `.agg(step)` | list | single value | Aggregation |
+| `.next(step)` | any | any | Sequential/linear chain |
+
+**Error conditions:**
+- Flow ending with an open Map block (without `.agg()`) must raise an exception
+- Nested `.map()` calls are not supported and should raise an exception
+
 ---
 
 ## 4. Execution Graph

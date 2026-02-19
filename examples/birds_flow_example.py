@@ -9,6 +9,16 @@ def get_birds() -> list[str]:
 
 
 @step
+def uppercase_list(birds: list[str]) -> list[str]:
+    return [b.upper() for b in birds]
+
+
+@step
+def lowercase(bird: str) -> str:
+    return bird.lower()
+
+
+@step
 def flap_bird(bird: str) -> str:
     return f"flappy {bird}"
 
@@ -20,7 +30,9 @@ def join_birds(birds: list[str]) -> str:
 
 @flow
 def birds_flow():
-    return get_birds().map(flap_bird).agg(join_birds)
+    return (
+        get_birds().next(uppercase_list).map(flap_bird).next(lowercase).agg(join_birds)
+    )
 
 
 if __name__ == "__main__":
