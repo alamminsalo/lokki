@@ -38,11 +38,26 @@ lokki/
 
 **T2.2** Implement `_deep_merge(base, override)` — recursively merges two dicts; scalars and lists in `override` replace those in `base`; nested dicts are merged recursively.
 
-**T2.3** Implement `LokkiConfig`, `RolesConfig`, and `LambdaDefaultsConfig` dataclasses with all fields and defaults as per design section 13.
+**T2.3** Implement `LokkiConfig`, `AwsConfig`, `RolesConfig`, `LambdaConfig`, and `LoggingConfig` dataclasses with all fields and defaults as per the new config schema:
+- `aws.artifact_bucket`, `aws.ecr_repo_prefix`, `aws.roles`
+- `lambda.timeout`, `lambda.memory`, `lambda.image_tag`, `lambda.env`
+- `build_dir`, `logging`
 
 **T2.4** Implement `load_config()` — loads global (`~/.lokki/lokki.yml`) then local (`./lokki.yml`), deep-merges them, applies environment variable overrides (`LOKKI_ARTIFACT_BUCKET`, `LOKKI_ECR_REPO_PREFIX`, `LOKKI_BUILD_DIR`), returns a populated `LokkiConfig`.
 
 **T2.5** Write unit tests for `_deep_merge` covering: scalar override, list replacement, nested dict merge, missing keys in either file, neither file present.
+
+### T2.6 — Update config schema for new format
+
+Update `LokkiConfig` to use the new nested structure:
+- Move `artifact_bucket`, `ecr_repo_prefix`, `roles` under `aws`
+- Move `lambda_defaults` to `lambda` with `timeout`, `memory`, `image_tag`
+- Move `lambda_env` to `lambda.env`
+- Add `logging` config
+
+### T2.7 — Update config loading for new format
+
+Update `load_config()` to handle the new YAML structure with nested `aws` and `lambda` sections. Ensure backward compatibility or provide migration guidance.
 
 ---
 
@@ -188,7 +203,7 @@ _Depends on: M3, M2_
 - Writes the `Dockerfile` (multi-stage, using AWS Lambda Python base image, installing deps from `pyproject.toml` via `uv`, copying `lokki/` source and the generated `handler.py`)
 - Writes the auto-generated `handler.py` that imports the user's step function and binds it to `make_handler`
 
-**T8.2** Implement Dockerfile template as a string constant or Jinja2-style template, parameterised on the Python base image tag from `lambda_defaults.image_tag`.
+**T8.2** Implement Dockerfile template as a string constant or Jinja2-style template, parameterised on the Python base image tag from `lambda.image_tag`.
 
 **T8.3** Write tests asserting the generated `Dockerfile` contains the expected `FROM`, `COPY`, `RUN uv pip install`, and `CMD` lines; and that `handler.py` imports the correct function name.
 
@@ -219,9 +234,9 @@ _Depends on: M9, M2_
 
 **T10.1** Implement `build_template(graph, config) -> str` — returns a valid CloudFormation YAML string.
 
-**T10.2** Implement Lambda function resource generation (one per step) with: `PackageType: Image`, `ImageUri` referencing ECR, `Role` from `config.roles.lambda_`, `Timeout` and `MemorySize` from `lambda_defaults`, environment variables from `lambda_env` plus `LOKKI_ARTIFACT_BUCKET` and `LOKKI_FLOW_NAME`.
+**T10.2** Implement Lambda function resource generation (one per step) with: `PackageType: Image`, `ImageUri` referencing ECR, `Role` from `config.aws.roles.lambda_`, `Timeout` and `MemorySize` from `lambda`, environment variables from `lambda.env` plus `LOKKI_ARTIFACT_BUCKET` and `LOKKI_FLOW_NAME`.
 
-**T10.3** Implement IAM role resources: `LambdaExecutionRole` (S3 read/write on lokki prefix, CloudWatch Logs) and `StepFunctionsExecutionRole` (Lambda invoke, S3 read/write for Distributed Map result writing). Use ARNs from `config.roles` if provided, otherwise generate the role resources.
+**T10.3** Implement IAM role resources: `LambdaExecutionRole` (S3 read/write on lokki prefix, CloudWatch Logs) and `StepFunctionsExecutionRole` (Lambda invoke, S3 read/write for Distributed Map result writing). Use ARNs from `config.aws.roles` if provided, otherwise generate the role resources.
 
 **T10.4** Implement the Step Functions state machine resource with the state machine JSON inlined via `DefinitionString` and `!Sub` for Lambda ARN interpolation.
 

@@ -64,13 +64,13 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print(f"Error: Failed to load configuration: {e}")
             sys.exit(1)
 
-        if not config.artifact_bucket:
-            print("Error: 'artifact_bucket' is not configured.")
+        if not config.aws.artifact_bucket:
+            print("Error: 'aws.artifact_bucket' is not configured.")
             print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
-        if not config.ecr_repo_prefix:
-            print("Error: 'ecr_repo_prefix' is not configured.")
+        if not config.aws.ecr_repo_prefix:
+            print("Error: 'aws.ecr_repo_prefix' is not configured.")
             print("Please set it in lokki.yml or via LOKKI_ECR_REPO_PREFIX env var.")
             sys.exit(1)
 
@@ -122,13 +122,13 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print(f"Error: Failed to load configuration: {e}")
             sys.exit(1)
 
-        if not config.artifact_bucket:
-            print("Error: 'artifact_bucket' is not configured.")
+        if not config.aws.artifact_bucket:
+            print("Error: 'aws.artifact_bucket' is not configured.")
             print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
-        if not config.ecr_repo_prefix:
-            print("Error: 'ecr_repo_prefix' is not configured.")
+        if not config.aws.ecr_repo_prefix:
+            print("Error: 'aws.ecr_repo_prefix' is not configured.")
             print("Please set it in lokki.yml or via LOKKI_ECR_REPO_PREFIX env var.")
             sys.exit(1)
 
@@ -152,8 +152,8 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             )
             deployer.deploy(
                 flow_name=graph.name,
-                artifact_bucket=config.artifact_bucket,
-                ecr_repo_prefix=config.ecr_repo_prefix,
+                artifact_bucket=config.aws.artifact_bucket,
+                ecr_repo_prefix=config.aws.ecr_repo_prefix,
                 build_dir=Path(config.build_dir),
             )
             print()

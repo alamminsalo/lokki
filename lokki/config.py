@@ -44,38 +44,51 @@ class RolesConfig:
 
 
 @dataclass
-class LambdaDefaultsConfig:
-    """Default Lambda configuration."""
+class AwsConfig:
+    """AWS configuration."""
+
+    artifact_bucket: str = ""
+    ecr_repo_prefix: str = ""
+    roles: RolesConfig = field(default_factory=RolesConfig)
+
+
+@dataclass
+class LambdaConfig:
+    """Lambda configuration."""
 
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
 class LokkiConfig:
     """Main lokki configuration."""
 
-    artifact_bucket: str = ""
-    ecr_repo_prefix: str = ""
+    aws: AwsConfig = field(default_factory=AwsConfig)
+    lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
     build_dir: str = "lokki-build"
     flow_name: str = ""
-    roles: RolesConfig = field(default_factory=RolesConfig)
-    lambda_env: dict[str, str] = field(default_factory=dict)
-    lambda_defaults: LambdaDefaultsConfig = field(default_factory=LambdaDefaultsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "LokkiConfig":
         """Create a LokkiConfig from a dictionary."""
-        roles = RolesConfig(
-            pipeline=d.get("roles", {}).get("pipeline", ""),
-            lambda_=d.get("roles", {}).get("lambda", ""),
+        roles_cfg = RolesConfig(
+            pipeline=d.get("aws", {}).get("roles", {}).get("pipeline", ""),
+            lambda_=d.get("aws", {}).get("roles", {}).get("lambda", ""),
         )
-        lambda_defaults = LambdaDefaultsConfig(
-            timeout=d.get("lambda_defaults", {}).get("timeout", 900),
-            memory=d.get("lambda_defaults", {}).get("memory", 512),
-            image_tag=d.get("lambda_defaults", {}).get("image_tag", "latest"),
+        aws_cfg = AwsConfig(
+            artifact_bucket=d.get("aws", {}).get("artifact_bucket", ""),
+            ecr_repo_prefix=d.get("aws", {}).get("ecr_repo_prefix", ""),
+            roles=roles_cfg,
+        )
+        lambda_cfg = LambdaConfig(
+            timeout=d.get("lambda", {}).get("timeout", 900),
+            memory=d.get("lambda", {}).get("memory", 512),
+            image_tag=d.get("lambda", {}).get("image_tag", "latest"),
+            env=d.get("lambda", {}).get("env", {}),
         )
         logging_cfg = LoggingConfig(
             level=d.get("logging", {}).get("level", "INFO"),
@@ -84,13 +97,10 @@ class LokkiConfig:
             show_timestamps=d.get("logging", {}).get("show_timestamps", True),
         )
         return cls(
-            artifact_bucket=d.get("artifact_bucket", ""),
-            ecr_repo_prefix=d.get("ecr_repo_prefix", ""),
+            aws=aws_cfg,
+            lambda_cfg=lambda_cfg,
             build_dir=d.get("build_dir", "lokki-build"),
             flow_name=d.get("flow_name", ""),
-            roles=roles,
-            lambda_env=d.get("lambda_env", {}),
-            lambda_defaults=lambda_defaults,
             logging=logging_cfg,
         )
 
@@ -107,9 +117,9 @@ def load_config() -> LokkiConfig:
     config = LokkiConfig.from_dict(merged)
 
     if env_bucket := os.environ.get("LOKKI_ARTIFACT_BUCKET"):
-        config.artifact_bucket = env_bucket
+        config.aws.artifact_bucket = env_bucket
     if env_ecr := os.environ.get("LOKKI_ECR_REPO_PREFIX"):
-        config.ecr_repo_prefix = env_ecr
+        config.aws.ecr_repo_prefix = env_ecr
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
         config.build_dir = env_build
     if env_log_level := os.environ.get("LOKKI_LOG_LEVEL"):

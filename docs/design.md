@@ -622,24 +622,29 @@ def load_config() -> "LokkiConfig":
 
 ```python
 @dataclass
-class RolesConfig:
-    pipeline: str = ""   # IAM role ARN for Step Functions
-    lambda_: str  = ""   # IAM role ARN for Lambda execution
+class AwsConfig:
+    artifact_bucket: str = ""      # S3 bucket for pipeline data and artifacts
+    ecr_repo_prefix: str = ""     # ECR repository prefix for Lambda images
+    roles: RolesConfig = field(default_factory=RolesConfig)
 
 @dataclass
-class LambdaDefaultsConfig:
-    timeout:   int = 900
-    memory:    int = 512
+class RolesConfig:
+    pipeline: str = ""   # IAM role ARN for Step Functions
+    lambda_: str = ""    # IAM role ARN for Lambda execution
+
+@dataclass
+class LambdaConfig:
+    timeout: int = 900
+    memory: int = 512
     image_tag: str = "latest"
+    env: dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class LokkiConfig:
-    artifact_bucket:  str = ""
-    ecr_repo_prefix:  str = ""
-    build_dir:        str = "lokki-build"
-    roles:            RolesConfig          = field(default_factory=RolesConfig)
-    lambda_env:       dict[str, str]       = field(default_factory=dict)
-    lambda_defaults:  LambdaDefaultsConfig = field(default_factory=LambdaDefaultsConfig)
+    aws: AwsConfig = field(default_factory=AwsConfig)
+    lambda: LambdaConfig = field(default_factory=LambdaConfig)
+    build_dir: str = "lokki-build"
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
     def from_dict(cls, d: dict) -> "LokkiConfig": ...
@@ -651,15 +656,15 @@ After loading and merging the YAML files, specific fields can be overridden by e
 
 | Environment variable | Overrides field |
 |---|---|
-| `LOKKI_ARTIFACT_BUCKET` | `artifact_bucket` |
-| `LOKKI_ECR_REPO_PREFIX` | `ecr_repo_prefix` |
+| `LOKKI_ARTIFACT_BUCKET` | `aws.artifact_bucket` |
+| `LOKKI_ECR_REPO_PREFIX` | `aws.ecr_repo_prefix` |
 | `LOKKI_BUILD_DIR` | `build_dir` |
 
 ### Usage at build time vs runtime
 
 At **build time** (`python flow_script.py build`), `load_config()` reads both YAML files from the filesystem and uses the merged result to populate the CloudFormation template and Dockerfiles (e.g. IAM role ARNs, ECR prefix, artifact bucket name). The flow name is derived directly from the `@flow`-decorated function name (e.g. `birds_flow` → `"birds-flow"`, lowercased and underscores replaced with hyphens) and is not configurable — it is baked into the CloudFormation resource names and S3 key prefixes at build time.
 
-At **Lambda runtime**, the YAML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda_env` in the config.
+At **Lambda runtime**, the YAML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda.env` in the config.
 
 ---
 
@@ -926,7 +931,7 @@ class Deployer:
         Builder.build(graph, config)
 
         # 3. Push Lambda images
-        self._push_images(config.ecr_repo_prefix)
+        self._push_images(config.aws.ecr_repo_prefix)
 
         # 4. Deploy CloudFormation
         self._deploy_stack(config)
@@ -956,8 +961,8 @@ class Deployer:
             Capabilities=["CAPABILITY_IAM"],
             Parameters=[
                 {"ParameterKey": "FlowName", "ParameterValue": config.flow_name},
-                {"ParameterKey": "S3Bucket", "ParameterValue": config.artifact_bucket},
-                {"ParameterKey": "ECRRepoPrefix", "ParameterValue": config.ecr_repo_prefix},
+                {"ParameterKey": "S3Bucket", "ParameterValue": config.aws.artifact_bucket},
+                {"ParameterKey": "ECRRepoPrefix", "ParameterValue": config.aws.ecr_repo_prefix},
                 {"ParameterKey": "ImageTag", "ParameterValue": self.image_tag},
             ],
         )

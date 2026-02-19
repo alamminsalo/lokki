@@ -54,7 +54,7 @@ def generate_lambda_dir(
     lambda_dir = build_dir / "lambdas" / step_name
     lambda_dir.mkdir(parents=True, exist_ok=True)
 
-    image_tag = config.lambda_defaults.image_tag
+    image_tag = config.lambda_cfg.image_tag
     dockerfile_content = DOCKERFILE_TEMPLATE.format(image_tag=image_tag)
     (lambda_dir / "Dockerfile").write_text(dockerfile_content)
 

@@ -74,13 +74,13 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
                     + ":{{Param:ImageTag}}"
                 },
                 "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
-                "Timeout": config.lambda_defaults.timeout,
-                "MemorySize": config.lambda_defaults.memory,
+                "Timeout": config.lambda_cfg.timeout,
+                "MemorySize": config.lambda_cfg.memory,
                 "Environment": {
                     "Variables": {
                         "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
                         "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
-                        **config.lambda_env,
+                        **config.lambda_cfg.env,
                     }
                 },
             },

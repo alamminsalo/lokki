@@ -373,30 +373,33 @@ Neither file is required; lokki falls back to sensible defaults or environment v
 ```yaml
 # lokki.yml
 
-# S3 bucket used for intermediate pipeline data and build artifacts
-artifact_bucket: my-lokki-artifacts
+# AWS configuration
+aws:
+  # S3 bucket for intermediate pipeline data and build artifacts
+  artifact_bucket: my-lokki-artifacts
+  
+  # ECR repository prefix for Lambda container images
+  ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+  
+  # IAM role ARNs
+  roles:
+    pipeline: arn:aws:iam::123456789::role/lokki-stepfunctions-role
+    lambda: arn:aws:iam::123456789::role/lokki-lambda-execution-role
 
-# IAM role ARNs
-roles:
-  pipeline: arn:aws:iam::123456789::role/lokki-stepfunctions-role
-  lambda: arn:aws:iam::123456789::role/lokki-lambda-execution-role
-
-# Environment variables injected into every Lambda function
-lambda_env:
-  LOG_LEVEL: INFO
-  MY_API_ENDPOINT: https://api.example.com
-
-# ECR repository prefix for Lambda container images
-ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
-
-# Output directory for build artifacts (default: lokki-build)
-build_dir: lokki-build
-
-# Default Lambda resource configuration
-lambda_defaults:
+# Lambda configuration
+lambda:
+  # Default Lambda resource configuration
   timeout: 900          # seconds
   memory: 512           # MB
   image_tag: latest
+  
+  # Environment variables injected into every Lambda function
+  env:
+    LOG_LEVEL: INFO
+    MY_API_ENDPOINT: https://api.example.com
+
+# Output directory for build artifacts (default: lokki-build)
+build_dir: lokki-build
 
 # Logging configuration
 logging:
