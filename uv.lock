@@ -1233,6 +1233,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pandas" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
@@ -1244,6 +1249,9 @@ requires-dist = [
     { name = "stepfunctions", specifier = ">=2.0.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pandas", specifier = ">=2.3.3" }]
 
 [[package]]
 name = "mako"

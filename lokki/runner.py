@@ -9,10 +9,22 @@ import shutil
 import tempfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+
+
+def _to_json_safe(obj: Any) -> Any:
+    """Convert objects to JSON-safe types."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_json_safe(item) for item in obj]
+    return obj
 
 
 class LocalStore:
@@ -39,7 +51,8 @@ class LocalStore:
     ) -> str:
         path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(items))
+        serialized_items = _to_json_safe(items)
+        path.write_text(json.dumps(serialized_items))
         return str(path)
 
     def read(self, path: str) -> Any:
