@@ -1,5 +1,10 @@
 # AGENTS.md - Development Guidelines for lokki
 
+## Tools
+
+You must only call tools from this exact list: bash, read, glob, grep, edit, write, 
+task, webfetch, todowrite, question. Never invent or assume tool names. If unsure, use bash.
+
 ## Build/Test/Run Commands
 
 ```bash
