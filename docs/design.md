@@ -17,6 +17,7 @@
 13. [Configuration](#13-configuration)
 14. [Data Flow Walkthrough](#14-data-flow-walkthrough)
 15. [Logging & Observability](#15-logging--observability)
+16. [Deploy Command](#16-deploy-command)
 
 ---
 
@@ -817,3 +818,144 @@ fields @timestamp, event, step, duration
 | filter level = 'ERROR'
 | sort @timestamp desc
 ```
+
+---
+
+## 16. Deploy Command
+
+The `deploy` command builds the flow and deploys it to AWS. It combines the build step with AWS deployment operations.
+
+### Architecture
+
+```
+python flow_script.py deploy
+         │
+         ▼
+┌─────────────────────────────────────┐
+│          deploy.py                   │
+│  1. Validate AWS credentials       │
+│  2. Build (reuse Builder.build)    │
+│  3. Push Lambda images to ECR      │
+│  4. Deploy CloudFormation stack    │
+└─────────────────────────────────────┘
+```
+
+### Implementation
+
+`lokki/deploy.py` contains the deployment logic:
+
+```python
+# lokki/deploy.py (simplified)
+
+import boto3
+import subprocess
+from pathlib import Path
+
+from lokki.builder.builder import Builder
+from lokki.config import load_config
+
+
+class Deployer:
+    def __init__(self, stack_name: str, region: str, image_tag: str):
+        self.stack_name = stack_name
+        self.region = region
+        self.image_tag = image_tag
+        self.cf_client = boto3.client("cloudformation", region_name=region)
+        self.ecr_client = boto3.client("ecr")
+        self.sts_client = boto3.client("sts")
+
+    def deploy(self, graph: FlowGraph, config: LokkiConfig) -> None:
+        # 1. Validate credentials
+        self._validate_credentials()
+
+        # 2. Build (reuse Builder)
+        print("Building...")
+        Builder.build(graph, config)
+
+        # 3. Push Lambda images
+        self._push_images(config.ecr_repo_prefix)
+
+        # 4. Deploy CloudFormation
+        self._deploy_stack(config)
+
+    def _push_images(self, ecr_prefix: str) -> None:
+        build_dir = Path(config.build_dir)
+        for step_dir in (build_dir / "lambdas").iterdir():
+            step_name = step_dir.name
+            image_uri = f"{ecr_prefix}/{step_name}:{self.image_tag}"
+
+            # Build and push
+            subprocess.run(
+                ["docker", "build", "-t", image_uri, "."],
+                cwd=step_dir,
+                check=True,
+            )
+            subprocess.run(
+                ["docker", "push", image_uri],
+                check=True,
+            )
+
+    def _deploy_stack(self, config: LokkiConfig) -> None:
+        template_path = Path(config.build_dir) / "template.yaml"
+        response = self.cf_client.create_or_update_stack(
+            StackName=self.stack_name,
+            TemplateBody=template_path.read_text(),
+            Capabilities=["CAPABILITY_IAM"],
+            Parameters=[
+                {"ParameterKey": "FlowName", "ParameterValue": config.flow_name},
+                {"ParameterKey": "S3Bucket", "ParameterValue": config.artifact_bucket},
+                {"ParameterKey": "ECRRepoPrefix", "ParameterValue": config.ecr_repo_prefix},
+                {"ParameterKey": "ImageTag", "ParameterValue": self.image_tag},
+            ],
+        )
+        print(f"Deployed stack: {self.stack_name}")
+```
+
+### CLI Integration
+
+The `main()` function in `__init__.py` is extended to handle the `deploy` command:
+
+```python
+elif command == "deploy":
+    from lokki.deploy import Deployer
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stack-name")
+    parser.add_argument("--region")
+    parser.add_argument("--image-tag", default="latest")
+    parser.add_argument("--confirm", action="store_true")
+    args = parser.parse_args(sys.argv[2:])
+
+    graph = flow_fn()
+    config = load_config()
+
+    deployer = Deployer(
+        stack_name=args.stack_name or f"{graph.name}-stack",
+        region=args.region or "us-east-1",
+        image_tag=args.image_tag,
+    )
+    deployer.deploy(graph, config)
+```
+
+### Image Build Strategy
+
+For Lambda container images, the deploy command:
+
+1. Reads each step's Dockerfile from `lokki-build/lambdas/<step>/`
+2. Builds the image locally using `docker build`
+3. Tags with `<ecr_repo_prefix>/<step>:<image_tag>`
+4. Pushes to ECR using `docker push`
+
+This requires Docker to be installed and running on the developer's machine.
+
+### Error Handling
+
+- **No Docker**: Raises error if Docker is not available
+- **ECR auth failure**: Prompts to run `aws ecr get-login-password`
+- **CloudFormation failure**: Displays error message and stack events
+- **Partial failure**: Images already pushed remain in ECR; re-running deploy will continue from where it failed
+
+### Idempotency
+
+The deploy command is idempotent - running it multiple times with the same parameters will update the CloudFormation stack. Images are re-tagged and pushed on each run.

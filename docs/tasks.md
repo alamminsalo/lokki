@@ -260,3 +260,43 @@ Add environment variable override: `LOKKI_LOG_LEVEL`.
 - Log input processing
 - Log execution duration
 - Log errors with stack traces
+
+---
+
+## Milestone 14 — Deploy Command
+
+_Depends on: M11, M12_
+
+**T14.1** Implement `lokki/deploy.py`:
+- `Deployer` class with `__init__(stack_name, region, image_tag)`
+- `deploy(graph, config)` method that orchestrates the full deploy
+- `_validate_credentials()` - verify AWS credentials are configured
+- `_push_images(ecr_prefix)` - build and push Docker images to ECR
+- `_deploy_stack(config)` - deploy CloudFormation stack
+
+**T14.2** Implement Docker image build and push:
+- For each step in `lokki-build/lambdas/<step>/`, run `docker build`
+- Tag images with `<ecr_repo_prefix>/<step>:<image_tag>`
+- Push to ECR using `docker push`
+- Handle Docker not installed error gracefully
+
+**T14.3** Implement CloudFormation deployment:
+- Use boto3 to create or update stack
+- Pass parameters: FlowName, S3Bucket, ECRRepoPrefix, ImageTag
+- Wait for stack creation/update to complete
+- Report stack status and output
+
+**T14.4** Add `deploy` command to CLI:
+- Parse `--stack-name`, `--region`, `--image-tag`, `--confirm` arguments
+- Call `Deployer.deploy(graph, config)`
+- Print success/failure messages
+
+**T14.5** Add error handling:
+- Docker not available: clear error message with installation instructions
+- ECR authorization: prompt to run `aws ecr get-login-password`
+- CloudFormation errors: display error and suggest fixes
+
+**T14.6** Write integration tests:
+- Test deploy with mocked AWS clients
+- Test image build and push
+- Test CloudFormation stack creation

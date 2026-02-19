@@ -58,6 +58,96 @@ The flow script is the entry point for all lokki operations.
 |---|---|
 | `python flow_script.py build` | Package and generate all deployment artifacts |
 | `python flow_script.py run` | Execute the pipeline locally |
+| `python flow_script.py deploy` | Build and deploy to AWS Step Functions |
+
+---
+
+## Deploy Command
+
+The `deploy` command builds the flow and deploys it to AWS Step Functions. It performs the following steps:
+
+1. **Build** - Runs the same build process as `build` command
+2. **Push Lambda Images** - Builds and pushes Docker images to ECR for each step
+3. **Deploy CloudFormation** - Creates or updates the CloudFormation stack
+
+### Prerequisites
+
+- AWS credentials configured (via `aws configure` or environment variables)
+- ECR repository exists (created manually or as part of a previous deployment)
+- S3 bucket for intermediate data exists
+
+### Usage
+
+```bash
+python flow_script.py deploy
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--stack-name NAME` | CloudFormation stack name (default: derived from flow name) |
+| `--region REGION` | AWS region (default: from AWS config) |
+| `--image-tag TAG` | Docker image tag (default: latest) |
+| `--confirm` | Skip confirmation prompt |
+
+### Configuration
+
+The deploy command uses the same configuration as `build`:
+
+```yaml
+# lokki.yml
+artifact_bucket: my-lokki-artifacts
+ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+```
+
+### Deploy Workflow
+
+1. **Validate** - Check AWS credentials and required configuration
+2. **Build** - Generate Lambda packages, state machine, CloudFormation template
+3. **Build & Push Images** - For each step:
+   - Build Docker image from `lokki-build/lambdas/<step>/`
+   - Push to ECR: `<ecr_repo_prefix>/<step>:<image-tag>`
+4. **Deploy Stack** - Run `aws cloudformation deploy`:
+   ```bash
+   aws cloudformation deploy \
+     --template-file lokki-build/template.yaml \
+     --stack-name <stack-name> \
+     --capabilities CAPABILITY_IAM \
+     --parameter-overrides \
+       FlowName=<flow-name> \
+       S3Bucket=<artifact-bucket> \
+       ECRRepoPrefix=<ecr-repo-prefix> \
+       ImageTag=<image-tag>
+   ```
+5. **Report** - Display stack status and output
+
+### Output
+
+On success:
+```
+✓ Built Lambda packages
+✓ Pushed 3 images to ECR
+✓ Deployed CloudFormation stack 'my-flow'
+  State Machine ARN: arn:aws:states:eu-west-1:123456789:stateMachine:my-flow
+```
+
+On failure:
+```
+✗ Build failed: <error>
+```
+or
+```
+✗ Deploy failed: <CloudFormation error>
+```
+
+### Continuous Deployment
+
+For CI/CD pipelines, use `--confirm` to skip prompts:
+
+```bash
+python flow_script.py deploy --confirm --image-tag $VERSION
+```
 
 ---
 
