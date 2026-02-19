@@ -19,6 +19,7 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
         "S3Bucket": {"Type": "String"},
         "ECRRepoPrefix": {"Type": "String"},
         "ImageTag": {"Type": "String", "Default": "latest"},
+        "AWSEndpoint": {"Type": "String", "Default": ""},
     }
 
     resources["LambdaExecutionRole"] = {
@@ -80,6 +81,7 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
                     "Variables": {
                         "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
                         "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
+                        "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
                         **config.lambda_cfg.env,
                     }
                 },

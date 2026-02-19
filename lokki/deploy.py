@@ -28,13 +28,22 @@ class Deployer:
         stack_name: str,
         region: str = "us-east-1",
         image_tag: str = "latest",
+        endpoint: str = "",
     ) -> None:
         self.stack_name = stack_name
         self.region = region
         self.image_tag = image_tag
-        self.cf_client = boto3.client("cloudformation", region_name=region)
-        self.ecr_client = boto3.client("ecr", region_name=region)
-        self.sts_client = boto3.client("sts")
+        self.endpoint = endpoint
+
+        endpoint_kwargs: dict[str, str] = {}
+        if endpoint:
+            endpoint_kwargs["endpoint_url"] = endpoint
+
+        self.cf_client = boto3.client(
+            "cloudformation", region_name=region, **endpoint_kwargs
+        )
+        self.ecr_client = boto3.client("ecr", region_name=region, **endpoint_kwargs)
+        self.sts_client = boto3.client("sts", **endpoint_kwargs)
         self._account_id: str | None = None
 
     @property
@@ -49,12 +58,16 @@ class Deployer:
         artifact_bucket: str,
         ecr_repo_prefix: str,
         build_dir: Path,
+        aws_endpoint: str = "",
     ) -> None:
         self._validate_credentials()
         self._push_images(ecr_repo_prefix, build_dir)
-        self._deploy_stack(flow_name, artifact_bucket, ecr_repo_prefix)
+        self._deploy_stack(flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint)
 
-    def _validate_credentials(self) -> None:
+    def _validate_credentials(self, require_ecr: bool = True) -> None:
+        if self.endpoint:
+            return
+
         try:
             self.sts_client.get_caller_identity()
         except Exception as e:
@@ -91,20 +104,37 @@ class Deployer:
         if not lambdas_dir.exists():
             raise DeployError(f"Lambda directory not found: {lambdas_dir}")
 
-        self._login_to_ecr()
-
         step_dirs = sorted(lambdas_dir.iterdir())
         total = len(step_dirs)
 
+        is_local = not ecr_repo_prefix
+
+        if is_local:
+            print(
+                f"Building {total} local Docker images (ECR prefix not configured)..."
+            )
+        else:
+            self._login_to_ecr()
+            print(f"Building and pushing {total} images to ECR...")
+
         for i, step_dir in enumerate(step_dirs, 1):
             step_name = step_dir.name
-            image_uri = f"{ecr_repo_prefix}/{step_name}:{self.image_tag}"
+            if is_local:
+                image_uri = f"{step_name}:{self.image_tag}"
+            else:
+                image_uri = f"{ecr_repo_prefix}/{step_name}:{self.image_tag}"
 
-            print(f"[{i}/{total}] Building and pushing {step_name}...")
+            print(f"[{i}/{total}] Building {step_name}...")
 
-            self._build_and_push_image(step_dir, image_uri)
+            self._build_image(step_dir, image_uri)
 
-        print(f"Successfully pushed {total} images to ECR")
+            if not is_local:
+                self._push_image(image_uri)
+
+        if is_local:
+            print(f"Successfully built {total} local images")
+        else:
+            print(f"Successfully pushed {total} images to ECR")
 
     def _login_to_ecr(self) -> None:
         try:
@@ -134,7 +164,7 @@ class Deployer:
         except Exception as e:
             raise DeployError(f"Failed to login to ECR: {e}") from e
 
-    def _build_and_push_image(self, context: Path, image_uri: str) -> None:
+    def _build_image(self, context: Path, image_uri: str) -> None:
         try:
             build_result = subprocess.run(
                 ["docker", "build", "-t", image_uri, "."],
@@ -150,6 +180,7 @@ class Deployer:
         except FileNotFoundError:
             raise DockerNotAvailableError("Docker is not installed") from None
 
+    def _push_image(self, image_uri: str) -> None:
         try:
             push_result = subprocess.run(
                 ["docker", "push", image_uri],
@@ -167,6 +198,7 @@ class Deployer:
         flow_name: str,
         artifact_bucket: str,
         ecr_repo_prefix: str,
+        aws_endpoint: str = "",
     ) -> None:
         template_path = Path("lokki-build") / "template.yaml"
         if not template_path.exists():
@@ -212,6 +244,10 @@ class Deployer:
                             "ParameterKey": "ImageTag",
                             "ParameterValue": self.image_tag,
                         },
+                        {
+                            "ParameterKey": "AWSEndpoint",
+                            "ParameterValue": aws_endpoint,
+                        },
                     ],
                 )
             else:
@@ -236,6 +272,10 @@ class Deployer:
                         {
                             "ParameterKey": "ImageTag",
                             "ParameterValue": self.image_tag,
+                        },
+                        {
+                            "ParameterKey": "AWSEndpoint",
+                            "ParameterValue": aws_endpoint,
                         },
                     ],
                 )

@@ -379,7 +379,14 @@ aws:
   artifact_bucket: my-lokki-artifacts
   
   # ECR repository prefix for Lambda container images
-  ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+  # Leave empty to use local Docker images (e.g., for LocalStack testing)
+  # Example: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+  ecr_repo_prefix: ""
+  
+  # AWS endpoint URL for local development (e.g., LocalStack)
+  # Leave empty to use real AWS endpoints
+  # Example: http://localhost:4566
+  endpoint: ""
   
   # IAM role ARNs
   roles:

@@ -624,7 +624,8 @@ def load_config() -> "LokkiConfig":
 @dataclass
 class AwsConfig:
     artifact_bucket: str = ""      # S3 bucket for pipeline data and artifacts
-    ecr_repo_prefix: str = ""     # ECR repository prefix for Lambda images
+    ecr_repo_prefix: str = ""      # ECR repo prefix (empty = use local Docker images)
+    endpoint: str = ""             # AWS endpoint URL (empty = use real AWS)
     roles: RolesConfig = field(default_factory=RolesConfig)
 
 @dataclass

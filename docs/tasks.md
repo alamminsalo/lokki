@@ -339,6 +339,18 @@ _Depends on: M11, M12_
 - Push to ECR using `docker push`
 - Handle Docker not installed error gracefully
 
+**T14.2b** Support empty `ecr_repo_prefix` for local testing:
+- When `aws.ecr_repo_prefix` is empty, skip ECR push entirely
+- Use local Docker image names directly (`<step>:<image_tag>`)
+- Update CloudFormation to use local image URIs when ECR prefix is empty
+- Useful for LocalStack or local development testing
+
+**T14.2c** Support `aws.endpoint` for local AWS services:
+- Add `endpoint` field to `AwsConfig` (e.g., `http://localhost:4566` for LocalStack)
+- Pass endpoint to boto3 clients in deploy.py and runtime handler
+- When endpoint is set, configure boto3 to use it for S3, Lambda, Step Functions, CloudFormation, ECR
+- Skip Docker login/push validation when using local endpoint
+
 **T14.3** Implement CloudFormation deployment:
 - Use boto3 to create or update stack
 - Pass parameters: FlowName, S3Bucket, ECRRepoPrefix, ImageTag

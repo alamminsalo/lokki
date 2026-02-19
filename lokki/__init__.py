@@ -69,11 +69,6 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
-        if not config.aws.ecr_repo_prefix:
-            print("Error: 'aws.ecr_repo_prefix' is not configured.")
-            print("Please set it in lokki.yml or via LOKKI_ECR_REPO_PREFIX env var.")
-            sys.exit(1)
-
         Builder.build(graph, config)
         print("Build complete!")
     elif command == "run":
@@ -127,11 +122,6 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
-        if not config.aws.ecr_repo_prefix:
-            print("Error: 'aws.ecr_repo_prefix' is not configured.")
-            print("Please set it in lokki.yml or via LOKKI_ECR_REPO_PREFIX env var.")
-            sys.exit(1)
-
         stack_name = args.stack_name or f"{graph.name}-stack"
 
         print(f"Deploying flow '{graph.name}' to stack '{stack_name}'...")
@@ -149,12 +139,14 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
                 stack_name=stack_name,
                 region=args.region or "us-east-1",
                 image_tag=args.image_tag,
+                endpoint=config.aws.endpoint,
             )
             deployer.deploy(
                 flow_name=graph.name,
                 artifact_bucket=config.aws.artifact_bucket,
                 ecr_repo_prefix=config.aws.ecr_repo_prefix,
                 build_dir=Path(config.build_dir),
+                aws_endpoint=config.aws.endpoint,
             )
             print()
             print("Deploy complete!")

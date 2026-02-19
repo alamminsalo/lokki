@@ -49,6 +49,7 @@ class AwsConfig:
 
     artifact_bucket: str = ""
     ecr_repo_prefix: str = ""
+    endpoint: str = ""
     roles: RolesConfig = field(default_factory=RolesConfig)
 
 
@@ -82,6 +83,7 @@ class LokkiConfig:
         aws_cfg = AwsConfig(
             artifact_bucket=d.get("aws", {}).get("artifact_bucket", ""),
             ecr_repo_prefix=d.get("aws", {}).get("ecr_repo_prefix", ""),
+            endpoint=d.get("aws", {}).get("endpoint", ""),
             roles=roles_cfg,
         )
         lambda_cfg = LambdaConfig(
@@ -120,6 +122,8 @@ def load_config() -> LokkiConfig:
         config.aws.artifact_bucket = env_bucket
     if env_ecr := os.environ.get("LOKKI_ECR_REPO_PREFIX"):
         config.aws.ecr_repo_prefix = env_ecr
+    if env_endpoint := os.environ.get("LOKKI_AWS_ENDPOINT"):
+        config.aws.endpoint = env_endpoint
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
         config.build_dir = env_build
     if env_log_level := os.environ.get("LOKKI_LOG_LEVEL"):

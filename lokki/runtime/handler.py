@@ -35,9 +35,14 @@ def make_handler(
             if hasattr(cfg, "flow_name")
             else os.environ.get("LOKKI_FLOW_NAME", "unknown")
         )
-        bucket = cfg.artifact_bucket or os.environ.get("LOKKI_S3_BUCKET", "")
+        bucket = cfg.aws.artifact_bucket or os.environ.get("LOKKI_S3_BUCKET", "")
+        endpoint = cfg.aws.endpoint or os.environ.get("LOKKI_AWS_ENDPOINT", "")
         run_id = event.get("run_id", "unknown")
         step_name = fn.__name__
+
+        s3_client_kwargs = {}
+        if endpoint:
+            s3_client_kwargs["endpoint_url"] = endpoint
 
         logger.info(
             f"Lambda invoked: flow={flow_name}, step={step_name}, run_id={run_id}",
