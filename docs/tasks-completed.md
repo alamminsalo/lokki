@@ -276,15 +276,86 @@ lokki/
 
 ---
 
+## Milestone 13 — Logging & Observability ✅
+
+### T13.1 — LoggingConfig dataclass ✅
+- Added `level`, `format`, `progress_interval`, `show_timestamps` fields
+- Environment variable override: `LOKKI_LOG_LEVEL`
+
+### T13.2 — Logging module ✅
+- `lokki/logging.py` with `get_logger()` factory
+- `StepLogger` class with `start()`, `complete(duration)`, `fail(duration, error)` methods
+- `MapProgressLogger` class with `start(total_items)`, `update(status)`, `complete()` methods
+- `HumanFormatter` and `JsonFormatter` classes
+
+### T13.3 — Human-readable formatter ✅
+- Step start: `[INFO] Step 'step_name' started at 2024-01-15T10:30:00`
+- Step complete: `[INFO] Step 'step_name' completed in 2.345s (status=success)`
+- Step fail: `[ERROR] Step 'step_name' failed after 1.234s: ValueError: invalid input`
+- Progress bar: `[=====>                    ] 30/100 (30%) completed`
+
+### T13.4 — JSON formatter ✅
+- Each log line is a JSON object with: level, ts, event, step, duration, status, message
+- Example: `{"level": "INFO", "ts": "2024-01-15T10:30:00.123Z", "event": "step_start", "step": "get_data"}`
+
+### T13.5 — Integration with LocalRunner ✅
+- Wrapped `_run_task()` with step start/complete/fail logging
+- Wrapped `_run_map()` with map progress tracking
+- Wrapped `_run_agg()` with step logging
+
+### T13.6 — Unit tests ✅
+- Written in `tests/test_logging.py`
+- Tests for StepLogger, MapProgressLogger, formatters, configuration
+- All tests pass
+
+### T13.7 — Integration with Lambda runtime handler ✅
+- Added logging to runtime handler in `lokki/runtime/handler.py`
+- Logs function invocation, input processing, execution duration, errors
+
+---
+
+## Milestone 14 — Deploy Command ✅
+
+### T14.1 — Deploy module ✅
+- Implemented `lokki/deploy.py`
+- `Deployer` class with `__init__(stack_name, region, image_tag)`
+- `deploy()` method orchestrating full deploy
+- `_validate_credentials()` - verify AWS credentials and Docker
+
+### T14.2 — Docker image build and push ✅
+- For each step in `lokki-build/lambdas/<step>/`, builds Docker image
+- Tags images with `<ecr_repo_prefix>/<step>:<image_tag>`
+- Pushes to ECR using `docker push`
+- Handles Docker not installed/running errors gracefully
+
+### T14.3 — CloudFormation deployment ✅
+- Uses boto3 to create or update stack
+- Passes parameters: FlowName, S3Bucket, ECRRepoPrefix, ImageTag
+- Waits for stack creation/update to complete
+- Reports stack status and output
+
+### T14.4 — CLI integration ✅
+- Added `deploy` command to CLI in `lokki/__init__.py`
+- Parses `--stack-name`, `--region`, `--image-tag`, `--confirm` arguments
+- Calls `Deployer.deploy(graph, config)`
+- Prints success/failure messages
+
+### T14.5 — Error handling ✅
+- Docker not available: clear error message with instructions
+- ECR authorization: error handling included
+- CloudFormation errors: display error and suggest fixes
+
+---
+
 ## Summary
 
-**Completed:** All milestones T1.1-T12.5
+**Completed:** All milestones T1.1-T14.5
 
 ---
 
 ## Test Results
 
-- **Total tests:** 61
+- **Total tests:** 74
 - **All tests pass**
 - **Linting:** All checks pass
-- **Type checking:** Success (13 source files)
+- **Type checking:** Success (14 source files)

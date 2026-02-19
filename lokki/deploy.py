@@ -275,4 +275,5 @@ class Deployer:
 
     def _get_stack_outputs(self) -> list[dict[str, Any]]:
         stack = self.cf_client.describe_stacks(StackName=self.stack_name)["Stacks"][0]
-        return stack.get("Outputs", [])
+        outputs: list[dict[str, Any]] = stack.get("Outputs", []) or []
+        return outputs
