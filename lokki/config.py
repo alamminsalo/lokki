@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from lokki.logging import LoggingConfig
+
 GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.yml"
 LOCAL_CONFIG_PATH = Path.cwd() / "lokki.yml"
 
@@ -61,6 +63,7 @@ class LokkiConfig:
     roles: RolesConfig = field(default_factory=RolesConfig)
     lambda_env: dict[str, str] = field(default_factory=dict)
     lambda_defaults: LambdaDefaultsConfig = field(default_factory=LambdaDefaultsConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "LokkiConfig":
@@ -74,6 +77,12 @@ class LokkiConfig:
             memory=d.get("lambda_defaults", {}).get("memory", 512),
             image_tag=d.get("lambda_defaults", {}).get("image_tag", "latest"),
         )
+        logging_cfg = LoggingConfig(
+            level=d.get("logging", {}).get("level", "INFO"),
+            format=d.get("logging", {}).get("format", "human"),
+            progress_interval=d.get("logging", {}).get("progress_interval", 10),
+            show_timestamps=d.get("logging", {}).get("show_timestamps", True),
+        )
         return cls(
             artifact_bucket=d.get("artifact_bucket", ""),
             ecr_repo_prefix=d.get("ecr_repo_prefix", ""),
@@ -82,6 +91,7 @@ class LokkiConfig:
             roles=roles,
             lambda_env=d.get("lambda_env", {}),
             lambda_defaults=lambda_defaults,
+            logging=logging_cfg,
         )
 
 
@@ -102,5 +112,7 @@ def load_config() -> LokkiConfig:
         config.ecr_repo_prefix = env_ecr
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
         config.build_dir = env_build
+    if env_log_level := os.environ.get("LOKKI_LOG_LEVEL"):
+        config.logging.level = env_log_level
 
     return config

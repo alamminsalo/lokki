@@ -66,6 +66,7 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
         Builder.build(graph, config)
         print("Build complete!")
     elif command == "run":
+        from lokki.config import load_config
         from lokki.runner import LocalRunner
 
         try:
@@ -74,7 +75,12 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print(f"Error: Failed to create flow graph: {e}")
             sys.exit(1)
 
-        runner = LocalRunner()
+        try:
+            config = load_config()
+        except Exception:
+            config = None
+
+        runner = LocalRunner(logging_config=config.logging if config else None)
         try:
             result = runner.run(graph)
             print(result)

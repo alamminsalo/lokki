@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
 
 
 def _to_json_safe(obj: Any) -> Any:
@@ -65,9 +66,15 @@ class LocalStore:
 
 
 class LocalRunner:
+    def __init__(self, logging_config: LoggingConfig | None = None) -> None:
+        self.logging_config = logging_config or LoggingConfig()
+        self.logger = get_logger("lokki.runner", self.logging_config)
+
     def run(self, graph: FlowGraph) -> Any:
         run_id = "local-run"
         store = LocalStore()
+
+        self.logger.info(f"Starting flow '{graph.name}' (run_id={run_id})")
 
         try:
             for entry in graph.entries:
@@ -99,18 +106,30 @@ class LocalRunner:
         node = entry.node
         step_name = node.name
 
-        if node._default_args or node._default_kwargs:
-            result = node.fn(*node._default_args, **node._default_kwargs)
-        else:
-            result = node.fn()
+        step_logger = StepLogger(step_name, self.logger)
+        step_logger.start()
 
-        store.write(flow_name, run_id, step_name, result)
+        start_time = datetime.now()
+        try:
+            if node._default_args or node._default_kwargs:
+                result = node.fn(*node._default_args, **node._default_kwargs)
+            else:
+                result = node.fn()
+            duration = (datetime.now() - start_time).total_seconds()
 
-        if isinstance(result, list):
-            manifest_items = [
-                {"item": item, "index": i} for i, item in enumerate(result)
-            ]
-            store.write_manifest(flow_name, run_id, step_name, manifest_items)
+            store.write(flow_name, run_id, step_name, result)
+
+            if isinstance(result, list):
+                manifest_items = [
+                    {"item": item, "index": i} for i, item in enumerate(result)
+                ]
+                store.write_manifest(flow_name, run_id, step_name, manifest_items)
+
+            step_logger.complete(duration)
+        except Exception as e:
+            duration = (datetime.now() - start_time).total_seconds()
+            step_logger.fail(duration, e)
+            raise
 
     def _run_map(
         self, store: LocalStore, flow_name: str, run_id: str, entry: MapOpenEntry
@@ -122,6 +141,30 @@ class LocalRunner:
         manifest = json.loads(manifest_path.read_text())
 
         inner_steps = entry.inner_steps
+
+        step_logger = StepLogger(source_name, self.logger)
+        step_logger.start()
+
+        map_logger = MapProgressLogger(
+            source_name, len(manifest), self.logger, self.logging_config
+        )
+        map_logger.start()
+
+        def run_step_with_logging(
+            fn: Callable[[Any], Any], rp: Path, it: Any, ml: MapProgressLogger
+        ) -> tuple[str, Path, Any, str]:
+            try:
+                res = fn(it)
+                rp.parent.mkdir(parents=True, exist_ok=True)
+                data = gzip.compress(
+                    pickle.dumps(res, protocol=pickle.HIGHEST_PROTOCOL)
+                )
+                rp.write_bytes(data)
+                ml.update("completed")
+                return "", rp, res, "success"
+            except Exception:
+                ml.update("failed")
+                raise
 
         with ThreadPoolExecutor() as executor:
             futures = {}
@@ -137,22 +180,16 @@ class LocalRunner:
 
                     fn = step_node.fn
 
-                    def run_step(
-                        fn: Callable[[Any], Any], rp: Path, it: Any
-                    ) -> tuple[str, Path, Any]:
-                        res = fn(it)
-                        rp.parent.mkdir(parents=True, exist_ok=True)
-                        data = gzip.compress(
-                            pickle.dumps(res, protocol=pickle.HIGHEST_PROTOCOL)
-                        )
-                        rp.write_bytes(data)
-                        return "", rp, res
-
-                    future = executor.submit(run_step, fn, result_path, item_data)
+                    future = executor.submit(
+                        run_step_with_logging, fn, result_path, item_data, map_logger
+                    )
                     futures[future] = (step_name, result_path)
 
             for future in as_completed(futures):
                 future.result()
+
+        map_logger.complete()
+        step_logger.complete(0.0)
 
     def _run_agg(
         self, store: LocalStore, flow_name: str, run_id: str, entry: MapCloseEntry
