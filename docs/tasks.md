@@ -380,3 +380,112 @@ _Depends on: M11, M12_
 - Test deploy with mocked AWS clients
 - Test image build and push
 - Test CloudFormation stack creation
+
+---
+
+## Milestone 15 — Local Testing with LocalStack
+
+**Purpose**: Enable full pipeline testing locally using LocalStack and SAM CLI. This provides an AWS simulation environment that catches deployment and integration issues early.
+
+### T15.1 — ZIP Package with Dispatcher Handler ✅
+
+**Status**: COMPLETED
+
+- Generate single `function.zip` containing all dependencies, lokki runtime, and flow module
+- Create dispatcher `handler.py` that reads `LOKKI_STEP_NAME` env var to route to correct step
+- Handle both `StepNode` and raw function objects
+
+### T15.2 — SAM Template for Local Testing ✅
+
+**Status**: COMPLETED
+
+- Generate `sam.yaml` alongside `template.yaml`
+- Use `CodeUri: lambdas/function.zip` for Lambda functions
+- Use single `Handler: handler.lambda_handler` for all functions
+- Set `LOKKI_AWS_ENDPOINT` for SAM local invoke connectivity
+- Set `LOKKI_S3_BUCKET` and `LOKKI_FLOW_NAME` env vars
+
+### T15.3 — CloudFormation ZIP Support ✅
+
+**Status**: COMPLETED
+
+- Add `PackageType: ZipFile` support in CloudFormation template
+- Add explicit `Handler` property for ZIP packages
+- Remove inline `ZipFile` handler (use shared handler)
+
+### T15.4 — S3 Endpoint Configuration ✅
+
+**Status**: COMPLETED
+
+- Add `set_endpoint()` function to lokki S3 module
+- Configure endpoint globally for all S3 operations
+- Support for LocalStack S3 endpoint
+
+### T15.5 — Runtime Handler Endpoint Support ✅
+
+**Status**: COMPLETED
+
+- Read `LOKKI_AWS_ENDPOINT` from environment
+- Configure S3 client with endpoint for Lambda runtime
+- Write manifest using configured endpoint
+
+### T15.6 — Deploy to LocalStack ✅
+
+**Status**: COMPLETED
+
+- Detect LocalStack via `aws.endpoint` configuration
+- Use AWS CLI with `--endpoint-url` for LocalStack deployment
+- Skip Docker image push for ZIP deployments
+- Fall back to AWS CLI when `samlocal` is not available
+
+### T15.7 — Build Integration ✅
+
+**Status**: COMPLETED
+
+- Generate both CloudFormation and SAM templates
+- SAM template used for LocalStack deployments
+- CloudFormation template used for real AWS
+
+---
+
+## Milestone 16 — Step Functions Local Deployment
+
+**Purpose**: Deploy and test the full Step Functions state machine locally using LocalStack. This enables end-to-end pipeline testing without real AWS.
+
+### T16.1 — SAM Template State Machine Resource
+
+Add Step Functions state machine to SAM template for local testing:
+
+- Add `AWS::Serverless::StateMachine` resource to `sam.yaml`
+- Reference the generated `statemachine.json`
+- Configure IAM role for state machine
+
+### T16.2 — SAM Local Start-API
+
+Support starting local Step Functions API:
+
+- Generate any additional configuration needed for SAM
+- Document how to start local Step Functions endpoint
+
+### T16.3 — LocalStack Step Functions Support
+
+Ensure compatibility with LocalStack Step Functions:
+
+- Test state machine deployment to LocalStack
+- Handle any LocalStack-specific requirements
+
+### T16.4 — Integration Test
+
+Write end-to-end test for local pipeline execution:
+
+- Deploy state machine to LocalStack
+- Start execution
+- Verify outputs in LocalStack S3
+
+### T16.5 — Dev Scripts
+
+Create development scripts for local testing:
+
+- `dev/test-sam-local.sh` — Test individual Lambda functions
+- `dev/deploy-localstack.sh` — Deploy full pipeline to LocalStack
+- `dev/run-localstack.sh` — Run pipeline and verify results

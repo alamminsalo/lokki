@@ -311,8 +311,11 @@ lokki-build/
 │       ├── Dockerfile
 │       └── handler.py
 ├── statemachine.json
-└── template.yaml
+├── template.yaml
+└── sam.yaml                    # For LocalStack testing
 ```
+
+> **Note**: For ZIP-based deployments (used for LocalStack testing), the structure differs. See [Section 17: Local Deployment with SAM/LocalStack](#17-local-deployment-with-samlocalstack).
 
 Build steps in order:
 

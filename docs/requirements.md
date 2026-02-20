@@ -505,6 +505,86 @@ When `package_type: zip` is set:
 
 ---
 
+## Local Testing with LocalStack
+
+### Purpose
+
+Local testing with LocalStack and SAM CLI provides an environment that **simulates real AWS** locally, enabling developers to test their pipelines without incurring AWS costs or requiring internet connectivity. This significantly improves code quality by catching deployment and integration issues early in the development cycle.
+
+### Benefits
+
+1. **AWS Simulation**: LocalStack provides local implementations of AWS services (S3, Lambda, Step Functions, CloudFormation, ECR)
+2. **Fast Iteration**: No need to deploy to real AWS for testing
+3. **Cost Free**: No AWS charges for local development
+4. **Offline Development**: Works without internet connectivity
+5. **Full Pipeline Testing**: Can test the complete flow including Step Functions orchestration
+
+### Components
+
+| Component | Role |
+|-----------|------|
+| **LocalStack** | Local AWS cloud stack (S3, Lambda, Step Functions, CloudFormation) |
+| **SAM CLI** | Local Lambda invocation and deployment |
+| **ZIP Deployment** | Package type for Lambda functions (required for LocalStack) |
+
+### Configuration
+
+For local testing, configure `lokki.yml`:
+
+```yaml
+# lokki.yml
+aws:
+  endpoint: http://localhost:4566
+  artifact_bucket: lokki
+
+lambda:
+  package_type: zip  # Required for LocalStack
+```
+
+### Workflow
+
+| Step | Command | Description |
+|------|---------|-------------|
+| Start LocalStack | `localstack start -d` | Start LocalStack services |
+| Build | `python flow_script.py build` | Generate deployment artifacts |
+| Deploy | `python flow_script.py deploy` | Deploy to LocalStack |
+| Test Lambda | `sam local invoke GetBirdsFunction` | Test individual functions |
+| Test Pipeline | `aws stepfunctions start-execution ...` | Run full pipeline |
+| Verify S3 | `aws s3 ls s3://lokki/` | Check outputs |
+
+### Testing Individual Steps
+
+```bash
+# Build first
+python flow_script.py build
+
+# Invoke a specific Lambda function locally
+cd lokki-build
+sam local invoke GetBirdsFunction --template sam.yaml
+
+# Or start local Lambda endpoint
+sam local start-lambda --template sam.yaml --port 3001
+```
+
+### Verifying Pipeline Execution
+
+```bash
+# Check S3 for outputs
+aws --endpoint-url=http://localhost:4566 s3 ls s3://lokki/
+
+# Download and inspect output
+aws --endpoint-url=http://localhost:4566 s3 cp s3://lokki/.../output.pkl.gz -
+```
+
+### Limitations
+
+- LocalStack does not support all AWS service features
+- Some AWS Lambda features may behave differently
+- Container image-based Lambda not fully supported (use ZIP deployment)
+- Step Functions local has limited state machine size
+
+---
+
 ## Out of Scope (v1)
 
 - Non-AWS deployment targets

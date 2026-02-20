@@ -349,7 +349,7 @@ lokki/
 
 ## Summary
 
-**Completed:** All milestones T1.1-T14.5
+**Completed:** All milestones T1.1-T15.7
 
 ---
 
@@ -385,16 +385,11 @@ Implemented sequential chaining with `.next()` method:
 - Updated `_map_state()` to generate nested state machine
 - Inner chain B → C gets proper `Next` pointers
 
-### Test Results
-- **Total tests:** 83
-- **All tests pass**
-- **Linting:** All checks pass
-
 ---
 
 ## Test Results
 
-- **Total tests:** 74
+- **Total tests:** 85
 - **All tests pass**
 - **Linting:** All checks pass
 - **Type checking:** Success (14 source files)
