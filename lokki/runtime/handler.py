@@ -32,17 +32,16 @@ def make_handler(
         cfg = load_config()
         flow_name = (
             cfg.flow_name
-            if hasattr(cfg, "flow_name")
+            if cfg.flow_name
             else os.environ.get("LOKKI_FLOW_NAME", "unknown")
         )
         bucket = cfg.aws.artifact_bucket or os.environ.get("LOKKI_S3_BUCKET", "")
-        endpoint = cfg.aws.endpoint or os.environ.get("LOKKI_AWS_ENDPOINT", "")
+        endpoint = os.environ.get("LOKKI_AWS_ENDPOINT", "")
         run_id = event.get("run_id", "unknown")
         step_name = fn.__name__
 
-        s3_client_kwargs = {}
         if endpoint:
-            s3_client_kwargs["endpoint_url"] = endpoint
+            s3.set_endpoint(endpoint)
 
         logger.info(
             f"Lambda invoked: flow={flow_name}, step={step_name}, run_id={run_id}",
@@ -111,12 +110,7 @@ def make_handler(
                     f"lokki/{flow_name}/{run_id}/{step_name}/map_manifest.json"
                 )
 
-                boto3.client("s3").put_object(
-                    Bucket=bucket,
-                    Key=map_manifest_key,
-                    Body=json.dumps(manifest),
-                    ContentType="application/json",
-                )
+                s3.write_manifest(bucket, map_manifest_key, manifest)
                 duration = (datetime.now() - start_time).total_seconds()
                 logger.info(
                     f"Step completed: {step_name} in {duration:.3f}s",

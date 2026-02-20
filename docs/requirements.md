@@ -395,6 +395,12 @@ aws:
 
 # Lambda configuration
 lambda:
+  # Deployment package type: "image" (default) or "zip"
+  # - image: Docker container image pushed to ECR
+  # - zip: ZIP archive uploaded directly to Lambda
+  # Use "zip" for LocalStack testing or simpler deployments
+  package_type: image
+  
   # Default Lambda resource configuration
   timeout: 900          # seconds
   memory: 512           # MB
@@ -432,6 +438,60 @@ The **flow name** is not a configurable field — it is always derived from the 
 | `stepfunctions` (pip) | AWS Step Functions SDK / state machine construction helpers |
 | `boto3` | AWS SDK for S3 and Step Functions API calls |
 | `pyyaml` | Parsing `lokki.yml` configuration files |
+
+---
+
+## Lambda Deployment Modes
+
+lokki supports two Lambda deployment modes: **container image** and **ZIP archive**.
+
+### Container Image (Default)
+
+Each `@step` function is packaged into its own Docker container image pushed to ECR. This is the default and recommended approach for production deployments.
+
+**Advantages:**
+- Full control over runtime environment
+- Larger deployment package size (10GB limit vs 50MB for ZIP)
+- Better for dependencies with native extensions
+
+**Requirements:**
+- ECR repository for storing images
+- Docker installed and configured
+
+### ZIP Archive
+
+Each `@step` function is packaged as a ZIP archive uploaded directly to Lambda. This mode is useful for:
+
+- **LocalStack testing** — LocalStack has limited support for container image-based Lambdas
+- **Simpler deployments** — No need for ECR or Docker
+- **Smaller packages** — When step functions have minimal dependencies
+
+**Advantages:**
+- No Docker or ECR required
+- Faster builds (no image push/pull)
+- Simpler CI/CD pipelines
+
+**Limitations:**
+- 50MB deployment package size (250MB unzipped)
+- Not suitable for dependencies with large native extensions
+
+### Configuration
+
+To enable ZIP deployment mode, set `package_type: zip` in `lokki.yml`:
+
+```yaml
+# lokki.yml
+lambda:
+  package_type: zip  # "image" (default) or "zip"
+  timeout: 900
+  memory: 512
+```
+
+When `package_type: zip` is set:
+- The build process generates a ZIP file per step instead of a Dockerfile
+- The CloudFormation template uses `PackageType: ZipFile` instead of `PackageType: Image`
+- No Docker build or ECR push is performed during deployment
+- The Lambda runtime automatically installs dependencies from `requirements.txt` generated at build time
 
 ---
 

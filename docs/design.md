@@ -430,6 +430,7 @@ Parameters:
   S3Bucket: { Type: String }
   ECRRepoPrefix: { Type: String }
   ImageTag: { Type: String, Default: latest }
+  PackageType: { Type: String, Default: image }
 ```
 
 **IAM**
@@ -439,6 +440,8 @@ Parameters:
 
 **Lambda Functions** (one per `@step`)
 
+For container image deployments (`PackageType: Image`):
+
 ```yaml
 GetBirdsFunction:
   Type: AWS::Lambda::Function
@@ -447,6 +450,26 @@ GetBirdsFunction:
     PackageType: Image
     Code:
       ImageUri: !Sub "${ECRRepoPrefix}/get_birds:${ImageTag}"
+    Role: !GetAtt LambdaExecutionRole.Arn
+    Timeout: 900
+    MemorySize: 512
+    Environment:
+      Variables:
+        LOKKI_S3_BUCKET: !Ref S3Bucket
+        LOKKI_FLOW_NAME: !Ref FlowName
+```
+
+For ZIP archive deployments (`PackageType: ZipFile`):
+
+```yaml
+GetBirdsFunction:
+  Type: AWS::Lambda::Function
+  Properties:
+    FunctionName: !Sub "${FlowName}-get-birds"
+    PackageType: ZipFile
+    Code:
+      ZipFile: |
+        # Inlined handler code
     Role: !GetAtt LambdaExecutionRole.Arn
     Timeout: 900
     MemorySize: 512
@@ -509,6 +532,52 @@ CMD ["handler.lambda_handler"]
 ```
 
 > **Symlink note**: Docker `COPY` does not support host symlinks into the image in a way that persists as symlinks inside the container. Instead, the `lokki/` source tree is `COPY`-ed once per image from the build context. To minimise duplication, Docker layer caching means this layer is shared across all step images when built from the same context — effectively the same benefit as symlinking. If the project uses a monorepo and lokki is an editable install, the wheel can be built once and `COPY`-ed into each image.
+
+### ZIP Archive Packaging
+
+When `package_type: zip` is configured in `lokki.yml`, the build process generates ZIP archives instead of Docker images. This is useful for LocalStack testing or simpler deployment setups.
+
+**Directory structure** (`lokki-build/lambdas/<step_name>/`):
+
+```
+get_birds/
+├── requirements.txt    # Step-specific dependencies
+├── handler.py          # Step entrypoint
+└── function.zip       # ZIP archive for Lambda
+```
+
+**requirements.txt generation** — The build process:
+1. Extracts the step's direct imports from the flow script
+2. Generates a `requirements.txt` with only those dependencies
+3. Downloads and includes the resolved packages in the ZIP
+
+**handler.py** (per-step entrypoint):
+
+```python
+# lokki-build/lambdas/get_birds/handler.py (auto-generated)
+from birds_flow_example import get_birds
+from lokki.runtime.handler import make_handler
+
+lambda_handler = make_handler(get_birds.fn)
+```
+
+**CloudFormation template** — Lambda functions use `PackageType: ZipFile`:
+
+```yaml
+GetBirdsFunction:
+  Type: AWS::Lambda::Function
+  Properties:
+    FunctionName: !Sub "${FlowName}-get-birds"
+    PackageType: ZipFile
+    Code:
+      ZipFile: |
+        # Inline the handler.py content
+    Role: !GetAtt LambdaExecutionRole.Arn
+    Timeout: 900
+    MemorySize: 512
+```
+
+> **Note**: For ZIP deployments, the CloudFormation template inlines the handler code directly rather than referencing an S3 object. This simplifies deployment but means the handler source is stored in the template itself.
 
 ### handler.py (per-step entrypoint)
 
@@ -1028,3 +1097,172 @@ This requires Docker to be installed and running on the developer's machine.
 ### Idempotency
 
 The deploy command is idempotent - running it multiple times with the same parameters will update the CloudFormation stack. Images are re-tagged and pushed on each run.
+
+---
+
+## 17. Local Deployment with SAM/LocalStack
+
+For local development and testing, lokki supports ZIP-based deployment with SAM CLI and LocalStack. This allows testing the full pipeline locally without deploying to real AWS.
+
+### Configuration
+
+In `lokki.yml`, set `package_type: zip`:
+
+```yaml
+lambda:
+  package_type: zip  # Use "zip" for LocalStack testing; "image" for production
+  timeout: 900
+  memory: 512
+```
+
+For LocalStack, configure the endpoint:
+
+```yaml
+aws:
+  profile: local
+  artifact_bucket: lokki
+  endpoint: http://localhost:4566
+```
+
+### Build Output
+
+When `package_type: zip` is set, the build generates:
+
+```
+lokki-build/
+├── lambdas/
+│   ├── function.zip      # Single ZIP with all dependencies
+│   ├── handler.py       # Dispatcher handler
+│   ├── lokki/          # lokki runtime code
+│   └── birds_flow_example.py  # User's flow module
+├── statemachine.json
+├── template.yaml        # CloudFormation (for real AWS)
+└── sam.yaml            # SAM template (for LocalStack)
+```
+
+### Single ZIP Package
+
+Instead of per-step Docker images, a single `function.zip` is created containing:
+- All dependencies (boto3, pyyaml, etc.)
+- lokki runtime code
+- User's flow module (e.g., `birds_flow_example.py`)
+
+### Dispatcher Handler
+
+A single `handler.py` dispatches to the correct step function based on the `LOKKI_STEP_NAME` environment variable:
+
+```python
+# handler.py (auto-generated)
+import os
+import importlib
+
+step_name = os.environ.get("LOKKI_STEP_NAME", "")
+module_name = os.environ.get("LOKKI_MODULE_NAME", "")
+
+mod = importlib.import_module(module_name)
+step_node = getattr(mod, step_name)
+step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
+
+from lokki.runtime.handler import make_handler
+lambda_handler = make_handler(step_func)
+```
+
+### SAM Template
+
+The `sam.yaml` template defines Lambda functions using the ZIP package:
+
+```yaml
+GetBirdsFunction:
+  Type: AWS::Serverless::Function
+  Properties:
+    FunctionName: birds-flow-get_birds
+    Runtime: python3.13
+    Handler: handler.lambda_handler
+    CodeUri: lambdas/function.zip
+    Environment:
+      Variables:
+        LOKKI_S3_BUCKET: lokki
+        LOKKI_FLOW_NAME: birds-flow
+        LOKKI_AWS_ENDPOINT: http://host.docker.internal:4566
+        LOKKI_STEP_NAME: get_birds
+        LOKKI_MODULE_NAME: birds_flow_example
+```
+
+**Key environment variables:**
+- `LOKKI_S3_BUCKET`: S3 bucket for pipeline data
+- `LOKKI_FLOW_NAME`: Name of the flow
+- `LOKKI_AWS_ENDPOINT`: Endpoint for SAM local invoke (LocalStack)
+- `LOKKI_STEP_NAME`: Name of the step to invoke
+- `LOKKI_MODULE_NAME`: Python module containing the flow
+
+### S3 Endpoint Configuration
+
+The lokki S3 module supports endpoint configuration for LocalStack:
+
+```python
+# lokki/s3.py
+_endpoint: str = ""
+
+def set_endpoint(endpoint: str) -> None:
+    global _endpoint
+    _endpoint = endpoint
+
+def _get_s3_client():
+    kwargs = {}
+    if _endpoint:
+        kwargs["endpoint_url"] = _endpoint
+    return boto3.client("s3", **kwargs)
+```
+
+The runtime handler reads `LOKKI_AWS_ENDPOINT` and configures the S3 client:
+
+```python
+# lokki/runtime/handler.py
+endpoint = os.environ.get("LOKKI_AWS_ENDPOINT", "")
+if endpoint:
+    s3.set_endpoint(endpoint)
+```
+
+### Deploy to LocalStack
+
+The deploy command detects LocalStack (when `aws.endpoint` is configured) and uses AWS CLI with `--endpoint-url`:
+
+```bash
+python flow_script.py deploy --stack-name lokki-test --region us-east-1
+```
+
+Output:
+```
+Skipping Docker image push for ZIP deployment
+Using SAM template for LocalStack deployment...
+✓ Deployed stack 'lokki-test'
+```
+
+### Test Locally with SAM CLI
+
+After deployment, test individual Lambda functions:
+
+```bash
+cd lokki-build
+
+# Invoke a specific function
+sam local invoke GetBirdsFunction --template sam.yaml --region us-east-1
+
+# Or start a local Lambda endpoint
+sam local start-lambda --template sam.yaml --port 3001
+```
+
+The Lambda container will write to LocalStack S3, which can be verified:
+
+```bash
+aws --endpoint-url=http://localhost:4566 s3 ls lokki/
+```
+
+### Workflow Summary
+
+| Step | Command |
+|------|---------|
+| Build | `python flow_script.py build` |
+| Deploy to LocalStack | `python flow_script.py deploy` |
+| Test function | `sam local invoke GetBirdsFunction` |
+| List S3 contents | `aws --endpoint-url=http://localhost:4566 s3 ls lokki/` |

@@ -20,6 +20,7 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
         "ECRRepoPrefix": {"Type": "String"},
         "ImageTag": {"Type": "String", "Default": "latest"},
         "AWSEndpoint": {"Type": "String", "Default": ""},
+        "PackageType": {"Type": "String", "Default": config.lambda_cfg.package_type},
     }
 
     resources["LambdaExecutionRole"] = {
@@ -65,30 +66,50 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
     module_name = _get_module_name(graph)
 
     step_names = _get_step_names(graph)
+    package_type = config.lambda_cfg.package_type
+
     for step_name in step_names:
         env_vars = {
             "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
             "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
             "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
             "LOKKI_STEP_NAME": step_name,
-            "LOKKI_MODULE_NAME": module_name,
+            "LOKKI_MODULE_NAME": f"{module_name}_example",
         }
         env_vars.update(config.lambda_cfg.env)
 
-        resources[_to_pascal(step_name) + "Function"] = {
-            "Type": "AWS::Lambda::Function",
-            "Properties": {
-                "FunctionName": "{{Param:FlowName}}-" + step_name,
-                "PackageType": "Image",
-                "Code": {
-                    "ImageUri": "{{Param:ECRRepoPrefix}}/lokki:{{Param:ImageTag}}"
+        if package_type == "zip":
+            resources[_to_pascal(step_name) + "Function"] = {
+                "Type": "AWS::Lambda::Function",
+                "Properties": {
+                    "FunctionName": "{{Param:FlowName}}-" + step_name,
+                    "PackageType": "ZipFile",
+                    "Code": {
+                        "S3Bucket": "{{Param:S3Bucket}}",
+                        "S3Key": "lambdas/function.zip",
+                    },
+                    "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
+                    "Timeout": config.lambda_cfg.timeout,
+                    "MemorySize": config.lambda_cfg.memory,
+                    "Environment": {"Variables": env_vars},
+                    "Handler": "handler.lambda_handler",
                 },
-                "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
-                "Timeout": config.lambda_cfg.timeout,
-                "MemorySize": config.lambda_cfg.memory,
-                "Environment": {"Variables": env_vars},
-            },
-        }
+            }
+        else:
+            resources[_to_pascal(step_name) + "Function"] = {
+                "Type": "AWS::Lambda::Function",
+                "Properties": {
+                    "FunctionName": "{{Param:FlowName}}-" + step_name,
+                    "PackageType": "Image",
+                    "Code": {
+                        "ImageUri": "{{Param:ECRRepoPrefix}}/lokki:{{Param:ImageTag}}"
+                    },
+                    "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
+                    "Timeout": config.lambda_cfg.timeout,
+                    "MemorySize": config.lambda_cfg.memory,
+                    "Environment": {"Variables": env_vars},
+                },
+            }
 
     resources["StepFunctionsExecutionRole"] = {
         "Type": "AWS::IAM::Role",
@@ -170,4 +191,4 @@ def _to_pascal(name: str) -> str:
 
 def _get_module_name(graph: FlowGraph) -> str:
     """Get the module name from the flow graph name."""
-    return f"{graph.name.replace('-', '_')}_flow"
+    return graph.name.replace("-", "_")

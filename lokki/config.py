@@ -57,6 +57,7 @@ class AwsConfig:
 class LambdaConfig:
     """Lambda configuration."""
 
+    package_type: str = "image"  # "image" or "zip"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
@@ -87,6 +88,7 @@ class LokkiConfig:
             roles=roles_cfg,
         )
         lambda_cfg = LambdaConfig(
+            package_type=d.get("lambda", {}).get("package_type", "image"),
             timeout=d.get("lambda", {}).get("timeout", 900),
             memory=d.get("lambda", {}).get("memory", 512),
             image_tag=d.get("lambda", {}).get("image_tag", "latest"),

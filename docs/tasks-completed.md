@@ -398,3 +398,51 @@ Implemented sequential chaining with `.next()` method:
 - **All tests pass**
 - **Linting:** All checks pass
 - **Type checking:** Success (14 source files)
+
+---
+
+## New Feature — ZIP Package Deployment with SAM/LocalStack
+
+Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStack:
+
+### T15.1 — Single ZIP Package with Dispatcher Handler ✅
+- Modified `lambda_pkg.py` to generate single `function.zip`
+- Contains all dependencies, lokki code, and flow example modules
+- Single `handler.py` dispatcher reads `LOKKI_STEP_NAME` env var to route to correct step
+- Handles `StepNode` objects by extracting `.fn` attribute
+
+### T15.2 — SAM Template for Local Testing ✅
+- Updated `sam_template.py` to use `CodeUri: lambdas/function.zip`
+- Uses single `Handler: handler.lambda_handler` for all functions
+- Sets `LOKKI_AWS_ENDPOINT: http://host.docker.internal:4566` for SAM local invoke
+- Sets `LOKKI_S3_BUCKET` and `LOKKI_FLOW_NAME` env vars
+
+### T15.3 — CloudFormation Template Updates ✅
+- Added explicit `Handler: handler.lambda_handler` for ZIP package type
+- Uses `PackageType: ZipFile` instead of `Image`
+
+### T15.4 — S3 Module Endpoint Support ✅
+- Added `set_endpoint()` function to configure S3 endpoint globally
+- `_get_s3_client()` uses configured endpoint for all S3 operations
+- Enables Lambda runtime to write to LocalStack during `sam local invoke`
+
+### T15.5 — Runtime Handler Endpoint Configuration ✅
+- Reads `LOKKI_AWS_ENDPOINT` from environment
+- Calls `s3.set_endpoint()` to configure S3 client
+- All S3 writes (output, map manifest) use configured endpoint
+
+### T15.6 — Deploy to LocalStack ✅
+- Added `package_type` parameter to `Deployer` class
+- For LocalStack (when `aws.endpoint` is configured), uses AWS CLI with `--endpoint-url`
+- Falls back to AWS CLI when `samlocal` is not available
+- Skips Docker image push for ZIP deployments
+
+### T15.7 — Build Integration ✅
+- Builder generates SAM template (`sam.yaml`) alongside CloudFormation template
+- `lokki-build/sam.yaml` used for LocalStack deployments
+- `lokki-build/template.yaml` still used for real AWS deployments
+
+### Test Results
+- **Total tests:** 85
+- **All tests pass**
+- **SAM local invoke:** Successfully writes to LocalStack S3

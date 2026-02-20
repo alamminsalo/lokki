@@ -7,6 +7,7 @@ from pathlib import Path
 
 from lokki.builder.cloudformation import build_template
 from lokki.builder.lambda_pkg import generate_shared_lambda_files
+from lokki.builder.sam_template import build_sam_template
 from lokki.builder.state_machine import build_state_machine
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph
@@ -32,7 +33,12 @@ class Builder:
         template_path = build_dir / "template.yaml"
         template_path.write_text(template)
 
+        sam_template = build_sam_template(graph, config, build_dir)
+        sam_template_path = build_dir / "sam.yaml"
+        sam_template_path.write_text(sam_template)
+
         print(f"Build complete! Artifacts written to {build_dir}")
         print(f"  - Lambda packages: {lambdas_dir}")
         print(f"  - State machine: {state_machine_path}")
         print(f"  - CloudFormation template: {template_path}")
+        print(f"  - SAM template: {sam_template_path}")

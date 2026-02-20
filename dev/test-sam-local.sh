@@ -8,9 +8,6 @@ LOCALSTACK_HOST="${LOCALSTACK_HOST:-localhost}"
 LOCALSTACK_PORT="${LOCALSTACK_PORT:-4566}"
 ENDPOINT_URL="http://${LOCALSTACK_HOST}:${LOCALSTACK_PORT}"
 
-FLOW_FILE="${FLOW_FILE:-$PROJECT_DIR/examples/birds_flow_example.py}"
-CONFIG_FILE="${CONFIG_FILE:-$PROJECT_DIR/examples/lokki.yml}"
-
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export AWS_DEFAULT_REGION=us-east-1
@@ -30,7 +27,7 @@ cd "$PROJECT_DIR/examples"
 rm -rf lokki-build/
 uv run python -c "
 import importlib.util
-spec = importlib.util.spec_from_file_location('flow', '$FLOW_FILE')
+spec = importlib.util.spec_from_file_location('flow', 'birds_flow_example.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -42,35 +39,22 @@ config = load_config()
 Builder.build(graph, config)
 "
 
-STACK_NAME="lokki-test"
-FLOW_NAME="birds-flow"
-BUILD_DIR="$PROJECT_DIR/examples/lokki-build"
+cd lokki-build
 
-echo "=== Deploying to LocalStack ==="
-cd "$PROJECT_DIR/examples"
-uv run python -c "
-from pathlib import Path
-from lokki.deploy import Deployer
-from lokki.config import load_config
+echo "=== Testing Lambda with SAM local ==="
+echo ""
+echo "Invoking get_birds function..."
+sam local invoke GetBirdsFunction \
+    --event '{"test": true}' \
+    --endpoint-url "http://127.0.0.1:3001" \
+    2>/dev/null || echo "SAM local not running, trying direct invoke..."
 
-config = load_config()
-deployer = Deployer(
-    stack_name='$STACK_NAME',
-    region='us-east-1',
-    endpoint='$ENDPOINT_URL',
-    package_type=config.lambda_cfg.package_type
-)
-
-deployer.deploy(
-    flow_name='$FLOW_NAME',
-    artifact_bucket='lokki',
-    ecr_repo_prefix='',
-    build_dir=Path('$BUILD_DIR'),
-    aws_endpoint='$ENDPOINT_URL',
-    package_type=config.lambda_cfg.package_type
-)
-"
-
-echo "=== Done! ==="
-echo "Stack '$STACK_NAME' deployed to LocalStack"
-echo "Access LocalStack at: $ENDPOINT_URL"
+echo ""
+echo "To test with SAM local Lambda endpoint:"
+echo "1. In one terminal: cd lokki-build && sam local start-lambda --port 3001"
+echo "2. In another: sam local invoke GetBirdsFunction --endpoint-url http://127.0.0.1:3001"
+echo ""
+echo "To test individual steps, run:"
+echo "  cd lokki-build"
+echo "  sam local invoke GetBirdsFunction"
+echo "  sam local invoke UppercaseListFunction --event '{\"result_url\": \"file:///tmp/test.pkl\"}'"

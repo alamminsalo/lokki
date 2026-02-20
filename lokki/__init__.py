@@ -140,6 +140,7 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
                 region=args.region or "us-east-1",
                 image_tag=args.image_tag,
                 endpoint=config.aws.endpoint,
+                package_type=config.lambda_cfg.package_type,
             )
             deployer.deploy(
                 flow_name=graph.name,
@@ -147,6 +148,7 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
                 ecr_repo_prefix=config.aws.ecr_repo_prefix,
                 build_dir=Path(config.build_dir),
                 aws_endpoint=config.aws.endpoint,
+                package_type=config.lambda_cfg.package_type,
             )
             print()
             print("Deploy complete!")

@@ -26,7 +26,7 @@ services:
       - "8080:8080"
     volumes:
       - pypi_packages:/data/packages
-    command: run -p 8080 -P . -a . /data/packages
+    command: run -p 8080 -P . -a . --overwrite /data/packages
 
 volumes:
   localstack_data:

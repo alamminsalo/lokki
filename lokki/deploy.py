@@ -29,11 +29,13 @@ class Deployer:
         region: str = "us-east-1",
         image_tag: str = "latest",
         endpoint: str = "",
+        package_type: str = "image",
     ) -> None:
         self.stack_name = stack_name
         self.region = region
         self.image_tag = image_tag
         self.endpoint = endpoint
+        self.package_type = package_type
 
         endpoint_kwargs: dict[str, str] = {}
         if endpoint:
@@ -59,10 +61,16 @@ class Deployer:
         ecr_repo_prefix: str,
         build_dir: Path,
         aws_endpoint: str = "",
+        package_type: str = "image",
     ) -> None:
         self._validate_credentials()
-        self._push_images(ecr_repo_prefix, build_dir)
-        self._deploy_stack(flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint)
+        if package_type == "zip":
+            print("Skipping Docker image push for ZIP deployment")
+        else:
+            self._push_images(ecr_repo_prefix, build_dir)
+        self._deploy_stack(
+            flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint, build_dir
+        )
 
     def _validate_credentials(self, require_ecr: bool = True) -> None:
         if self.endpoint:
@@ -188,19 +196,146 @@ class Deployer:
         artifact_bucket: str,
         ecr_repo_prefix: str,
         aws_endpoint: str = "",
+        build_dir: Path | None = None,
     ) -> None:
-        template_path = Path("lokki-build") / "template.yaml"
+        if build_dir is None:
+            build_dir = Path("lokki-build")
+
+        template_path = build_dir / "template.yaml"
         if not template_path.exists():
             template_path = Path(self.stack_name).parent / "template.yaml"
 
         if not template_path.exists():
             raise DeployError(f"Template file not found: {template_path}")
 
+        use_sam = bool(aws_endpoint)
+
+        if use_sam:
+            sam_template_path = build_dir / "sam.yaml"
+            if sam_template_path.exists():
+                template_path = sam_template_path
+                print("Using SAM template for LocalStack deployment...")
+                self._deploy_with_sam_cli(
+                    template_path, flow_name, artifact_bucket, aws_endpoint
+                )
+                return
+
         try:
             template_body = template_path.read_text()
         except Exception as e:
             raise DeployError(f"Failed to read template: {e}") from e
 
+        self._deploy_with_boto3(
+            template_body, flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint
+        )
+
+    def _deploy_with_sam_cli(
+        self,
+        template_path: Path,
+        flow_name: str,
+        artifact_bucket: str,
+        aws_endpoint: str,
+    ) -> None:
+        aws_cmd_path = shutil.which("aws") or "aws"
+        use_samlocal = shutil.which("samlocal")
+
+        if use_samlocal:
+            samlocal_cmd = shutil.which("samlocal") or "samlocal"
+            cmd = [
+                samlocal_cmd,
+                "deploy",
+                "--template-file",
+                str(template_path),
+                "--stack-name",
+                self.stack_name,
+                "--capabilities",
+                "CAPABILITY_IAM",
+                "--resolve-s3",
+                "--region",
+                self.region,
+            ]
+            if aws_endpoint:
+                cmd.extend(
+                    [
+                        "--parameter-overrides",
+                        f"FlowName={flow_name} S3Bucket={artifact_bucket} "
+                        f"AWSEndpoint={aws_endpoint}",
+                    ]
+                )
+            else:
+                cmd.extend(
+                    [
+                        "--parameter-overrides",
+                        f"FlowName={flow_name} S3Bucket={artifact_bucket}",
+                    ]
+                )
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode != 0:
+                    raise DeployError(f"SAM local deploy failed: {result.stderr}")
+                print(f"✓ Deployed stack '{self.stack_name}' via samlocal")
+                return
+            except FileNotFoundError:
+                pass
+
+        aws_cmd_path = shutil.which("aws") or "aws"
+        aws_cmd = [aws_cmd_path, "cloudformation", "deploy"]
+        endpoint_args = []
+        if aws_endpoint:
+            endpoint_args = ["--endpoint-url", aws_endpoint]
+
+        cmd = (
+            aws_cmd
+            + endpoint_args
+            + [
+                "--template-file",
+                str(template_path),
+                "--stack-name",
+                self.stack_name,
+                "--capabilities",
+                "CAPABILITY_IAM",
+                "--parameter-overrides",
+                f"FlowName={flow_name} S3Bucket={artifact_bucket}",
+                "--region",
+                self.region,
+            ]
+        )
+
+        env = None
+        if aws_endpoint:
+            env = {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env,
+            )
+            if result.returncode != 0:
+                error_msg = result.stderr
+                raise DeployError(f"CloudFormation deploy failed: {error_msg}")
+            print(f"✓ Deployed stack '{self.stack_name}'")
+        except subprocess.TimeoutExpired:
+            raise DeployError("CloudFormation deploy timed out") from None
+        except FileNotFoundError:
+            raise DeployError("AWS CLI not found. Please install AWS CLI.") from None
+
+    def _deploy_with_boto3(
+        self,
+        template_body: str,
+        flow_name: str,
+        artifact_bucket: str,
+        ecr_repo_prefix: str,
+        aws_endpoint: str,
+    ) -> None:
         try:
             existing_stack = None
             try:
