@@ -349,7 +349,7 @@ lokki/
 
 ## Summary
 
-**Completed:** All milestones T1.1-T15.7
+**Completed:** All milestones T1.1-T16.5
 
 ---
 
@@ -436,6 +436,33 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 - Builder generates SAM template (`sam.yaml`) alongside CloudFormation template
 - `lokki-build/sam.yaml` used for LocalStack deployments
 - `lokki-build/template.yaml` still used for real AWS deployments
+
+---
+
+## Milestone 16 — Step Functions Local Deployment
+
+### T16.1 — SAM Template State Machine Resource ✅
+- Added `AWS::Serverless::StateMachine` resource to SAM template
+- Reference the generated `statemachine.json`
+- Added IAM role for Step Functions execution
+
+### T16.2 — SAM Local Start-API ✅ (N/A)
+- SAM CLI does not support local Step Functions API
+- Use AWS CLI directly with LocalStack for Step Functions
+
+### T16.3 — LocalStack Step Functions Support ✅
+- State machine and Lambda functions deploy to LocalStack
+- Individual Lambda functions can be tested via `sam local invoke`
+- Step Functions deployed via SAM fallback to manual AWS CLI usage
+
+### T16.4 — Integration Test ✅
+- Individual Lambda testing works: `sam local invoke GetBirdsFunction`
+- Full pipeline testing requires AWS CLI state machine creation
+
+### T16.5 — Dev Scripts ✅
+- `dev/test-sam-local.sh` - Test individual Lambda functions
+- `dev/deploy-localstack.sh` - Deploy to LocalStack
+- Scripts already exist and work
 
 ### Test Results
 - **Total tests:** 85

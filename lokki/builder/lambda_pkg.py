@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
+import sys
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 from lokki.config import LokkiConfig
@@ -58,7 +61,10 @@ lambda_handler = make_handler(step_func)
 
 
 def generate_shared_lambda_files(
-    graph: FlowGraph, config: LokkiConfig, build_dir: Path
+    graph: FlowGraph,
+    config: LokkiConfig,
+    build_dir: Path,
+    flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate Lambda package files.
 
@@ -69,6 +75,7 @@ def generate_shared_lambda_files(
         graph: The flow graph (used to determine module name)
         config: Configuration including lambda defaults
         build_dir: Base build directory
+        flow_fn: The flow function (optional, used to detect module path)
 
     Returns:
         Path to the generated lambdas directory
@@ -77,7 +84,7 @@ def generate_shared_lambda_files(
     lambdas_dir.mkdir(parents=True, exist_ok=True)
 
     if config.lambda_cfg.package_type == "zip":
-        return _generate_shared_zip_package(graph, config, lambdas_dir)
+        return _generate_shared_zip_package(graph, config, lambdas_dir, flow_fn)
     else:
         return _generate_docker_packages(graph, config, lambdas_dir)
 
@@ -107,8 +114,48 @@ def _generate_docker_packages(
     return lambdas_dir
 
 
+def _get_flow_module_path(
+    flow_fn: Callable[[], FlowGraph] | None,
+) -> Path | None:
+    """Detect the flow module path from the flow function.
+
+    Args:
+        flow_fn: The flow function
+
+    Returns:
+        Path to the flow module file, or None if not detectable
+    """
+    import sys
+
+    if flow_fn is None:
+        return None
+
+    original_fn = flow_fn
+    if hasattr(flow_fn, "_fn"):
+        original_fn = flow_fn._fn
+
+    if hasattr(original_fn, "__module__"):
+        module_name = original_fn.__module__
+
+        if module_name in sys.modules:
+            module = sys.modules[module_name]
+            if hasattr(module, "__file__") and module.__file__:
+                return Path(module.__file__)
+
+        if module_name == "__main__":
+            if hasattr(sys, "argv") and len(sys.argv) > 0:
+                script_path = Path(sys.argv[0]).resolve()
+                if script_path.exists():
+                    return script_path
+
+    return None
+
+
 def _generate_shared_zip_package(
-    graph: FlowGraph, config: LokkiConfig, lambdas_dir: Path
+    graph: FlowGraph,
+    config: LokkiConfig,
+    lambdas_dir: Path,
+    flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate a single shared ZIP package with all dependencies and handlers.
 
@@ -120,64 +167,74 @@ def _generate_shared_zip_package(
         graph: The flow graph
         config: Configuration including lambda defaults
         lambdas_dir: The lambdas directory to create files in
+        flow_fn: The flow function (optional, used to detect module path)
 
     Returns:
         Path to the generated lambdas directory
     """
-    lokki_src = Path(__file__).parent.parent
-    project_root = lokki_src.parent
 
     print("Generating shared ZIP package")
-    print(f"  lokki_src: {lokki_src}")
-    print(f"  project_root: {project_root}")
     print(f"  graph.name: {graph.name}")
 
     step_names = _get_step_names_from_graph(graph)
 
     build_dir = lambdas_dir.parent
-    deps_dir = build_dir / "deps"
-
-    if not deps_dir.exists():
-        deps_dir.mkdir(parents=True, exist_ok=True)
-        import subprocess
-
-        subprocess.run(
-            ["uv", "pip", "install", "-t", str(deps_dir), "boto3", "pyyaml"],
-            check=True,
-            capture_output=True,
-        )
-
     shared_zip_dir = lambdas_dir
     shared_zip_dir.mkdir(parents=True, exist_ok=True)
 
-    lokki_target_dir = shared_zip_dir / "lokki"
-    if not lokki_target_dir.exists():
-        lokki_target_dir.mkdir(parents=True, exist_ok=True)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        subprocess.run(
+            [uv_path, "pip", "install", "--target", str(shared_zip_dir), "lokki"],
+            check=False,
+            capture_output=True,
+        )
 
-    for item in lokki_src.rglob("*"):
-        if item.is_file():
-            relative = item.relative_to(lokki_src)
-            target = lokki_target_dir / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(item, target)
+    flow_module_path = _get_flow_module_path(flow_fn)
+    if flow_module_path:
+        flow_module_dir = flow_module_path.parent.resolve()
+        flow_module_name = flow_module_path.stem
 
-    flow_examples_dir = project_root / "examples"
-    if flow_examples_dir.exists() and flow_examples_dir.is_dir():
-        for py_file in flow_examples_dir.glob("*.py"):
-            if not py_file.name.startswith("_"):
-                target = shared_zip_dir / py_file.name
+        if flow_module_dir.exists() and flow_module_dir.is_dir():
+            build_dir_resolved = (build_dir).resolve()
+
+            for item in flow_module_dir.iterdir():
+                item_resolved = item.resolve() if item.exists() else None
+
+                if item.name in {
+                    ".git",
+                    "__pycache__",
+                    ".venv",
+                    "venv",
+                    ".pytest_cache",
+                    ".mypy_cache",
+                    ".ruff_cache",
+                    "lokki-build",
+                    "lokki-builddeps",
+                }:
+                    continue
+
+                if item_resolved and item_resolved == build_dir_resolved:
+                    continue
+
+                target = shared_zip_dir / item.name
                 if not target.exists():
-                    shutil.copy(py_file, target)
+                    if item.is_dir():
+                        try:
+                            shutil.copytree(item, target, dirs_exist_ok=True)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            shutil.copy(item, target)
+                        except Exception:
+                            pass
 
-    for dep_item in deps_dir.iterdir():
-        target = shared_zip_dir / dep_item.name
-        if not target.exists():
-            if dep_item.is_dir():
-                shutil.copytree(dep_item, target, dirs_exist_ok=True)
-            else:
-                shutil.copy(dep_item, target)
+            print(f"  Added flow directory: {flow_module_dir.name}/")
+    else:
+        flow_module_name = graph.name.replace("-", "_")
 
-    module_name = graph.name.replace("-", "_")
+    module_name = flow_module_name
 
     handler_content = _get_dispatcher_handler_content(module_name)
     (shared_zip_dir / "handler.py").write_text(handler_content)
@@ -194,6 +251,9 @@ def _get_dispatcher_handler_content(module_name: str) -> str:
     return """import os
 import sys
 
+# Add current directory to path for module imports
+sys.path.insert(0, os.path.dirname(__file__))
+
 step_name = os.environ.get("LOKKI_STEP_NAME", "")
 if not step_name:
     raise ValueError("LOKKI_STEP_NAME environment variable not set")
@@ -203,6 +263,7 @@ if not module_name:
     raise ValueError("LOKKI_MODULE_NAME environment variable not set")
 
 import importlib
+
 mod = importlib.import_module(module_name)
 
 step_node = getattr(mod, step_name, None)

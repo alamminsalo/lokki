@@ -69,7 +69,7 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
-        Builder.build(graph, config)
+        Builder.build(graph, config, flow_fn)
         print("Build complete!")
     elif command == "run":
         from lokki.config import load_config
@@ -128,7 +128,7 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
         print()
 
         try:
-            Builder.build(graph, config)
+            Builder.build(graph, config, flow_fn)
             print()
         except Exception as e:
             print(f"Error: Build failed: {e}")

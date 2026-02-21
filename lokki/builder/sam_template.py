@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,13 +12,14 @@ from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
-def build_sam_template(graph: FlowGraph, config: LokkiConfig, build_dir: Path) -> str:
+def build_sam_template(
+    graph: FlowGraph, config: LokkiConfig, build_dir: Path, module_name: str
+) -> str:
     """Build a SAM template for local testing with sam local."""
     resources: dict[str, dict[str, Any]] = {}
 
     step_names = _get_step_names(graph)
     package_type = config.lambda_cfg.package_type
-    module_name = _get_module_name(graph)
 
     for step_name in step_names:
         env_vars = {
@@ -26,7 +28,7 @@ def build_sam_template(graph: FlowGraph, config: LokkiConfig, build_dir: Path) -
                 "LOKKI_FLOW_NAME": graph.name,
                 "LOKKI_AWS_ENDPOINT": "http://host.docker.internal:4566",
                 "LOKKI_STEP_NAME": step_name,
-                "LOKKI_MODULE_NAME": f"{module_name}_example",
+                "LOKKI_MODULE_NAME": module_name,
             }
         }
         env_vars["Variables"].update(config.lambda_cfg.env)
@@ -57,6 +59,69 @@ def build_sam_template(graph: FlowGraph, config: LokkiConfig, build_dir: Path) -
                     "Environment": env_vars,
                 },
             }
+
+    resources["StepFunctionsExecutionRole"] = {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+            "AssumeRolePolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"Service": "states.amazonaws.com"},
+                        "Action": "sts:AssumeRole",
+                    }
+                ],
+            },
+            "ManagedPolicyArns": [
+                "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+            ],
+            "Policies": [
+                {
+                    "PolicyName": "InvokeLambda",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": ["lambda:InvokeFunction"],
+                                "Resource": [
+                                    f"arn:aws:lambda:us-east-1:123456789012:function:{graph.name}-*"
+                                ],
+                            }
+                        ],
+                    },
+                },
+                {
+                    "PolicyName": "S3Access",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": ["s3:GetObject", "s3:PutObject"],
+                                "Resource": "arn:aws:s3:::lokki/lokki/*",
+                            }
+                        ],
+                    },
+                },
+            ],
+        },
+    }
+
+    state_machine_path = build_dir / "statemachine.json"
+    if state_machine_path.exists():
+        state_machine_json = json.loads(state_machine_path.read_text())
+        resources[_to_pascal(graph.name.replace("-", "")) + "StateMachine"] = {
+            "Type": "AWS::Serverless::StateMachine",
+            "Properties": {
+                "Definition": state_machine_json,
+                "Role": (
+                    f"arn:aws:iam::123456789012:role/{graph.name}-stepfunctions-role"
+                ),
+                "Type": "STANDARD",
+            },
+        }
 
     template = {
         "AWSTemplateFormatVersion": "2010-09-09",

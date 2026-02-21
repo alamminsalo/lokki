@@ -10,7 +10,7 @@ from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
-def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
+def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> str:
     """Build a CloudFormation template for the flow."""
     resources: dict[str, dict[str, Any]] = {}
 
@@ -63,8 +63,6 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
         },
     }
 
-    module_name = _get_module_name(graph)
-
     step_names = _get_step_names(graph)
     package_type = config.lambda_cfg.package_type
 
@@ -74,7 +72,7 @@ def build_template(graph: FlowGraph, config: LokkiConfig) -> str:
             "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
             "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
             "LOKKI_STEP_NAME": step_name,
-            "LOKKI_MODULE_NAME": f"{module_name}_example",
+            "LOKKI_MODULE_NAME": module_name,
         }
         env_vars.update(config.lambda_cfg.env)
 

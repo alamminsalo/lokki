@@ -1,6 +1,6 @@
 [project]
 name = "lokki"
-version = "0.1.1"
+version = "0.1.6"
 description = "Python library for defining, building, and deploying data pipelines to AWS Step Functions"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -30,7 +30,7 @@ warn_return_any = true
 warn_unused_ignores = true
 
 [tool.uv.workspace]
-members = ["examples"]
+exclude = ["dev", "examples"]
 
 [dependency-groups]
 dev = ["pytest>=9.0.2"]
