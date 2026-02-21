@@ -1,176 +1,87 @@
 # AGENTS.md - Development Guidelines for lokki
 
+## Requirements
+
+- **Python**: 3.13+ (required for `tomllib` stdlib module)
+
 ## Tools
 
-You must only call tools from this exact list: bash, read, glob, grep, edit, write, 
-task, webfetch, todowrite, question. Never invent or assume tool names. If unsure, use bash.
+Only use these tools: bash, read, glob, grep, edit, write, task, webfetch, todowrite, question.
 
-## Build/Test/Run Commands
+## Development Commands
 
 ```bash
-# Install dependencies
-uv sync
-
-# Run a single test file
-uv run pytest tests/test_runner.py          # specific test file
-uv run pytest tests/test_runner.py::test_map  # specific test function
-
-# Run all tests
-uv run pytest
-
-# Run type checking
-uv run mypy lokki/
-
-# Run linting
-uv run ruff check lokki/
-
-# Fix linting issues
-uv run ruff check lokki/ --fix
-
-# Format code
-uv run ruff format lokki/
-
-# Run locally (for flow scripts)
-python flow_script.py run
-
-# Build deployment artifacts
-python flow_script.py build
+uv sync                      # Install dependencies
+uv run pytest                # Run all tests
+uv run ruff check lokki/    # Linting
+uv run ruff format lokki/   # Formatting
+python flow_script.py run   # Run locally
+python flow_script.py build # Build artifacts
 ```
 
-## Code Style Guidelines
+## Agent Workflow
 
-### Imports
-- Standard library imports first, then third-party, then local imports (separated by blank lines)
-- Use absolute imports: `from lokki.decorators import step`
-- Group related imports together
-- Avoid wildcards: `from module import *`
-
-### Formatting
-- Use 4 spaces for indentation (no tabs)
-- Maximum line length: 88 characters (ruff default)
-- Use double quotes for strings
-- Trailing commas in multi-line structures
-- One logical statement per line
-
-### Type Hints
-- Use Python 3.13+ type hint syntax
-- Always annotate function parameters and return types
-- Use `Optional[T]` or `T | None` for nullable types
-- Use `Callable[[ArgType], ReturnType]` for function types
-- Prefer explicit types over `Any`
-
-### Naming Conventions
-- **Classes**: PascalCase (`StepNode`, `FlowGraph`, `MapBlock`)
-- **Functions/Methods**: snake_case (`get_birds`, `make_handler`)
-- **Constants**: UPPER_SNAKE_CASE (`LOKKI_S3_BUCKET`)
-- **Private members**: Leading underscore (`_resolve`, `_default_args`)
-- **Variables**: Descriptive snake_case names
-
-### Error Handling
-- Raise specific exceptions (`ValueError`, `TypeError`) with clear messages
-- Use custom exception classes for domain-specific errors
-- Wrap external library exceptions at boundaries
-- Fail fast with descriptive error messages
-
-### Documentation
-- Use docstrings for public modules, classes, and functions
-- Follow Google or NumPy docstring style consistently
-- Include type hints in docstrings only when needed for clarity
-
-## Architecture Notes
-
-- `lokki/decorators.py`: `@step` and `@flow` decorators, `StepNode`, `MapBlock`
-- `lokki/graph.py`: `FlowGraph` execution graph model
-- `lokki/runner.py`: Local execution engine
-- `lokki/builder/`: Build pipeline (lambda_pkg, state_machine, cloudformation)
-- `lokki/runtime/`: Lambda handler wrapper (runs in production)
-- `lokki/s3.py`: S3 read/write with gzip pickle serialization
-- `lokki/config.py`: Configuration loading from `lokki.toml`
-
-## Key Patterns
-
-- **Decorator pattern**: Steps are registered, not executed at definition time
-- **Chain of responsibility**: `.map()` returns `MapBlock`, `.agg()` closes and returns `StepNode`
-- **S3 abstraction**: Steps receive/return plain Python objects; serialization is transparent
-- **Data passing**: Step Functions pass S3 URLs, not payloads (stays under 256KB limit)
-
-## Configuration
-
-- Global config: `~/.lokki/lokki.toml`
-- Local config: `lokki.toml` (overrides global)
-- Environment overrides: `LOKKI_ARTIFACT_BUCKET`, `LOKKI_IMAGE_REPOSITORY`, `LOKKI_AWS_ENDPOINT`, `LOKKI_BUILD_DIR`
-- Lambda runtime env: `LOKKI_S3_BUCKET`, `LOKKI_FLOW_NAME`
-- See docs/design.md for full documentation
-
-## AI Assistant Rules
-
-- No Cursor or Copilot rules currently defined
-- Follow existing code conventions when adding new files
-- Keep functions small and focused
-- Prefer composition over inheritance
-- Test locally with `python flow_script.py run` before building
-- After completing a milestone, raise the minor version number in pyproject.toml
-
-### Mandatory Unit Testing
-
-**For each task completed, you MUST:**
-
-1. Create a unit test file in `tests/` directory (e.g., `tests/test_config.py`, `tests/test_decorators.py`)
-2. Write comprehensive tests covering:
-   - Normal/expected behavior
-   - Edge cases and error conditions
-   - All public functions and classes
-3. Run the tests immediately after writing:
-   ```bash
-   uv run pytest tests/test_<module>.py -v
-   ```
+1. Test locally before building: `python flow_script.py run`
+2. After completing a milestone, bump the minor version in pyproject.toml
+3. Write tests for each task (see Mandatory Unit Testing below)
 4. Ensure all tests pass before marking a task complete
-5. If tests fail, fix the code or tests until they pass
 
-**Test file naming convention:** `tests/test_<module>.py`
+## Git Workflow
 
-**Run commands:**
-```bash
-# Run all tests
-uv run pytest
+- **Branches**: Create feature branches using format `feature/<snake_cased_feature_name>`
+  - Example: `feature/add_toml_config`, `feature/remove_yaml_dependency`
+- **Commits**: Do NOT create commits - only create branches
+- **Clean repo check**: Before creating a branch, verify there are no pending changes
+  - If there are local changes, inform the user and ask how to proceed
+- **Security**: Never commit secrets, credentials, or sensitive data
 
-# Run single test file
-uv run pytest tests/test_config.py -v
+## Mandatory Unit Testing
 
-# Run specific test function
-uv run pytest tests/test_config.py::test_deep_merge -v
+- Create `tests/test_<module>.py` for each task
+- Test normal behavior, edge cases, and error conditions
+- Run: `uv run pytest tests/test_<module>.py -v`
 
-# Run with coverage
-uv run pytest --cov=lokki
+## Testing Patterns
+
+- Use `pytest` as the test framework
+- Use `pytest.MonkeyPatch` for environment variable mocking
+- Use `tmp_path` fixture for temporary file/directory operations
+- Group tests by class following `Test<ClassName>` convention
+- Example test structure:
+
+```python
+class TestClassName:
+    def test_normal_behavior(self) -> None:
+        # Arrange
+        ...
+        # Act
+        ...
+        # Assert
+        ...
+
+    def test_edge_case(self) -> None:
+        ...
+
+    def test_error_condition(self) -> None:
+        with pytest.raises(ExpectedException):
+            ...
 ```
 
-## Repository Structure
+## Environment Variables
 
-```
-lokki/
-├── lokki/
-│   ├── __init__.py              # Public API: exports flow, step
-│   ├── decorators.py            # @step and @flow decorator implementations
-│   ├── graph.py                 # StepNode, FlowGraph — execution graph model
-│   ├── runner.py                # Local execution engine
-│   ├── builder/
-│   │   ├── builder.py           # Orchestrates the full build
-│   │   ├── lambda_pkg.py        # Generates per-step Dockerfile directories
-│   │   ├── state_machine.py     # Generates Step Functions JSON
-│   │   └── cloudformation.py    # Generates CloudFormation YAML
-│   ├── runtime/
-│   │   └── handler.py           # Lambda handler wrapper (runs in Lambda)
-│   ├── s3.py                    # S3 read/write with gzip pickle
-│   └── config.py                # Configuration loading
-├── pyproject.toml
-├── uv.lock
-└── docs/
-```
+| Variable | Purpose |
+|----------|---------|
+| `LOKKI_ARTIFACT_BUCKET` | S3 bucket for pipeline data |
+| `LOKKI_IMAGE_REPOSITORY` | Docker repository (local, docker.io, or ECR prefix) |
+| `LOKKI_AWS_ENDPOINT` | AWS endpoint for local development |
+| `LOKKI_BUILD_DIR` | Output directory for build artifacts |
+| `LOKKI_LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
-## Dependencies
+## Documentation
 
-| Dependency | Role |
-|---|---|
-| `uv` | Dependency management and venv tooling |
-| `boto3` | AWS SDK for S3 and Step Functions |
-| Python stdlib `tomllib` | Parsing `lokki.toml` configuration |
+| File | Purpose |
+|------|---------|
+| docs/requirements.md | User requirements and configuration reference |
+| docs/design.md | Architecture and implementation details |
+| docs/tasks.md | Planned milestones |
+| docs/tasks-completed.md | Completed milestones |
