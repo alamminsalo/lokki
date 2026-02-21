@@ -550,3 +550,66 @@ _Depends on: M11, M12_
 - Update state machine generation to build ASL JSON directly as Python dict
 - Remove any imports or references to `stepfunctions` package
 - Update builder tests to not depend on stepfunctions package
+
+---
+
+## Milestone 18 — Test Coverage Improvements
+
+**Purpose**: Improve test coverage for untested modules. Add `moto` for AWS mocking in tests.
+
+### T18.1 — Add moto to dev dependencies ✅
+
+- Add `moto>=5.0.0` to dev dependencies in `pyproject.toml`
+- Update `tests/test_deploy.py` to use moto for AWS mocking
+
+### T18.2 — Test graph.py ✅
+
+- Create `tests/test_graph.py`
+- Test `FlowGraph` construction with various chain structures
+- Test `_find_chain_start` method
+- Test `_resolve_from_head` method
+- Test `_resolve_map_block` method
+- Test `_validate` method (open map block detection)
+- Test `TaskEntry`, `MapOpenEntry`, `MapCloseEntry` types
+
+### T18.3 — Test state_machine.py ✅
+
+- Create `tests/test_state_machine.py`
+- Test `build_state_machine` function with simple chain
+- Test task state generation with correct ARN
+- Test Map block states (MapOpen, Map iterations, MapClose)
+- Test state ordering and transitions
+- Test various flow configurations
+
+### T18.4 — Test cloudformation.py ✅
+
+- Create `tests/test_cloudformation.py`
+- Test `build_template` function
+- Test IAM role generation
+- Test Lambda function resources
+- Test State Machine definition
+- Test parameters handling
+- Test ZIP package type support
+
+### T18.5 — Test sam_template.py ✅
+
+- Create `tests/test_sam_template.py`
+- Test `build_sam_template` function
+- Test ZIP package support
+- Test environment variables in template
+
+### T18.6 — Test builder.py ✅
+
+- Create `tests/test_builder.py`
+- Test full build flow
+- Test directory creation
+- Test file generation
+
+### T18.7 — Test deploy.py ✅
+
+- Create `tests/test_deploy.py`
+- Test `Deployer` class initialization
+- Test credential validation
+- Test local image push
+- Test stack deployment
+- Test error handling

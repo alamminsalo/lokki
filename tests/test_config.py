@@ -157,7 +157,9 @@ class TestLokkiConfig:
             "build_dir": "custom-build",
             "aws": {
                 "artifact_bucket": "my-bucket",
-                "image_repository": "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject",
+                "image_repository": (
+                    "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject"
+                ),
                 "endpoint": "http://localhost:4566",
                 "stepfunctions_role": "arn:aws:iam::123::role/sfn",
                 "lambda_execution_role": "arn:aws:iam::123::role/lambda",
