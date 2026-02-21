@@ -8,7 +8,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from lokki.deploy import Deployer, DeployError
+from lokki.deploy import Deployer, DeployError, DockerNotAvailableError
 
 
 class TestDeployerInit:
@@ -338,4 +338,172 @@ Resources:
 
             # Verify stack was updated
             stacks = cf_client.describe_stacks(StackName="test-stack")
+            assert len(stacks["Stacks"]) == 1
+
+
+class TestDeployerValidateCredentials:
+    """Tests for credential validation."""
+
+    @mock_aws
+    def test_validate_credentials_with_endpoint(self) -> None:
+        """Test credentials not checked when endpoint is set."""
+        deployer = Deployer(
+            stack_name="test-stack",
+            region="us-east-1",
+            endpoint="http://localhost:4566",
+        )
+        # Should not raise - endpoint is set so credentials not checked
+        deployer._validate_credentials()
+
+    @mock_aws
+    def test_validate_credentials_no_docker(self) -> None:
+        """Test error when docker is not available."""
+        deployer = Deployer(
+            stack_name="test-stack",
+            region="us-east-1",
+        )
+
+        with patch("lokki.deploy.shutil.which") as mock_which:
+            mock_which.return_value = None  # Docker not found
+
+            with pytest.raises(
+                DockerNotAvailableError, match="Docker is not installed"
+            ):
+                deployer._validate_credentials()
+
+
+class TestDeployerSamCli:
+    """Tests for SAM CLI deployment."""
+
+    @patch("lokki.deploy.shutil.which")
+    def test_deploy_with_sam_cli(self, mock_which: MagicMock) -> None:
+        """Test SAM CLI deployment path."""
+        mock_which.side_effect = (
+            lambda cmd: "/usr/bin/" + cmd if cmd in ("samlocal", "aws") else None
+        )
+
+        with patch("lokki.deploy.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+            deployer = Deployer(
+                stack_name="test-stack",
+                region="us-east-1",
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                build_dir = Path(tmpdir) / "build"
+                build_dir.mkdir()
+                sam_path = build_dir / "sam.yaml"
+                sam_path.write_text("Resources: {}")
+
+                deployer._deploy_with_sam_cli(
+                    template_path=sam_path,
+                    flow_name="test-flow",
+                    artifact_bucket="test-bucket",
+                    aws_endpoint="http://localhost:4566",
+                )
+
+                mock_run.assert_called_once()
+
+    @mock_aws
+    @patch("lokki.deploy.shutil.which")
+    def test_deploy_with_aws_cli(self, mock_which: MagicMock) -> None:
+        """Test AWS CLI deployment path when samlocal not available."""
+
+        def which_side_effect(cmd: str) -> str | None:
+            if cmd == "aws":
+                return "/usr/bin/aws"
+            return None  # samlocal not available
+
+        mock_which.side_effect = which_side_effect
+
+        with patch("lokki.deploy.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+            deployer = Deployer(
+                stack_name="test-stack",
+                region="us-east-1",
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                build_dir = Path(tmpdir) / "build"
+                build_dir.mkdir()
+                template_path = build_dir / "template.yaml"
+                template_path.write_text("Resources: {}")
+
+                deployer._deploy_with_boto3(
+                    template_body="Resources: {}",
+                    flow_name="test-flow",
+                    artifact_bucket="test-bucket",
+                    image_repository="test-repo",
+                    aws_endpoint="",
+                )
+
+    @mock_aws
+    @patch("lokki.deploy.shutil.which")
+    def test_deploy_sam_cli_fail(self, mock_which: MagicMock) -> None:
+        """Test SAM CLI deployment failure."""
+        mock_which.side_effect = (
+            lambda cmd: "/usr/bin/" + cmd if cmd in ("samlocal", "aws") else None
+        )
+
+        with patch("lokki.deploy.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stderr="Deployment failed")
+
+            deployer = Deployer(
+                stack_name="test-stack",
+                region="us-east-1",
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                build_dir = Path(tmpdir) / "build"
+                build_dir.mkdir()
+                sam_path = build_dir / "sam.yaml"
+                sam_path.write_text("Resources: {}")
+
+                with pytest.raises(DeployError, match="SAM local deploy failed"):
+                    deployer._deploy_with_sam_cli(
+                        template_path=sam_path,
+                        flow_name="test-flow",
+                        artifact_bucket="test-bucket",
+                        aws_endpoint="",
+                    )
+
+
+class TestDeployerBoto3:
+    """Tests for boto3 deployment."""
+
+    @mock_aws
+    @patch("lokki.deploy.subprocess.run")
+    def test_deploy_boto3_create_stack(self, mock_subprocess: MagicMock) -> None:
+        """Test boto3 stack creation."""
+        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+
+        deployer = Deployer(
+            stack_name="test-stack-boto3",
+            region="us-east-1",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            build_dir = Path(tmpdir) / "build"
+            build_dir.mkdir()
+
+            template = """AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  TestBucket:
+    Type: AWS::S3::Bucket
+"""
+            template_path = build_dir / "template.yaml"
+            template_path.write_text(template)
+
+            deployer._deploy_with_boto3(
+                template_body=template,
+                flow_name="test-flow",
+                artifact_bucket="test-bucket",
+                image_repository="test-repo",
+                aws_endpoint="",
+            )
+
+            cf_client = boto3.client("cloudformation", region_name="us-east-1")
+            stacks = cf_client.describe_stacks(StackName="test-stack-boto3")
             assert len(stacks["Stacks"]) == 1
