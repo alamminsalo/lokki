@@ -19,6 +19,55 @@ python flow_script.py run   # Run locally
 python flow_script.py build # Build artifacts
 ```
 
+## Local Development with LocalStack
+
+Before testing deployment-related commands, ensure LocalStack and pypiserver are running:
+
+```bash
+# Check if Docker is running
+docker ps
+
+# Start LocalStack and pypiserver (if not running)
+docker compose up -d
+
+# Verify services are running
+docker ps
+```
+
+Services required:
+- **LocalStack** (port 4566) - AWS mock for S3, Step Functions, Lambda, CloudFormation
+- **pypiserver** (port 8080) - Local Python package index
+
+### Testing with Examples
+
+When testing with example projects:
+
+1. **Update and publish lokki to pypiserver:**
+   ```bash
+   # Bump version in pyproject.toml
+   uv build
+   # Upload to local pypiserver (no auth required)
+   uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
+   ```
+
+2. **Sync example project:**
+   ```bash
+   cd examples/nyc_taxi
+   uv sync
+   ```
+
+3. **Run deployment commands:**
+   ```bash
+   python nyc_taxi.py run   # Run locally
+   python nyc_taxi.py build # Build artifacts
+   python nyc_taxi.py deploy --confirm  # Deploy to LocalStack
+   python nyc_taxi.py show   # Show executions (requires real AWS)
+   python nyc_taxi.py logs   # Fetch logs (requires real AWS)
+   python nyc_taxi.py destroy --confirm  # Destroy stack
+   ```
+
+Note: `show` and `logs` commands require real AWS or LocalStack with full service support.
+
 ## Agent Workflow
 
 1. Test locally before building: `python flow_script.py run`
