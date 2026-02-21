@@ -63,6 +63,13 @@ def fetch_logs(
     except LogsError:
         raise
     except ClientError as e:
+        error_msg = str(e)
+        if "is not enabled" in error_msg.lower():
+            if endpoint:
+                raise LogsError(
+                    "CloudWatch Logs is not enabled in LocalStack. "
+                    "Check LocalStack SERVICES configuration."
+                ) from e
         raise LogsError(f"AWS error: {e}") from e
 
 

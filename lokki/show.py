@@ -27,7 +27,8 @@ def show_executions(
 
     Args:
         flow_name: Name of the flow
-        state_machine_name: Optional state machine name (defaults to flow-name-stack)
+        state_machine_name: Optional state machine name
+            (defaults to flow-name-state-machine)
         max_count: Maximum number of executions to show
         run_id: Specific run ID to show
         region: AWS region
@@ -65,6 +66,8 @@ def show_executions(
 
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "")
+        error_msg = str(e)
+
         if error_code == "ExecutionNotFound":
             raise ShowError(f"Execution '{run_id}' not found") from e
         if error_code == "StateMachineNotFound":
@@ -72,6 +75,20 @@ def show_executions(
                 f"State machine '{state_machine_name}' not found. "
                 "Has the flow been deployed?"
             ) from e
+        if error_code == "InvalidArn":
+            if endpoint:
+                raise ShowError(
+                    "Step Functions is not available in LocalStack. "
+                    "To test the full flow, deploy to real AWS."
+                ) from e
+            raise ShowError(f"Invalid state machine ARN: {e}") from e
+        if "is not enabled" in error_msg.lower():
+            if endpoint:
+                raise ShowError(
+                    "Step Functions is not enabled in LocalStack. "
+                    "Check LocalStack SERVICES configuration."
+                ) from e
+            raise ShowError(f"AWS error: {e}") from e
         raise ShowError(f"AWS error: {e}") from e
 
 
