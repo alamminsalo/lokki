@@ -70,16 +70,19 @@ class LocalRunner:
         self.logging_config = logging_config or LoggingConfig()
         self.logger = get_logger("lokki.runner", self.logging_config)
 
-    def run(self, graph: FlowGraph) -> Any:
+    def run(self, graph: FlowGraph, params: dict[str, Any] | None = None) -> Any:
         run_id = "local-run"
         store = LocalStore()
+        params = params or {}
 
         self.logger.info(f"Starting flow '{graph.name}' (run_id={run_id})")
+        if params:
+            self.logger.debug(f"Input parameters: {params}")
 
         try:
             for entry in graph.entries:
                 if isinstance(entry, TaskEntry):
-                    self._run_task(store, graph.name, run_id, entry)
+                    self._run_task(store, graph.name, run_id, entry, params)
                 elif isinstance(entry, MapOpenEntry):
                     self._run_map(store, graph.name, run_id, entry)
                 elif isinstance(entry, MapCloseEntry):
@@ -101,7 +104,12 @@ class LocalRunner:
             store.cleanup()
 
     def _run_task(
-        self, store: LocalStore, flow_name: str, run_id: str, entry: TaskEntry
+        self,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        entry: TaskEntry,
+        params: dict[str, Any],
     ) -> None:
         node = entry.node
         step_name = node.name
@@ -128,6 +136,8 @@ class LocalRunner:
                     result = node.fn(result)
             elif node._default_args or node._default_kwargs:
                 result = node.fn(*node._default_args, **node._default_kwargs)
+            elif params:
+                result = node.fn(**params)
             else:
                 result = node.fn()
 

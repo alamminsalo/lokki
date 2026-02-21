@@ -49,15 +49,15 @@ wheels = [
 
 [[package]]
 name = "lokki"
-version = "0.1.6"
+version = "0.2.1"
 source = { registry = "http://localhost:8080/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "pyyaml" },
 ]
-sdist = { url = "http://localhost:8080/packages/lokki-0.1.6.tar.gz", hash = "sha256:1c53b596e3e895e1dfc34f897bfeff4f7fc4abeb2a0c2d92ad2710a921f3bf37" }
+sdist = { url = "http://localhost:8080/packages/lokki-0.2.1.tar.gz", hash = "sha256:aea1039eb4305cb0885441228a2ee861a9398bcf4d41714f4f2a7d177c5d1292" }
 wheels = [
-    { url = "http://localhost:8080/packages/lokki-0.1.6-py3-none-any.whl", hash = "sha256:e433e7e1286c8539c6cf7c085507c637c13295ab582921d0f9090a5bb46ce47b" },
+    { url = "http://localhost:8080/packages/lokki-0.2.1-py3-none-any.whl", hash = "sha256:3a3a1ab458ffdec21d68cb7a811bbf0e3d49d55e8e4565efadfc81aaaf512f9e" },
 ]
 
 [[package]]
@@ -122,7 +122,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "lokki", specifier = ">=0.1.6" },
+    { name = "lokki", specifier = ">=0.2.1" },
     { name = "pandas", specifier = ">=3.0.1" },
     { name = "pyarrow", specifier = ">=23.0.1" },
 ]

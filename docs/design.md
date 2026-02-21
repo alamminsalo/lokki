@@ -250,24 +250,123 @@ MapCloseEntry(agg_step=join_birds)
 
 ## 5. CLI Entry Point
 
-Each flow script calls `lokki.main()` at the bottom (injected by the `@flow` decorator or added explicitly by the user):
+Each flow script calls `flow_fn()` (by the decorated function name) at the bottom (injected by the `@flow` decorator or added explicitly by the user):
 
 ```python
 # at bottom of flow_script.py — auto-injected or written manually
+@flow
+def flow_fn():
+#...
+
 if __name__ == "__main__":
-    from lokki import main
-    main(birds_flow)
+    flow_fn()
 ```
 
-`main()` inspects `sys.argv[1]` and dispatches:
+## 5. CLI Entry Point
 
-| `sys.argv[1]` | Action |
-|---|---|
-| `build` | Instantiate `FlowGraph`, call `Builder.build(graph)` |
-| `run` | Instantiate `FlowGraph`, call `LocalRunner.run(graph)` |
-| _(anything else)_ | Print usage and exit |
+The CLI is implemented using Python's `argparse` module for consistent command-line parsing and help text. Each flow script uses the `main` function from lokki as the entry point:
 
-The flow function is called with no arguments (or default arguments) to produce the `FlowGraph`. Any arguments can be overridden at deploy-time via the Step Functions input JSON — the `main()` CLI does not need to accept arguments because local `run` uses the defaults defined in the flow body.
+```python
+# flow_script.py
+from lokki import flow, step, main
+
+@step
+def get_data(start_date: str, limit: int = 100):
+    return [start_date] * limit
+
+@flow
+def my_flow(start_date: str, limit: int = 100):
+    return get_data(start_date, limit)
+
+if __name__ == "__main__":
+    main(my_flow)
+```
+
+### Command Structure
+
+| Command | Description |
+|---------|-------------|
+| `run` | Execute the pipeline locally |
+| `build` | Package and generate deployment artifacts |
+| `deploy` | Build and deploy to AWS |
+| `destroy` | Destroy the AWS CloudFormation stack (stub) |
+| `status` | Show flow run status on AWS (stub) |
+| `logs` | Fetch logs from AWS (stub) |
+
+### Run Command
+
+The `run` command supports passing input parameters to the flow function:
+
+```bash
+python flow_script.py run --start-date 2024-01-15 --limit 50
+python flow_script.py run --start-date=2024-01-15 --limit=50
+```
+
+**Parameter handling:**
+- Parameters are passed as `--param-name value` or `--param-name=value`
+- Parameter names must match the flow function parameter names exactly
+- Parameters without default values are **mandatory** - error if not provided
+- Parameters with default values are **optional** - uses default if not provided
+- Type validation is performed based on the flow function's type hints
+
+### Parameter Validation
+
+The CLI validates input parameters before execution:
+
+1. **Existence check**: All mandatory parameters (those without defaults) must be provided
+2. **Type validation**: Values are coerced to match the flow function's type hints
+3. **Unknown parameters**: Extra parameters not in the flow function signature cause an error
+
+**Supported type conversions:**
+| Python Type | Example Input | Notes |
+|-------------|---------------|-------|
+| `str` | `--name john` | Default if no type hint |
+| `int` | `--count 42` | Raises error on invalid int |
+| `float` | `--rate 3.14` | Raises error on invalid float |
+| `bool` | `--flag true` | Accepts true/false, 1/0 |
+| `list[str]` | `--items a,b,c` | Comma-separated values |
+| `list[int]` | `--ids 1,2,3` | Comma-separated integers |
+
+**Validation errors:**
+- Missing mandatory parameter: `Error: Missing required parameter: '--start-date'`
+- Invalid type: `Error: Invalid value for '--count': 'abc' is not a valid integer`
+- Unknown parameter: `Error: Unexpected parameter: '--unknown-param'`
+
+### Argparse Integration
+
+The `main` function in `lokki/__init__.py` uses `argparse` with subparsers for each command:
+
+```python
+def main(flow_fn: Callable[[], FlowGraph]) -> None:
+    parser = argparse.ArgumentParser(prog="flow_script.py")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # run command with flow params
+    run_parser = subparsers.add_parser("run", help="Run the flow locally")
+    # Add flow function parameters as argparse arguments
+    
+    # build command
+    subparsers.add_parser("build", help="Build deployment artifacts")
+    
+    # deploy command  
+    subparsers.add_parser("deploy", help="Build and deploy to AWS")
+    
+    # stub commands
+    subparsers.add_parser("destroy", help="Destroy the stack (not implemented)")
+    subparsers.add_parser("status", help="Show flow status (not implemented)")
+    subparsers.add_parser("logs", help="Fetch logs (not implemented)")
+```
+
+### Subcommand Dispatch
+
+| Subcommand | Action |
+|------------|--------|
+| `run` | Parse flow params → Validate → Call `LocalRunner.run(graph, params)` |
+| `build` | Call `Builder.build(graph, config)` |
+| `deploy` | Build → Push images → Deploy CloudFormation stack |
+| `destroy` | Print "Not implemented" |
+| `status` | Print "Not implemented" |
+| `logs` | Print "Not implemented" |
 
 ---
 
@@ -1111,7 +1210,7 @@ class Deployer:
 
 ### CLI Integration
 
-The `main()` function in `__init__.py` is extended to handle the `deploy` command:
+The @flow function in `__init__.py` is extended to handle the `deploy` command:
 
 ```python
 elif command == "deploy":

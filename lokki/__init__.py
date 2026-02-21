@@ -1,9 +1,11 @@
 """Lokki - Python library for data pipelines on AWS Step Functions."""
 
 import argparse
+import inspect
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, get_args, get_origin
 
 from lokki.decorators import flow, step
 from lokki.graph import FlowGraph
@@ -11,44 +13,175 @@ from lokki.graph import FlowGraph
 __all__ = ["flow", "step", "main"]
 
 
-def main(flow_fn: Callable[[], FlowGraph]) -> None:
+def _get_flow_params(
+    flow_fn: Callable[..., FlowGraph],
+) -> dict[str, inspect.Parameter]:
+    """Get the parameters of the flow function."""
+    fn = getattr(flow_fn, "_fn", flow_fn)
+    sig = inspect.signature(fn)
+    return dict(sig.parameters)
+
+
+def _coerce_value(value: str, param_type: type) -> Any:
+    """Coerce a string value to the expected type."""
+    origin = get_origin(param_type)
+    args = get_args(param_type)
+
+    if origin is list and args:
+        list_type = args[0]
+        return [list_type(item.strip()) for item in value.split(",")]
+
+    if param_type is bool:
+        lower = value.lower()
+        if lower in ("true", "1", "yes"):
+            return True
+        if lower in ("false", "0", "no"):
+            return False
+        raise ValueError(f"Invalid boolean value: {value}")
+
+    if param_type is int:
+        try:
+            return int(value)
+        except ValueError as e:
+            raise ValueError(f"Invalid integer value: {value}") from e
+
+    if param_type is float:
+        try:
+            return float(value)
+        except ValueError as e:
+            raise ValueError(f"Invalid float value: {value}") from e
+
+    return param_type(value)
+
+
+def _parse_flow_params(
+    flow_fn: Callable[..., FlowGraph], args: argparse.Namespace
+) -> dict[str, Any]:
+    """Parse and validate flow function parameters from parsed args."""
+    params = _get_flow_params(flow_fn)
+    result: dict[str, Any] = {}
+
+    for name, param in params.items():
+        value = getattr(args, name, None)
+        if value is not None:
+            try:
+                result[name] = _coerce_value(value, param.annotation)
+            except (ValueError, TypeError) as e:
+                msg = f"Invalid value for '--{name}': {e}"
+                raise argparse.ArgumentTypeError(msg) from e
+
+    missing = [
+        f"--{name}"
+        for name, param in params.items()
+        if param.default is inspect.Parameter.empty and name not in result
+    ]
+    if missing:
+        missing_str = ", ".join(missing)
+        raise argparse.ArgumentError(
+            None, f"Missing required parameter(s): {missing_str}"
+        )
+
+    return result
+
+
+def main(flow_fn: Callable[..., FlowGraph]) -> None:
     """CLI entry point for lokki flows.
 
     Usage:
-        python flow_script.py build  # Build deployment artifacts
-        python flow_script.py run    # Run locally
-        python flow_script.py deploy # Build and deploy to AWS
+        python flow_script.py build              # Build deployment artifacts
+        python flow_script.py run                # Run locally
+        python flow_script.py run --start-date 2024-01-15  # Run with params
+        python flow_script.py deploy             # Build and deploy to AWS
     """
-    if len(sys.argv) < 2 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
-        print("Usage: python <flow_script.py> <command>")
-        print()
-        print("Commands:")
-        print("  build   Build deployment artifacts")
-        print("          (Lambda Docker images, Step Functions state machine,")
-        print("          CloudFormation template)")
-        print("  run     Run the flow locally using temporary local storage")
-        print("  deploy  Build and deploy to AWS Step Functions")
-        print()
-        print("Deploy Options:")
-        print("  --stack-name NAME   CloudFormation stack name")
-        print("  --region REGION    AWS region (default: from AWS config)")
-        print("  --image-tag TAG    Docker image tag (default: latest)")
-        print("  --confirm          Skip confirmation prompt")
-        print()
-        print("Examples:")
-        print("  python my_flow.py run")
-        print("  python my_flow.py build")
-        print("  python my_flow.py deploy --region eu-west-1")
-        sys.exit(0)
+    params = _get_flow_params(flow_fn)
 
-    if len(sys.argv) < 2:
-        print("Usage: python <flow_script.py> <command>")
-        print("Run 'python <flow_script.py> --help' for more information.")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        prog="flow_script.py",
+        description="Lokki - Python library for data pipelines on AWS Step Functions",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    command = sys.argv[1]
+    run_parser = subparsers.add_parser("run", help="Run the flow locally")
+    for name, param in params.items():
+        has_default = param.default is not inspect.Parameter.empty
+        cli_name = name.replace("_", "-")
+        if has_default:
+            run_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                default=None,
+                help=f"(default: {param.default})",
+            )
+        else:
+            run_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                required=True,
+                help="(required)",
+            )
 
-    if command == "build":
+    subparsers.add_parser(
+        "build",
+        help="Build deployment artifacts (Lambda, Step Functions, CloudFormation)",
+    )
+
+    deploy_parser = subparsers.add_parser("deploy", help="Build and deploy to AWS")
+    deploy_parser.add_argument(
+        "--stack-name", default=None, help="CloudFormation stack name"
+    )
+    deploy_parser.add_argument(
+        "--region", default=None, help="AWS region (default: from AWS config)"
+    )
+    deploy_parser.add_argument(
+        "--image-tag", default="latest", help="Docker image tag (default: latest)"
+    )
+    deploy_parser.add_argument(
+        "--confirm", action="store_true", help="Skip confirmation prompt"
+    )
+
+    subparsers.add_parser(
+        "destroy", help="Destroy the CloudFormation stack (not implemented)"
+    )
+    subparsers.add_parser(
+        "status", help="Show flow run status on AWS (not implemented)"
+    )
+    subparsers.add_parser("logs", help="Fetch logs from AWS (not implemented)")
+
+    args = parser.parse_args()
+    command = args.command
+
+    if command == "run":
+        from lokki.config import load_config
+        from lokki.runner import LocalRunner
+
+        try:
+            flow_params = _parse_flow_params(flow_fn, args)
+        except (argparse.ArgumentError, argparse.ArgumentTypeError) as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        try:
+            graph = flow_fn(**flow_params)
+        except Exception as e:
+            print(f"Error: Failed to create flow graph: {e}")
+            sys.exit(1)
+
+        try:
+            config = load_config()
+        except Exception:
+            config = None
+
+        runner = LocalRunner(logging_config=config.logging if config else None)
+        try:
+            result = runner.run(graph, flow_params)
+            print(result)
+        except Exception as e:
+            print(f"Error: Failed to run flow: {e}")
+            sys.exit(1)
+
+    elif command == "build":
         from lokki.builder.builder import Builder
         from lokki.config import load_config
 
@@ -71,39 +204,11 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
 
         Builder.build(graph, config, flow_fn)
         print("Build complete!")
-    elif command == "run":
-        from lokki.config import load_config
-        from lokki.runner import LocalRunner
 
-        try:
-            graph = flow_fn()
-        except Exception as e:
-            print(f"Error: Failed to create flow graph: {e}")
-            sys.exit(1)
-
-        try:
-            config = load_config()
-        except Exception:
-            config = None
-
-        runner = LocalRunner(logging_config=config.logging if config else None)
-        try:
-            result = runner.run(graph)
-            print(result)
-        except Exception as e:
-            print(f"Error: Failed to run flow: {e}")
-            sys.exit(1)
     elif command == "deploy":
         from lokki.builder.builder import Builder
         from lokki.config import load_config
         from lokki.deploy import Deployer, DeployError, DockerNotAvailableError
-
-        parser = argparse.ArgumentParser(prog="deploy")
-        parser.add_argument("--stack-name", default=None)
-        parser.add_argument("--region", default=None)
-        parser.add_argument("--image-tag", default="latest")
-        parser.add_argument("--confirm", action="store_true")
-        args, _ = parser.parse_known_args(sys.argv[2:])
 
         try:
             graph = flow_fn()
@@ -162,7 +267,19 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
         except Exception as e:
             print(f"Error: Unexpected error: {e}")
             sys.exit(1)
+
+    elif command == "destroy":
+        print("Error: 'destroy' command is not implemented yet.")
+        sys.exit(1)
+
+    elif command == "status":
+        print("Error: 'status' command is not implemented yet.")
+        sys.exit(1)
+
+    elif command == "logs":
+        print("Error: 'logs' command is not implemented yet.")
+        sys.exit(1)
+
     else:
-        print(f"Unknown command: {command}")
-        print("Usage: python <flow_script.py> <build|run|deploy>")
+        parser.print_help()
         sys.exit(1)
