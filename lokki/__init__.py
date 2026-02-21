@@ -141,13 +141,32 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
         "--confirm", action="store_true", help="Skip confirmation prompt"
     )
 
-    subparsers.add_parser(
-        "destroy", help="Destroy the CloudFormation stack (not implemented)"
+    show_parser = subparsers.add_parser("show", help="Show flow run status on AWS")
+    show_parser.add_argument(
+        "--n", type=int, default=10, help="Number of runs to show (default: 10)"
     )
-    subparsers.add_parser(
-        "status", help="Show flow run status on AWS (not implemented)"
+    show_parser.add_argument("--run", type=str, help="Specific run ID to show")
+
+    logs_parser = subparsers.add_parser("logs", help="Fetch CloudWatch logs")
+    logs_parser.add_argument(
+        "--start",
+        type=str,
+        help="Start time (ISO 8601 format, e.g., 2024-01-15T10:00:00Z)",
     )
-    subparsers.add_parser("logs", help="Fetch logs from AWS (not implemented)")
+    logs_parser.add_argument(
+        "--end", type=str, help="End time (ISO 8601 format, e.g., 2024-01-15T12:00:00Z)"
+    )
+    logs_parser.add_argument("--run", type=str, help="Specific run ID to filter logs")
+    logs_parser.add_argument(
+        "--tail", action="store_true", help="Tail logs in real-time"
+    )
+
+    destroy_parser = subparsers.add_parser(
+        "destroy", help="Destroy the CloudFormation stack"
+    )
+    destroy_parser.add_argument(
+        "--confirm", action="store_true", help="Skip confirmation prompt"
+    )
 
     args = parser.parse_args()
     command = args.command
@@ -268,18 +287,123 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
             print(f"Error: Unexpected error: {e}")
             sys.exit(1)
 
-    elif command == "destroy":
-        print("Error: 'destroy' command is not implemented yet.")
-        sys.exit(1)
+    elif command == "show":
+        from lokki.config import load_config
+        from lokki.show import show
 
-    elif command == "status":
-        print("Error: 'status' command is not implemented yet.")
-        sys.exit(1)
+        try:
+            graph = flow_fn()
+        except Exception as e:
+            print(f"Error: Failed to create flow graph: {e}")
+            sys.exit(1)
+
+        try:
+            config = load_config()
+        except Exception as e:
+            print(f"Error: Failed to load configuration: {e}")
+            sys.exit(1)
+
+        if not config.artifact_bucket:
+            print("Error: 'artifact_bucket' is not configured.")
+            print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
+            sys.exit(1)
+
+        region = "us-east-1"
+        endpoint = config.aws_endpoint
+
+        show(
+            flow_name=graph.name,
+            max_count=args.n,
+            run_id=args.run,
+            region=region,
+            endpoint=endpoint,
+        )
 
     elif command == "logs":
-        print("Error: 'logs' command is not implemented yet.")
-        sys.exit(1)
+        from lokki.config import load_config
+        from lokki.logs import logs
+
+        try:
+            graph = flow_fn()
+        except Exception as e:
+            print(f"Error: Failed to create flow graph: {e}")
+            sys.exit(1)
+
+        try:
+            config = load_config()
+        except Exception as e:
+            print(f"Error: Failed to load configuration: {e}")
+            sys.exit(1)
+
+        if not config.artifact_bucket:
+            print("Error: 'artifact_bucket' is not configured.")
+            print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
+            sys.exit(1)
+
+        step_names = _get_step_names(graph)
+        region = "us-east-1"
+        endpoint = config.aws_endpoint
+
+        logs(
+            flow_name=graph.name,
+            step_names=step_names,
+            start_time=args.start,
+            end_time=args.end,
+            run_id=args.run,
+            region=region,
+            endpoint=endpoint,
+            tail=args.tail,
+        )
+
+    elif command == "destroy":
+        from lokki.config import load_config
+        from lokki.destroy import destroy
+
+        try:
+            graph = flow_fn()
+        except Exception as e:
+            print(f"Error: Failed to create flow graph: {e}")
+            sys.exit(1)
+
+        try:
+            config = load_config()
+        except Exception as e:
+            print(f"Error: Failed to load configuration: {e}")
+            sys.exit(1)
+
+        if not config.artifact_bucket:
+            print("Error: 'artifact_bucket' is not configured.")
+            print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
+            sys.exit(1)
+
+        stack_name = f"{graph.name}-stack"
+        region = "us-east-1"
+        endpoint = config.aws_endpoint
+
+        destroy(
+            stack_name=stack_name,
+            region=region,
+            endpoint=endpoint,
+            confirm=args.confirm,
+        )
 
     else:
         parser.print_help()
         sys.exit(1)
+
+
+def _get_step_names(graph: FlowGraph) -> list[str]:
+    """Get all step names from a flow graph."""
+    from lokki.graph import MapCloseEntry, MapOpenEntry, TaskEntry
+
+    step_names: list[str] = []
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            step_names.append(entry.node.name)
+        elif isinstance(entry, MapOpenEntry):
+            step_names.append(entry.source.name)
+            for inner_step in entry.inner_steps:
+                step_names.append(inner_step.name)
+        elif isinstance(entry, MapCloseEntry):
+            step_names.append(entry.agg_step.name)
+    return step_names

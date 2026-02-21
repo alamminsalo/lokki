@@ -290,22 +290,36 @@ class TestMainCLI:
                         main(simple_flow)
 
     def test_destroy_command_stub(self, simple_flow):
-        with patch.object(sys, "argv", ["test.py", "destroy"]):
-            with pytest.raises(SystemExit) as exc_info:
-                main(simple_flow)
-        assert exc_info.value.code == 1
+        with patch.object(sys, "argv", ["test.py", "destroy", "--confirm"]):
+            with patch("lokki.destroy.destroy_stack") as mock_destroy:
+                mock_destroy.return_value = None
+                with patch("lokki.config.load_config") as mock_config:
+                    from lokki.config import LambdaConfig, LokkiConfig
+
+                    mock_config.return_value = LokkiConfig(
+                        artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
+                    )
+                    main(simple_flow)
+                mock_destroy.assert_called_once()
 
     def test_status_command_stub(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "status"]):
             with pytest.raises(SystemExit) as exc_info:
                 main(simple_flow)
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 2
 
     def test_logs_command_stub(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "logs"]):
-            with pytest.raises(SystemExit) as exc_info:
-                main(simple_flow)
-        assert exc_info.value.code == 1
+            with patch("lokki.logs.fetch_logs") as mock_logs:
+                mock_logs.return_value = None
+                with patch("lokki.config.load_config") as mock_config:
+                    from lokki.config import LambdaConfig, LokkiConfig
+
+                    mock_config.return_value = LokkiConfig(
+                        artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
+                    )
+                    main(simple_flow)
+                mock_logs.assert_called_once()
 
     def test_unknown_command(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "unknown"]):

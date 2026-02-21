@@ -613,3 +613,70 @@ _Depends on: M11, M12_
 - Test local image push
 - Test stack deployment
 - Test error handling
+
+---
+
+## Milestone 19 — CLI Commands: show, logs, destroy
+
+_Purpose_: Implement AWS integration commands for viewing run status, fetching logs, and destroying stacks.
+
+### T19.1 — Implement show command
+
+- Add `show` subparser to CLI with options:
+  - `--n COUNT` (default: 10) - number of runs to show
+  - `--run RUN_ID` - show specific run ID
+- Implement `show.py` module with `show_executions` function
+- Use boto3 Step Functions client to list executions
+- Parse and display execution status, start time, duration
+- Support LocalStack endpoint if configured in config
+
+### T19.2 — Implement logs command
+
+- Add `logs` subparser to CLI with options:
+  - `--start DATETIME` - ISO 8601 format (default: 1 hour ago)
+  - `--end DATETIME` - ISO 8601 format (default: now)
+  - `--run RUN_ID` - specific run ID
+  - `--tail` - continuously poll logs
+- Implement `logs.py` module with `fetch_logs` function
+- Use boto3 CloudWatch Logs client to filter log events
+- Query log groups: `/aws/lambda/{flow-name}-{step-name}`
+- Support LocalStack endpoint if configured
+- For `--tail`, poll every 2 seconds until interrupted
+
+### T19.3 — Implement destroy command
+
+- Add `destroy` subparser to CLI with option:
+  - `--confirm` - skip confirmation prompt
+- Implement `destroy.py` module with `destroy_stack` function
+- Use boto3 CloudFormation client to delete stack
+- Show confirmation prompt (unless `--confirm`)
+- Wait for stack deletion to complete
+- Handle stack not found errors gracefully
+- Support LocalStack endpoint if configured
+
+### T19.4 — Update CLI main function
+
+- Add show, logs, destroy subparsers to main
+- Parse options and dispatch to appropriate module
+- Add error handling for AWS operations
+
+### T19.5 — Unit tests for show
+
+- Create `tests/test_show.py`
+- Test execution listing with mocked boto3
+- Test output formatting
+- Test `--n` and `--run` options
+
+### T19.6 — Unit tests for logs
+
+- Create `tests/test_logs.py`
+- Test log fetching with mocked boto3
+- Test datetime parsing
+- Test tail mode polling
+
+### T19.7 — Unit tests for destroy
+
+- Create `tests/test_destroy.py`
+- Test stack deletion with mocked boto3
+- Test confirmation prompt
+- Test error handling

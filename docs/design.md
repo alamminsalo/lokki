@@ -289,9 +289,9 @@ if __name__ == "__main__":
 | `run` | Execute the pipeline locally |
 | `build` | Package and generate deployment artifacts |
 | `deploy` | Build and deploy to AWS |
-| `destroy` | Destroy the AWS CloudFormation stack (stub) |
-| `status` | Show flow run status on AWS (stub) |
-| `logs` | Fetch logs from AWS (stub) |
+| `show` | Show status of flow runs on AWS |
+| `logs` | Fetch CloudWatch logs for a flow run |
+| `destroy` | Destroy the AWS CloudFormation stack |
 
 ### Run Command
 
@@ -339,7 +339,7 @@ The `main` function in `lokki/__init__.py` uses `argparse` with subparsers for e
 ```python
 def main(flow_fn: Callable[[], FlowGraph]) -> None:
     parser = argparse.ArgumentParser(prog="flow_script.py")
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     # run command with flow params
     run_parser = subparsers.add_parser("run", help="Run the flow locally")
@@ -351,10 +351,21 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
     # deploy command  
     subparsers.add_parser("deploy", help="Build and deploy to AWS")
     
-    # stub commands
-    subparsers.add_parser("destroy", help="Destroy the stack (not implemented)")
-    subparsers.add_parser("status", help="Show flow status (not implemented)")
-    subparsers.add_parser("logs", help="Fetch logs (not implemented)")
+    # show command
+    show_parser = subparsers.add_parser("show", help="Show flow run status")
+    show_parser.add_argument("--n", type=int, default=10, help="Number of runs to show")
+    show_parser.add_argument("--run", type=str, help="Show specific run ID")
+    
+    # logs command
+    logs_parser = subparsers.add_parser("logs", help="Fetch CloudWatch logs")
+    logs_parser.add_argument("--start", type=str, help="Start datetime (ISO 8601)")
+    logs_parser.add_argument("--end", type=str, help="End datetime (ISO 8601)")
+    logs_parser.add_argument("--tail", action="store_true", help="Tail logs in real-time")
+    logs_parser.add_argument("--run", type=str, help="Specific run ID")
+    
+    # destroy command
+    destroy_parser = subparsers.add_parser("destroy", help="Destroy the CloudFormation stack")
+    destroy_parser.add_argument("--confirm", action="store_true", help="Skip confirmation prompt")
 ```
 
 ### Subcommand Dispatch
@@ -364,9 +375,140 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
 | `run` | Parse flow params → Validate → Call `LocalRunner.run(graph, params)` |
 | `build` | Call `Builder.build(graph, config)` |
 | `deploy` | Build → Push images → Deploy CloudFormation stack |
-| `destroy` | Print "Not implemented" |
-| `status` | Print "Not implemented" |
-| `logs` | Print "Not implemented" |
+| `show` | List or show status of flow executions from Step Functions |
+| `logs` | Fetch CloudWatch logs for Lambda functions |
+| `destroy` | Delete CloudFormation stack after confirmation |
+
+---
+
+## Show Command
+
+The `show` command retrieves and displays the status of flow runs from AWS Step Functions.
+
+```bash
+# Show last 10 runs (default)
+python flow_script.py show
+
+# Show last N runs
+python flow_script.py show --n 5
+
+# Show specific run
+python flow_script.py show --run abc123-def456
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--n COUNT` | Number of recent runs to display (default: 10) |
+| `--run RUN_ID` | Show details for a specific run ID |
+
+**Output format:**
+```
+Run ID                    Status      Start Time              Duration
+abc123-def456            SUCCEEDED   2024-01-15T10:30:00Z   2m 34s
+ghi789-jkl012            FAILED      2024-01-15T10:25:00Z   1m 12s
+mno345-pqr678            RUNNING     2024-01-15T10:20:00Z   -
+```
+
+**Implementation:**
+- Uses AWS SDK (boto3) to call `list_executions` on the Step Functions state machine
+- Filters by status if needed (optional)
+- Returns execution name, status, start time, and stop time (if completed)
+- Supports LocalStack endpoint if configured
+
+---
+
+## Logs Command
+
+The `logs` command fetches CloudWatch logs for the flow's Lambda functions.
+
+```bash
+# Fetch logs for last run (default)
+python flow_script.py logs
+
+# Fetch logs for specific run
+python flow_script.py logs --run abc123-def456
+
+# Fetch logs with time range
+python flow_script.py logs --start 2024-01-15T10:00:00Z --end 2024-01-15T12:00:00Z
+
+# Tail logs in real-time
+python flow_script.py logs --tail
+
+# Combine options
+python flow_script.py logs --run abc123-def456 --tail
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--start DATETIME` | Start time in ISO 8601 format (default: 1 hour ago) |
+| `--end DATETIME` | End time in ISO 8601 format (default: now) |
+| `--run RUN_ID` | Fetch logs for a specific run ID |
+| `--tail` | Continuously poll and display new log entries |
+
+**Output:**
+- Fetches logs from all Lambda functions in the flow
+- Groups logs by function name
+- Displays timestamp, function name, and log message
+- For `--tail`, updates in real-time until interrupted
+
+**Implementation:**
+- Uses AWS SDK to call `filter_log_events` on CloudWatch Logs
+- Queries log groups using pattern: `/aws/lambda/{flow-name}-{step-name}`
+- Queries all step functions in the flow (fetches step names from flow graph)
+- Supports LocalStack endpoint if configured
+- For `--tail`, polls every 2 seconds
+
+---
+
+## Destroy Command
+
+The `destroy` command deletes the CloudFormation stack and associated resources.
+
+```bash
+# Destroy with confirmation prompt
+python flow_script.py destroy
+
+# Destroy without confirmation (for CI/CD)
+python flow_script.py destroy --confirm
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--confirm` | Skip confirmation prompt and destroy immediately |
+
+**Behavior:**
+1. Validates AWS credentials
+2. Shows what will be deleted (stack name)
+3. Prompts for confirmation (unless `--confirm` is passed)
+4. Deletes the CloudFormation stack
+5. Waits for stack deletion to complete
+6. Reports success or failure
+
+**Confirmation prompt:**
+```
+This will delete the CloudFormation stack 'my-flow-stack' and all associated resources.
+Are you sure you want to continue? (y/N):
+```
+
+**Implementation:**
+- Uses AWS SDK to call `delete_stack` on CloudFormation
+- Uses `wait_until_stack_deleted` to wait for completion
+- Handles stack not found errors gracefully
+- Supports LocalStack endpoint if configured
+
+### Subcommand Dispatch
+
+| Subcommand | Action |
+|------------|--------|
+| `run` | Parse flow params → Validate → Call `LocalRunner.run(graph, params)` |
+| `build` | Call `Builder.build(graph, config)` |
+| `deploy` | Build → Push images → Deploy CloudFormation stack |
+| `show` | List or show status of flow executions from Step Functions |
+| `logs` | Fetch CloudWatch logs for Lambda functions |
+| `destroy` | Delete CloudFormation stack after confirmation |
 
 ---
 
@@ -560,6 +702,26 @@ GetBirdsFunction:
         LOKKI_S3_BUCKET: !Ref S3Bucket
         LOKKI_FLOW_NAME: !Ref FlowName
 ```
+
+**CloudWatch Log Groups**
+
+Each Lambda function automatically creates a CloudWatch log group at deployment time. The log group naming convention is:
+
+```
+/aws/lambda/{FlowName}-{step-name}
+```
+
+For example, for a flow named `birds-flow` with steps `get_birds`, `flap_bird`, and `join_birds`:
+
+```
+/aws/lambda/birds-flow-get-birds
+/aws/lambda/birds-flow-flap-bird
+/aws/lambda/birds-flow-join-birds
+```
+
+These log groups are created automatically by AWS Lambda when the function is first invoked. The `logs` CLI command queries these log groups to fetch execution logs.
+
+The CloudFormation template includes an implicit log group resource (AWS Lambda creates it automatically), so no explicit `AWS::Logs::LogGroup` resource is required in the template.
 
 For ZIP archive deployments (`PackageType: ZipFile`):
 
