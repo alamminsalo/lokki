@@ -6,7 +6,7 @@ Tasks are grouped by milestone. Each milestone should be completable and testabl
 
 ## Milestone 1 — Project Scaffolding
 
-**T1.1** Initialise the project with `uv init`, configure `pyproject.toml` with package metadata and dependencies (`boto3`, `stepfunctions`, `pyyaml`).
+**T1.1** Initialise the project with `uv init`, configure `pyproject.toml` with package metadata and dependencies (`boto3`).
 
 **T1.2** Create the full directory skeleton as defined in the design:
 ```
@@ -34,7 +34,7 @@ lokki/
 
 ## Milestone 2 — Configuration (`lokki/config.py`)
 
-**T2.1** Implement `_load_yaml(path)` — loads a YAML file, returns empty dict if file does not exist.
+**T2.1** Implement `_load_toml(path)` — loads a TOML file, returns empty dict if file does not exist. Uses Python's stdlib `tomllib` (requires Python 3.11+).
 
 **T2.2** Implement `_deep_merge(base, override)` — recursively merges two dicts; scalars and lists in `override` replace those in `base`; nested dicts are merged recursively.
 
@@ -43,7 +43,7 @@ lokki/
 - `lambda.timeout`, `lambda.memory`, `lambda.image_tag`, `lambda.env`
 - `build_dir`, `logging`
 
-**T2.4** Implement `load_config()` — loads global (`~/.lokki/lokki.yml`) then local (`./lokki.yml`), deep-merges them, applies environment variable overrides (`LOKKI_ARTIFACT_BUCKET`, `LOKKI_ECR_REPO_PREFIX`, `LOKKI_BUILD_DIR`), returns a populated `LokkiConfig`.
+**T2.4** Implement `load_config()` — loads global (`~/.lokki/lokki.toml`) then local (`./lokki.toml`), deep-merges them, applies environment variable overrides (`LOKKI_ARTIFACT_BUCKET`, `LOKKI_ECR_REPO_PREFIX`, `LOKKI_BUILD_DIR`), returns a populated `LokkiConfig`.
 
 **T2.5** Write unit tests for `_deep_merge` covering: scalar override, list replacement, nested dict merge, missing keys in either file, neither file present.
 
@@ -57,7 +57,7 @@ Update `LokkiConfig` to use the new nested structure:
 
 ### T2.7 — Update config loading for new format
 
-Update `load_config()` to handle the new YAML structure with nested `aws` and `lambda` sections. Ensure backward compatibility or provide migration guidance.
+Update `load_config()` to handle the new TOML structure with nested `aws` and `lambda` sections. Ensure backward compatibility or provide migration guidance.
 
 ---
 
@@ -274,7 +274,7 @@ _Depends on: M8, M9, M10_
 
 **T12.4** Add a `--help` flag to the CLI that prints available commands and a short description.
 
-**T12.5** Write a `README.md` covering: installation, quickstart with the birds example, `lokki.yml` configuration reference, `build` and `run` commands, and deploying the CloudFormation stack.
+**T12.5** Write a `README.md` covering: installation, quickstart with the birds example, `lokki.toml` configuration reference, `build` and `run` commands, and deploying the CloudFormation stack.
 
 ---
 
@@ -315,7 +315,7 @@ Add environment variable override: `LOKKI_LOG_LEVEL`.
 - Test `StepLogger` output formats
 - Test `MapProgressLogger` progress updates
 - Test JSON formatter output
-- Test configuration loading from lokki.yml
+- Test configuration loading from lokki.toml
 
 **T13.7** Integrate logging into Lambda runtime handler:
 - Log function invocation
@@ -489,3 +489,64 @@ _Depends on: M11, M12_
 - `dev/test-sam-local.sh` — Test individual Lambda functions
 - `dev/deploy-localstack.sh` — Deploy full pipeline to LocalStack
 - `dev/run-localstack.sh` — Run pipeline and verify results
+
+---
+
+## Milestone 17 — TOML Configuration Format
+
+**Purpose**: Replace YAML configuration with TOML using Python stdlib. This removes the `pyyaml` dependency and leverages Python 3.11+'s built-in `tomllib` module.
+
+### T17.1 — Update config file naming ✅
+
+- Change default config filename from `lokki.yml` to `lokki.toml`
+- Update `GLOBAL_CONFIG_PATH` from `~/.lokki/lokki.yml` to `~/.lokki/lokki.toml`
+- Update `LOCAL_CONFIG_PATH` from `./lokki.yml` to `./lokki.toml`
+- Add migration documentation for users upgrading from YAML config
+
+### T17.2 — Update config loading ✅
+
+- Replace `yaml.safe_load()` with `tomllib.load()` (requires opening file in binary mode `"rb"`)
+- Update `_load_yaml()` to `_load_toml()` with proper error handling
+- Ensure TOML tables (`[section]`) map correctly to nested dict structure
+
+### T17.3 — Update configuration schema documentation ✅
+
+- Change all YAML examples in docs to TOML format
+- Update `pyproject.toml` dependencies to remove `pyyaml`
+- Verify all existing configuration fields work with TOML syntax
+
+### T17.4 — Environment variable handling ✅
+
+- Ensure environment variable overrides still work with TOML config
+- Test that `LOKKI_ARTIFACT_BUCKET`, `LOKKI_ECR_REPO_PREFIX`, `LOKKI_BUILD_DIR`, `LOKKI_LOG_LEVEL` override TOML values
+
+### T17.5 — Backward compatibility (optional)
+
+- Consider supporting both `lokki.yml` and `lokki.toml` with deprecation warning for YAML
+- If supporting both: check for TOML first, then YAML, then defaults
+- Document migration path for existing YAML users
+
+### T17.6 — Update tests ✅
+
+- Update existing config tests to use TOML fixtures
+- Add tests for TOML-specific syntax (tables, inline tables, arrays)
+- Ensure deep merge works correctly with TOML structure
+
+### T17.7 — Update builder integration ✅
+
+- Ensure builder code works with new config structure
+- Update any hardcoded references to `lokki.yml`
+- Update error messages to reference `lokki.toml`
+
+### T17.8 — Update documentation ✅
+
+- Update AGENTS.md config references
+- Update README.md examples
+- Add migration guide for YAML to TOML
+
+### T17.9 — Remove stepfunctions dependency ✅
+
+- Remove `stepfunctions` pip package from dependencies
+- Update state machine generation to build ASL JSON directly as Python dict
+- Remove any imports or references to `stepfunctions` package
+- Update builder tests to not depend on stepfunctions package

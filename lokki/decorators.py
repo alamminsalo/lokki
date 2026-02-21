@@ -110,7 +110,7 @@ def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
                 "Example: return step1().map(step2)"
             )
 
-        if not isinstance(head, (StepNode, MapBlock)):
+        if not isinstance(head, StepNode | MapBlock):
             raise ValueError(
                 f"@flow function '{fn.__name__}' must return a step chain "
                 "(e.g., step1().map(step2)), but returned {type(head).__name__}"

@@ -85,7 +85,7 @@ python flow_script.py build
 - `lokki/builder/`: Build pipeline (lambda_pkg, state_machine, cloudformation)
 - `lokki/runtime/`: Lambda handler wrapper (runs in production)
 - `lokki/s3.py`: S3 read/write with gzip pickle serialization
-- `lokki/config.py`: Configuration loading from `lokki.yml`
+- `lokki/config.py`: Configuration loading from `lokki.toml`
 
 ## Key Patterns
 
@@ -96,27 +96,11 @@ python flow_script.py build
 
 ## Configuration
 
-- Global config: `~/.lokki/lokki.yml`
-- Local config: `./lokki.yml` (overrides global)
-- Environment overrides: `LOKKI_ARTIFACT_BUCKET`, `LOKKI_ECR_REPO_PREFIX`, `LOKKI_BUILD_DIR`
+- Global config: `~/.lokki/lokki.toml`
+- Local config: `lokki.toml` (overrides global)
+- Environment overrides: `LOKKI_ARTIFACT_BUCKET`, `LOKKI_IMAGE_REPOSITORY`, `LOKKI_AWS_ENDPOINT`, `LOKKI_BUILD_DIR`
 - Lambda runtime env: `LOKKI_S3_BUCKET`, `LOKKI_FLOW_NAME`
-
-### lokki.yml Schema
-
-```yaml
-artifact_bucket: my-lokki-artifacts
-roles:
-  pipeline: arn:aws:iam::123456789::role/lokki-stepfunctions-role
-  lambda: arn:aws:iam::123456789::role/lokki-lambda-execution-role
-lambda_env:
-  LOG_LEVEL: INFO
-ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
-build_dir: lokki-build
-lambda_defaults:
-  timeout: 900
-  memory: 512
-  image_tag: latest
-```
+- See docs/design.md for full documentation
 
 ## AI Assistant Rules
 
@@ -125,6 +109,7 @@ lambda_defaults:
 - Keep functions small and focused
 - Prefer composition over inheritance
 - Test locally with `python flow_script.py run` before building
+- After completing a milestone, raise the minor version number in pyproject.toml
 
 ### Mandatory Unit Testing
 
@@ -187,17 +172,5 @@ lokki/
 | Dependency | Role |
 |---|---|
 | `uv` | Dependency management and venv tooling |
-| `stepfunctions` | AWS Step Functions SDK |
 | `boto3` | AWS SDK for S3 and Step Functions |
-| `pyyaml` | Parsing `lokki.yml` configuration |
-
-## Build Output Structure
-
-```
-lokki-build/
-├── lambdas/<step_name>/  # One per @step
-│   ├── Dockerfile
-│   └── handler.py
-├── statemachine.json
-└── template.yaml
-```
+| Python stdlib `tomllib` | Parsing `lokki.toml` configuration |

@@ -3,4 +3,4 @@
 lokki-build/
 *.pyc
 __pycache__/
-lokki.yml
+lokki.toml

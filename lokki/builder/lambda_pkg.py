@@ -125,7 +125,6 @@ def _get_flow_module_path(
     Returns:
         Path to the flow module file, or None if not detectable
     """
-    import sys
 
     if flow_fn is None:
         return None

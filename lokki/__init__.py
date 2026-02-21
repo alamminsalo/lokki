@@ -64,9 +64,9 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print(f"Error: Failed to load configuration: {e}")
             sys.exit(1)
 
-        if not config.aws.artifact_bucket:
-            print("Error: 'aws.artifact_bucket' is not configured.")
-            print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
+        if not config.artifact_bucket:
+            print("Error: 'artifact_bucket' is not configured.")
+            print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
         Builder.build(graph, config, flow_fn)
@@ -117,9 +117,9 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
             print(f"Error: Failed to load configuration: {e}")
             sys.exit(1)
 
-        if not config.aws.artifact_bucket:
-            print("Error: 'aws.artifact_bucket' is not configured.")
-            print("Please set it in lokki.yml or via LOKKI_ARTIFACT_BUCKET env var.")
+        if not config.artifact_bucket:
+            print("Error: 'artifact_bucket' is not configured.")
+            print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
             sys.exit(1)
 
         stack_name = args.stack_name or f"{graph.name}-stack"
@@ -139,15 +139,15 @@ def main(flow_fn: Callable[[], FlowGraph]) -> None:
                 stack_name=stack_name,
                 region=args.region or "us-east-1",
                 image_tag=args.image_tag,
-                endpoint=config.aws.endpoint,
+                endpoint=config.aws_endpoint,
                 package_type=config.lambda_cfg.package_type,
             )
             deployer.deploy(
                 flow_name=graph.name,
-                artifact_bucket=config.aws.artifact_bucket,
-                ecr_repo_prefix=config.aws.ecr_repo_prefix,
+                artifact_bucket=config.artifact_bucket,
+                image_repository=config.image_repository,
                 build_dir=Path(config.build_dir),
-                aws_endpoint=config.aws.endpoint,
+                aws_endpoint=config.aws_endpoint,
                 package_type=config.lambda_cfg.package_type,
             )
             print()

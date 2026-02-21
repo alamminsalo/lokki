@@ -1,23 +1,22 @@
 """Configuration loading and management for lokki."""
 
 import os
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from lokki.logging import LoggingConfig
 
-GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.yml"
-LOCAL_CONFIG_PATH = Path.cwd() / "lokki.yml"
+GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.toml"
+LOCAL_CONFIG_PATH = Path.cwd() / "lokki.toml"
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
-    """Load a YAML file, returning empty dict if not found."""
+def _load_toml(path: Path) -> dict[str, Any]:
+    """Load a TOML file, returning empty dict if not found."""
     if path.exists():
-        with path.open() as f:
-            return yaml.safe_load(f) or {}
+        with path.open("rb") as f:
+            return tomllib.load(f)
     return {}
 
 
@@ -36,24 +35,6 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 @dataclass
-class RolesConfig:
-    """IAM role configuration."""
-
-    pipeline: str = ""
-    lambda_: str = ""
-
-
-@dataclass
-class AwsConfig:
-    """AWS configuration."""
-
-    artifact_bucket: str = ""
-    ecr_repo_prefix: str = ""
-    endpoint: str = ""
-    roles: RolesConfig = field(default_factory=RolesConfig)
-
-
-@dataclass
 class LambdaConfig:
     """Lambda configuration."""
 
@@ -68,64 +49,71 @@ class LambdaConfig:
 class LokkiConfig:
     """Main lokki configuration."""
 
-    aws: AwsConfig = field(default_factory=AwsConfig)
-    lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
+    # Top-level fields
     build_dir: str = "lokki-build"
+
+    # AWS configuration (from [aws] table)
+    artifact_bucket: str = ""
+    image_repository: str = ""  # "local", "docker.io", or ECR prefix
+    aws_endpoint: str = ""
+    stepfunctions_role: str = ""
+    lambda_execution_role: str = ""
+
+    # Nested config
+    lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "LokkiConfig":
         """Create a LokkiConfig from a dictionary."""
-        roles_cfg = RolesConfig(
-            pipeline=d.get("aws", {}).get("roles", {}).get("pipeline", ""),
-            lambda_=d.get("aws", {}).get("roles", {}).get("lambda", ""),
-        )
-        aws_cfg = AwsConfig(
-            artifact_bucket=d.get("aws", {}).get("artifact_bucket", ""),
-            ecr_repo_prefix=d.get("aws", {}).get("ecr_repo_prefix", ""),
-            endpoint=d.get("aws", {}).get("endpoint", ""),
-            roles=roles_cfg,
-        )
+        aws_config = d.get("aws", {})
+        lambda_config = d.get("lambda", {})
+        logging_config = d.get("logging", {})
+
         lambda_cfg = LambdaConfig(
-            package_type=d.get("lambda", {}).get("package_type", "image"),
-            timeout=d.get("lambda", {}).get("timeout", 900),
-            memory=d.get("lambda", {}).get("memory", 512),
-            image_tag=d.get("lambda", {}).get("image_tag", "latest"),
-            env=d.get("lambda", {}).get("env", {}),
+            package_type=lambda_config.get("package_type", "image"),
+            timeout=lambda_config.get("timeout", 900),
+            memory=lambda_config.get("memory", 512),
+            image_tag=lambda_config.get("image_tag", "latest"),
+            env=lambda_config.get("env", {}),
         )
         logging_cfg = LoggingConfig(
-            level=d.get("logging", {}).get("level", "INFO"),
-            format=d.get("logging", {}).get("format", "human"),
-            progress_interval=d.get("logging", {}).get("progress_interval", 10),
-            show_timestamps=d.get("logging", {}).get("show_timestamps", True),
+            level=logging_config.get("level", "INFO"),
+            format=logging_config.get("format", "human"),
+            progress_interval=logging_config.get("progress_interval", 10),
+            show_timestamps=logging_config.get("show_timestamps", True),
         )
         return cls(
-            aws=aws_cfg,
-            lambda_cfg=lambda_cfg,
             build_dir=d.get("build_dir", "lokki-build"),
+            artifact_bucket=aws_config.get("artifact_bucket", ""),
+            image_repository=aws_config.get("image_repository", ""),
+            aws_endpoint=aws_config.get("endpoint", ""),
+            stepfunctions_role=aws_config.get("stepfunctions_role", ""),
+            lambda_execution_role=aws_config.get("lambda_execution_role", ""),
+            lambda_cfg=lambda_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )
 
 
 def load_config() -> LokkiConfig:
-    """Load and merge configuration from global and local YAML files.
+    """Load and merge configuration from global and local TOML files.
 
     Applies environment variable overrides.
     """
-    global_cfg = _load_yaml(GLOBAL_CONFIG_PATH)
-    local_cfg = _load_yaml(LOCAL_CONFIG_PATH)
+    global_cfg = _load_toml(GLOBAL_CONFIG_PATH)
+    local_cfg = _load_toml(LOCAL_CONFIG_PATH)
     merged = _deep_merge(global_cfg, local_cfg)
 
     config = LokkiConfig.from_dict(merged)
 
     if env_bucket := os.environ.get("LOKKI_ARTIFACT_BUCKET"):
-        config.aws.artifact_bucket = env_bucket
-    if env_ecr := os.environ.get("LOKKI_ECR_REPO_PREFIX"):
-        config.aws.ecr_repo_prefix = env_ecr
+        config.artifact_bucket = env_bucket
+    if env_repo := os.environ.get("LOKKI_IMAGE_REPOSITORY"):
+        config.image_repository = env_repo
     if env_endpoint := os.environ.get("LOKKI_AWS_ENDPOINT"):
-        config.aws.endpoint = env_endpoint
+        config.aws_endpoint = env_endpoint
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
         config.build_dir = env_build
     if env_log_level := os.environ.get("LOKKI_LOG_LEVEL"):

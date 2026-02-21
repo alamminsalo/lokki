@@ -3,15 +3,12 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
 from lokki.config import (
-    AwsConfig,
     LambdaConfig,
     LokkiConfig,
-    RolesConfig,
     _deep_merge,
-    _load_yaml,
+    _load_toml,
     load_config,
 )
 
@@ -74,46 +71,27 @@ class TestDeepMerge:
         assert result is not override
 
 
-class TestLoadYaml:
-    """Tests for _load_yaml function."""
+class TestLoadToml:
+    """Tests for _load_toml function."""
 
     def test_load_existing_file(self, tmp_path: Path) -> None:
-        """Test loading an existing YAML file."""
-        config_file = tmp_path / "config.yml"
-        config_file.write_text("key: value\nnested:\n  item: 123")
-        result = _load_yaml(config_file)
+        """Test loading an existing TOML file."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('key = "value"\nnested = { item = 123 }')
+        result = _load_toml(config_file)
         assert result == {"key": "value", "nested": {"item": 123}}
 
     def test_load_nonexistent_file(self) -> None:
         """Test loading a non-existent file returns empty dict."""
-        result = _load_yaml(Path("/nonexistent/path/config.yml"))
+        result = _load_toml(Path("/nonexistent/path/config.toml"))
         assert result == {}
 
     def test_load_empty_file(self, tmp_path: Path) -> None:
-        """Test loading an empty YAML file returns empty dict."""
-        config_file = tmp_path / "empty.yml"
+        """Test loading an empty TOML file returns empty dict."""
+        config_file = tmp_path / "empty.toml"
         config_file.write_text("")
-        result = _load_yaml(config_file)
+        result = _load_toml(config_file)
         assert result == {}
-
-
-class TestRolesConfig:
-    """Tests for RolesConfig dataclass."""
-
-    def test_default_values(self) -> None:
-        """Test default values for RolesConfig."""
-        config = RolesConfig()
-        assert config.pipeline == ""
-        assert config.lambda_ == ""
-
-    def test_custom_values(self) -> None:
-        """Test custom values for RolesConfig."""
-        config = RolesConfig(
-            pipeline="arn:aws:iam::123456789::role/pipeline",
-            lambda_="arn:aws:iam::123456789::role/lambda",
-        )
-        assert config.pipeline == "arn:aws:iam::123456789::role/pipeline"
-        assert config.lambda_ == "arn:aws:iam::123456789::role/lambda"
 
 
 class TestLambdaConfig:
@@ -122,6 +100,7 @@ class TestLambdaConfig:
     def test_default_values(self) -> None:
         """Test default values for LambdaConfig."""
         config = LambdaConfig()
+        assert config.package_type == "image"
         assert config.timeout == 900
         assert config.memory == 512
         assert config.image_tag == "latest"
@@ -130,88 +109,88 @@ class TestLambdaConfig:
     def test_custom_values(self) -> None:
         """Test custom values for LambdaConfig."""
         config = LambdaConfig(
-            timeout=300, memory=256, image_tag="v1.0", env={"KEY": "val"}
+            package_type="zip",
+            timeout=300,
+            memory=256,
+            image_tag="v1.0",
+            env={"KEY": "val"},
         )
+        assert config.package_type == "zip"
         assert config.timeout == 300
         assert config.memory == 256
         assert config.image_tag == "v1.0"
         assert config.env == {"KEY": "val"}
 
 
-class TestAwsConfig:
-    """Tests for AwsConfig dataclass."""
-
-    def test_default_values(self) -> None:
-        """Test default values for AwsConfig."""
-        config = AwsConfig()
-        assert config.artifact_bucket == ""
-        assert config.ecr_repo_prefix == ""
-        assert isinstance(config.roles, RolesConfig)
-
-    def test_custom_values(self) -> None:
-        """Test custom values for AwsConfig."""
-        roles = RolesConfig(pipeline="arn:pipeline", lambda_="arn:lambda")
-        config = AwsConfig(
-            artifact_bucket="my-bucket",
-            ecr_repo_prefix="123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject",
-            roles=roles,
-        )
-        assert config.artifact_bucket == "my-bucket"
-        assert (
-            config.ecr_repo_prefix
-            == "123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject"
-        )
-        assert config.roles.pipeline == "arn:pipeline"
-        assert config.roles.lambda_ == "arn:lambda"
-
-
 class TestLokkiConfig:
     """Tests for LokkiConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values for LokkiConfig."""
+        config = LokkiConfig()
+        assert config.build_dir == "lokki-build"
+        assert config.artifact_bucket == ""
+        assert config.image_repository == ""
+        assert config.stepfunctions_role == ""
+        assert config.lambda_execution_role == ""
+        assert config.aws_endpoint == ""
+        assert config.lambda_cfg.package_type == "image"
+        assert config.lambda_cfg.timeout == 900
+        assert config.lambda_cfg.memory == 512
 
     def test_from_dict_minimal(self) -> None:
         """Test creating LokkiConfig from minimal dict."""
         config = LokkiConfig.from_dict({})
-        assert config.aws.artifact_bucket == ""
-        assert config.aws.ecr_repo_prefix == ""
         assert config.build_dir == "lokki-build"
-        assert config.aws.roles.pipeline == ""
-        assert config.aws.roles.lambda_ == ""
+        assert config.artifact_bucket == ""
+        assert config.image_repository == ""
+        assert config.stepfunctions_role == ""
+        assert config.lambda_execution_role == ""
+        assert config.aws_endpoint == ""
+        assert config.lambda_cfg.package_type == "image"
         assert config.lambda_cfg.timeout == 900
         assert config.lambda_cfg.memory == 512
-        assert config.lambda_cfg.image_tag == "latest"
 
     def test_from_dict_full(self) -> None:
         """Test creating LokkiConfig from full dict."""
         data = {
+            "build_dir": "custom-build",
             "aws": {
                 "artifact_bucket": "my-bucket",
-                "ecr_repo_prefix": "123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject",
-                "roles": {
-                    "pipeline": "arn:aws:iam::123::role/pipeline",
-                    "lambda": "arn:aws:iam::123::role/lambda",
-                },
+                "image_repository": "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject",
+                "endpoint": "http://localhost:4566",
+                "stepfunctions_role": "arn:aws:iam::123::role/sfn",
+                "lambda_execution_role": "arn:aws:iam::123::role/lambda",
             },
             "lambda": {
+                "package_type": "zip",
                 "timeout": 600,
                 "memory": 256,
                 "image_tag": "v1.0",
                 "env": {"LOG_LEVEL": "INFO"},
             },
-            "build_dir": "custom-build",
+            "logging": {
+                "level": "DEBUG",
+                "format": "json",
+            },
         }
         config = LokkiConfig.from_dict(data)
-        assert config.aws.artifact_bucket == "my-bucket"
-        assert (
-            config.aws.ecr_repo_prefix
-            == "123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject"
-        )
         assert config.build_dir == "custom-build"
-        assert config.aws.roles.pipeline == "arn:aws:iam::123::role/pipeline"
-        assert config.aws.roles.lambda_ == "arn:aws:iam::123::role/lambda"
-        assert config.lambda_cfg.env == {"LOG_LEVEL": "INFO"}
+        assert config.artifact_bucket == "my-bucket"
+        assert (
+            config.image_repository
+            == "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject"
+        )
+        assert config.stepfunctions_role == "arn:aws:iam::123::role/sfn"
+        assert config.lambda_execution_role == "arn:aws:iam::123::role/lambda"
+        assert config.aws_endpoint == "http://localhost:4566"
+        assert config.lambda_cfg.package_type == "zip"
         assert config.lambda_cfg.timeout == 600
         assert config.lambda_cfg.memory == 256
         assert config.lambda_cfg.image_tag == "v1.0"
+        assert config.lambda_cfg.env == {"LOG_LEVEL": "INFO"}
+        assert config.logging.level == "DEBUG"
+        assert config.logging.format == "json"
 
 
 class TestLoadConfig:
@@ -220,62 +199,60 @@ class TestLoadConfig:
     def test_load_config_with_no_files(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test load_config when no config files exist."""
         monkeypatch.setenv("LOKKI_ARTIFACT_BUCKET", "")
-        monkeypatch.setenv("LOKKI_ECR_REPO_PREFIX", "")
+        monkeypatch.setenv("LOKKI_IMAGE_REPOSITORY", "")
+        monkeypatch.setenv("LOKKI_AWS_ENDPOINT", "")
         monkeypatch.setenv("LOKKI_BUILD_DIR", "")
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.yml")
+                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.toml")
             )
-            mp.setattr("lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.yml"))
+            mp.setattr(
+                "lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.toml")
+            )
 
             config = load_config()
-            assert config.aws.artifact_bucket == ""
+            assert config.artifact_bucket == ""
             assert config.build_dir == "lokki-build"
 
     def test_load_config_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that environment variables override config file values."""
         monkeypatch.setenv("LOKKI_ARTIFACT_BUCKET", "env-bucket")
-        monkeypatch.setenv("LOKKI_ECR_REPO_PREFIX", "env-ecr")
+        monkeypatch.setenv("LOKKI_IMAGE_REPOSITORY", "env-repo")
+        monkeypatch.setenv("LOKKI_AWS_ENDPOINT", "http://localhost:4566")
         monkeypatch.setenv("LOKKI_BUILD_DIR", "env-build")
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.yml")
+                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.toml")
             )
-            mp.setattr("lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.yml"))
+            mp.setattr(
+                "lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.toml")
+            )
 
             config = load_config()
-            assert config.aws.artifact_bucket == "env-bucket"
-            assert config.aws.ecr_repo_prefix == "env-ecr"
+            assert config.artifact_bucket == "env-bucket"
+            assert config.image_repository == "env-repo"
+            assert config.aws_endpoint == "http://localhost:4566"
             assert config.build_dir == "env-build"
 
     def test_load_config_with_local_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test loading config with local config file."""
-        local_config = tmp_path / "lokki.yml"
-        local_config.write_text(
-            yaml.dump(
-                {
-                    "aws": {
-                        "artifact_bucket": "local-bucket",
-                    },
-                    "build_dir": "local-build",
-                }
-            )
-        )
+        local_config = tmp_path / "lokki.toml"
+        local_config.write_text("[aws]\nartifact_bucket = 'local-bucket'")
 
         monkeypatch.setenv("LOKKI_ARTIFACT_BUCKET", "")
-        monkeypatch.setenv("LOKKI_ECR_REPO_PREFIX", "")
+        monkeypatch.setenv("LOKKI_IMAGE_REPOSITORY", "")
+        monkeypatch.setenv("LOKKI_AWS_ENDPOINT", "")
         monkeypatch.setenv("LOKKI_BUILD_DIR", "")
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.yml")
+                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.toml")
             )
             mp.setattr("lokki.config.LOCAL_CONFIG_PATH", local_config)
 
             config = load_config()
-            assert config.aws.artifact_bucket == "local-bucket"
-            assert config.build_dir == "local-build"
+            assert config.artifact_bucket == "local-bucket"

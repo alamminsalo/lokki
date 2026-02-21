@@ -58,7 +58,7 @@ class Deployer:
         self,
         flow_name: str,
         artifact_bucket: str,
-        ecr_repo_prefix: str,
+        image_repository: str,
         build_dir: Path,
         aws_endpoint: str = "",
         package_type: str = "image",
@@ -67,9 +67,9 @@ class Deployer:
         if package_type == "zip":
             print("Skipping Docker image push for ZIP deployment")
         else:
-            self._push_images(ecr_repo_prefix, build_dir)
+            self._push_images(image_repository, build_dir)
         self._deploy_stack(
-            flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint, build_dir
+            flow_name, artifact_bucket, image_repository, aws_endpoint, build_dir
         )
 
     def _validate_credentials(self, require_ecr: bool = True) -> None:
@@ -107,7 +107,7 @@ class Deployer:
                 "Docker is not installed. Please install Docker and try again."
             ) from None
 
-    def _push_images(self, ecr_repo_prefix: str, build_dir: Path) -> None:
+    def _push_images(self, image_repository: str, build_dir: Path) -> None:
         lambdas_dir = build_dir / "lambdas"
         if not lambdas_dir.exists():
             raise DeployError(f"Lambda directory not found: {lambdas_dir}")
@@ -116,7 +116,7 @@ class Deployer:
         if not dockerfile_path.exists():
             raise DeployError(f"Dockerfile not found: {dockerfile_path}")
 
-        is_local = not ecr_repo_prefix
+        is_local = image_repository == "local"
 
         if is_local:
             image_name = "lokki"
@@ -127,7 +127,7 @@ class Deployer:
         else:
             self._login_to_ecr()
             image_name = "lokki"
-            image_uri = f"{ecr_repo_prefix}/{image_name}:{self.image_tag}"
+            image_uri = f"{image_repository}/{image_name}:{self.image_tag}"
             print(f"Building and pushing shared Docker image: {image_uri}...")
             self._build_image(lambdas_dir, image_uri)
             self._push_image(image_uri)
@@ -194,7 +194,7 @@ class Deployer:
         self,
         flow_name: str,
         artifact_bucket: str,
-        ecr_repo_prefix: str,
+        image_repository: str,
         aws_endpoint: str = "",
         build_dir: Path | None = None,
     ) -> None:
@@ -226,7 +226,7 @@ class Deployer:
             raise DeployError(f"Failed to read template: {e}") from e
 
         self._deploy_with_boto3(
-            template_body, flow_name, artifact_bucket, ecr_repo_prefix, aws_endpoint
+            template_body, flow_name, artifact_bucket, image_repository, aws_endpoint
         )
 
     def _deploy_with_sam_cli(
@@ -333,7 +333,7 @@ class Deployer:
         template_body: str,
         flow_name: str,
         artifact_bucket: str,
-        ecr_repo_prefix: str,
+        image_repository: str,
         aws_endpoint: str,
     ) -> None:
         try:
@@ -366,8 +366,8 @@ class Deployer:
                             "ParameterValue": artifact_bucket,
                         },
                         {
-                            "ParameterKey": "ECRRepoPrefix",
-                            "ParameterValue": ecr_repo_prefix,
+                            "ParameterKey": "ImageRepository",
+                            "ParameterValue": image_repository,
                         },
                         {
                             "ParameterKey": "ImageTag",
@@ -395,8 +395,8 @@ class Deployer:
                             "ParameterValue": artifact_bucket,
                         },
                         {
-                            "ParameterKey": "ECRRepoPrefix",
-                            "ParameterValue": ecr_repo_prefix,
+                            "ParameterKey": "ImageRepository",
+                            "ParameterValue": image_repository,
                         },
                         {
                             "ParameterKey": "ImageTag",

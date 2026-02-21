@@ -77,6 +77,8 @@ def linear_flow():
 - This is equivalent to a simple linear pipeline without map/aggregation
 - Multiple `.next()` calls create a linear chain: `A.next(B).next(C)` → A → B → C
 - Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section until `.agg(step)` is called:
+- The flow must raise an exception if the flow ends with an open Map block.
+- Nested .map() calls is not supported and should raise an exception.
 
 ```python
 @step
@@ -101,9 +103,6 @@ def complex_flow():
     # Chain A -> Map(B -> C) -> Agg(D)
     return get_data().map(mult_item).next(pow_item).agg(collect)
 ```
-- The flow must raise an exception if the flow ends with an open Map block.
-- Nested .map() calls is not supported and should raise an exception.
-
 
 **Comparison:**
 
@@ -121,9 +120,12 @@ The flow script is the entry point for all lokki operations.
 
 | Command | Description |
 |---|---|
-| `python flow_script.py build` | Package and generate all deployment artifacts |
 | `python flow_script.py run` | Execute the pipeline locally |
-| `python flow_script.py deploy` | Build and deploy to AWS Step Functions |
+| `python flow_script.py build` | Package and generate all deployment artifacts for AWS Cloudformation |
+| `python flow_script.py deploy` | Build and deploy to AWS Cloudformation |
+| `python flow_script.py destroy` | Destroys the AWS Cloudformation stack of the flow |
+| `python flow_script.py status` | Retrieve and show information of last 10 flow runs on AWS |
+| `python flow_script.py logs` | Fetch the logs of a run or start log tailing |
 
 ---
 
@@ -160,10 +162,10 @@ python flow_script.py deploy
 
 The deploy command uses the same configuration as `build`:
 
-```yaml
-# lokki.yml
-artifact_bucket: my-lokki-artifacts
-ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+```toml
+# lokki.toml
+artifact_bucket = "my-lokki-artifacts"
+ecr_repo_prefix = "123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject"
 ```
 
 ### Deploy Workflow
@@ -278,7 +280,7 @@ The lokki library provides structured logging to help developers track pipeline 
 
 The default log level is `INFO`. It can be configured via:
 - Environment variable: `LOKKI_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR)
-- Config file: `lokki.yml` under `logging.level`
+- Config file: `lokki.toml` under `logging.level`
 
 ### Step Execution Logging
 
@@ -321,13 +323,13 @@ Progress updates occur at configurable intervals (default: every 10% or every 10
 
 ### Configuration Options
 
-```yaml
-# lokki.yml
-logging:
-  level: INFO              # DEBUG, INFO, WARNING, ERROR
-  format: human           # "human" (default) or "json"
-  progress_interval: 10    # Update every N items or 10% (whichever is smaller)
-  show_timestamps: true   # Include ISO timestamps in log output
+```toml
+# lokki.toml
+[logging]
+level = "INFO"              # DEBUG, INFO, WARNING, ERROR
+format = "human"           # "human" (default) or "json"
+progress_interval = 10      # Update every N items or 10% (whichever is smaller)
+show_timestamps = true     # Include ISO timestamps in log output
 ```
 
 ### JSON Structured Logging
@@ -355,76 +357,76 @@ In AWS Lambda, logs are emitted to CloudWatch. The handler logs:
 
 - All inter-step data is serialised using **gzip-compressed pickle** and stored in S3 under a structured key prefix (e.g. `s3://<bucket>/lokki/<run_id>/<step_name>/output.pkl.gz`).
 - Step functions receive Python objects, not S3 URLs — lokki's runtime wrapper handles download before invocation and upload after return.
-- The S3 bucket and prefix are configurable via `lokki.yml` or environment variable override.
+- The S3 bucket and prefix are configurable via `lokki.toml` or environment variable override.
 
 ---
 
-## Configuration — `lokki.yml`
+## Configuration — `lokki.toml`
 
-lokki is configured via a YAML file named `lokki.yml`. Two locations are supported, loaded in order with the local file taking precedence over the global file on a per-field basis:
+lokki is configured via a TOML file named `lokki.toml`. Two locations are supported, loaded in order with the local file taking precedence over the global file on a per-field basis:
 
-- **Global**: `~/.lokki/lokki.yml` — user-level defaults shared across all projects.
-- **Local**: `lokki.yml` in the project root — project-specific settings that override any matching global field.
+- **Global**: `~/.lokki/lokki.toml` — user-level defaults shared across all projects.
+- **Local**: `lokki.toml` in the project root — project-specific settings that override any matching global field.
 
 Neither file is required; lokki falls back to sensible defaults or environment variables where possible.
 
 **Supported fields:**
 
-```yaml
-# lokki.yml
+```toml
+# lokki.toml
+# Output directory for build artifacts (default: lokki-build)
+build_dir = "lokki-build"
 
 # AWS configuration
-aws:
-  # S3 bucket for intermediate pipeline data and build artifacts
-  artifact_bucket: my-lokki-artifacts
-  
-  # ECR repository prefix for Lambda container images
-  # Leave empty to use local Docker images (e.g., for LocalStack testing)
-  # Example: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
-  ecr_repo_prefix: ""
-  
-  # AWS endpoint URL for local development (e.g., LocalStack)
-  # Leave empty to use real AWS endpoints
-  # Example: http://localhost:4566
-  endpoint: ""
-  
-  # IAM role ARNs
-  roles:
-    pipeline: arn:aws:iam::123456789::role/lokki-stepfunctions-role
-    lambda: arn:aws:iam::123456789::role/lokki-lambda-execution-role
+[aws]
+
+# S3 bucket for intermediate pipeline data and build artifacts
+artifact_bucket = "my-lokki-artifacts"
+
+# Docker repository prefix for container images.
+# Set to 'local' use local Docker images (e.g., for LocalStack testing).
+# Example: docker.io to use docker repository.
+# Defaults to ECR for the current AWS profile.
+image_repository = "local"
+
+# AWS endpoint URL for local development (e.g., LocalStack)
+# Leave empty to use real AWS endpoints
+# Example: "http://localhost:4566"
+endpoint = ""
+
+# IAM role ARNs
+stepfunctions_role = "arn:aws:iam::123456789::role/lokki-stepfunctions-role"
+lambda_execution_role = "arn:aws:iam::123456789::role/lokki-lambda-execution-role"
 
 # Lambda configuration
-lambda:
-  # Deployment package type: "image" (default) or "zip"
-  # - image: Docker container image pushed to ECR
-  # - zip: ZIP archive uploaded directly to Lambda
-  # Use "zip" for LocalStack testing or simpler deployments
-  package_type: image
-  
-  # Default Lambda resource configuration
-  timeout: 900          # seconds
-  memory: 512           # MB
-  image_tag: latest
-  
-  # Environment variables injected into every Lambda function
-  env:
-    LOG_LEVEL: INFO
-    MY_API_ENDPOINT: https://api.example.com
+[lambda]
+# Deployment package type: "image" (default) or "zip"
+# - image: Docker container image pushed to ECR
+# - zip: ZIP archive uploaded directly to Lambda
+# Use "zip" for LocalStack testing or simpler deployments
+package_type = "image"
 
-# Output directory for build artifacts (default: lokki-build)
-build_dir: lokki-build
+# Default Lambda resource configuration
+timeout = 900          # seconds
+memory = 512           # MB
+image_tag = "latest"
+
+# Environment variables injected into every Lambda function
+[lambda.env]
+LOG_LEVEL = "INFO"
+MY_API_ENDPOINT = "https://api.example.com"
 
 # Logging configuration
-logging:
-  level: INFO           # DEBUG, INFO, WARNING, ERROR
-  format: human        # "human" or "json"
-  progress_interval: 10  # Update every N items or 10% (whichever is smaller)
-  show_timestamps: true # Include ISO timestamps in log output
+[logging]
+level = "INFO"           # DEBUG, INFO, WARNING, ERROR
+format = "human"        # "human" or "json"
+progress_interval = 10   # Update every N items or 10% (whichever is smaller)
+show_timestamps = true # Include ISO timestamps in log output
 ```
 
-**Merge behaviour**: when both files are present, they are deep-merged. Any field present in the local `lokki.yml` overrides the corresponding field in the global file. Fields absent from the local file inherit the global value. List values (e.g. under `lambda_env`) are replaced entirely by the local file, not concatenated.
+**Merge behaviour**: when both files are present, they are deep-merged. Any field present in the local `lokki.toml` overrides the corresponding field in the global file. Fields absent from the local file inherit the global value. List values (e.g. under `lambda.env`) are replaced entirely by the local file, not concatenated.
 
-**Resolution order** (highest to lowest precedence): environment variables → local `lokki.yml` → global `~/.lokki/lokki.yml` → built-in defaults.
+**Resolution order** (highest to lowest precedence): environment variables → local `lokki.toml` → global `~/.lokki/lokki.toml` → built-in defaults.
 
 The **flow name** is not a configurable field — it is always derived from the `@flow`-decorated function name at build time (e.g. `birds_flow` → `"birds-flow"`). It is used as the identifier in CloudFormation resource names, S3 key prefixes, and the Step Functions state machine name.
 
@@ -435,9 +437,8 @@ The **flow name** is not a configurable field — it is always derived from the 
 | Dependency | Role |
 |---|---|
 | `uv` | Dependency management and virtual environment tooling |
-| `stepfunctions` (pip) | AWS Step Functions SDK / state machine construction helpers |
-| `boto3` | AWS SDK for S3 and Step Functions API calls |
-| `pyyaml` | Parsing `lokki.yml` configuration files |
+| `boto3` | AWS SDK for S3, Lambda, Step Functions, and other AWS services |
+| Python stdlib `tomllib` | Parsing `lokki.toml` configuration files |
 
 ---
 
@@ -477,14 +478,14 @@ Each `@step` function is packaged as a ZIP archive uploaded directly to Lambda. 
 
 ### Configuration
 
-To enable ZIP deployment mode, set `package_type: zip` in `lokki.yml`:
+To enable ZIP deployment mode, set `package_type = "zip"` in `lokki.toml`:
 
-```yaml
-# lokki.yml
-lambda:
-  package_type: zip  # "image" (default) or "zip"
-  timeout: 900
-  memory: 512
+```toml
+# lokki.toml
+[lambda]
+package_type = "zip"  # "image" (default) or "zip"
+timeout = 900
+memory = 512
 ```
 
 When `package_type: zip` is set:
@@ -529,16 +530,16 @@ Local testing with LocalStack and SAM CLI provides an environment that **simulat
 
 ### Configuration
 
-For local testing, configure `lokki.yml`:
+For local testing, configure `lokki.toml`:
 
-```yaml
-# lokki.yml
-aws:
-  endpoint: http://localhost:4566
-  artifact_bucket: lokki
+```toml
+# lokki.toml
+[aws]
+endpoint = "http://localhost:4566"
+artifact_bucket = "lokki"
 
-lambda:
-  package_type: zip  # Required for LocalStack
+[lambda]
+package_type = "zip"  # Required for LocalStack
 ```
 
 ### Workflow

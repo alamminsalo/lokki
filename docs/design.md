@@ -417,7 +417,7 @@ Each Task state's output is a small JSON object containing only the S3 URL of th
 
 ### State naming
 
-States are named after the Python function: `GetBirds`, `FlapBird`, `JoinBirds` (PascalCase). The `stepfunctions` pip package is used as a helper for constructing and validating the state machine definition.
+States are named after the Python function: `GetBirds`, `FlapBird`, `JoinBirds` (PascalCase). The state machine is constructed directly as a Python dict in Amazon States Language format.
 
 ---
 
@@ -538,7 +538,7 @@ CMD ["handler.lambda_handler"]
 
 ### ZIP Archive Packaging
 
-When `package_type: zip` is configured in `lokki.yml`, the build process generates ZIP archives instead of Docker images. This is useful for LocalStack testing or simpler deployment setups.
+When `package_type = "zip"` is configured in `lokki.toml`, the build process generates ZIP archives instead of Docker images. This is useful for LocalStack testing or simpler deployment setups.
 
 **Directory structure** (`lokki-build/lambdas/<step_name>/`):
 
@@ -649,10 +649,10 @@ return {"map_manifest_key": manifest_key, "run_id": run_id}
 
 ## 13. Configuration
 
-`lokki/config.py` is responsible for loading, merging, and exposing configuration to the rest of the library. Configuration is sourced from two `lokki.yml` files and environment variables, resolved in this order (highest precedence first):
+`lokki/config.py` is responsible for loading, merging, and exposing configuration to the rest of the library. Configuration is sourced from two `lokki.toml` files and environment variables, resolved in this order (highest precedence first):
 
 ```
-environment variables → local lokki.yml → global ~/.lokki/lokki.yml → built-in defaults
+environment variables → local lokki.toml → global ~/.lokki/lokki.toml → built-in defaults
 ```
 
 ### Loading & merging
@@ -660,17 +660,17 @@ environment variables → local lokki.yml → global ~/.lokki/lokki.yml → buil
 ```python
 # lokki/config.py (simplified)
 import os
-import yaml
+import tomllib
 from pathlib import Path
 from dataclasses import dataclass, field
 
-GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.yml"
-LOCAL_CONFIG_PATH = Path.cwd() / "lokki.yml"
+GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.toml"
+LOCAL_CONFIG_PATH = Path.cwd() / "lokki.toml"
 
-def _load_yaml(path: Path) -> dict:
+def _load_toml(path: Path) -> dict:
     if path.exists():
-        with path.open() as f:
-            return yaml.safe_load(f) or {}
+        with path.open("rb") as f:
+            return tomllib.load(f)
     return {}
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -684,60 +684,127 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 def load_config() -> "LokkiConfig":
-    global_cfg = _load_yaml(GLOBAL_CONFIG_PATH)
-    local_cfg  = _load_yaml(LOCAL_CONFIG_PATH)
-    merged     = _deep_merge(global_cfg, local_cfg)
+    global_cfg = _load_toml(GLOBAL_CONFIG_PATH)
+    local_cfg = _load_toml(LOCAL_CONFIG_PATH)
+    merged = _deep_merge(global_cfg, local_cfg)
     return LokkiConfig.from_dict(merged)
-```
 
-### Config schema
-
-```python
-@dataclass
-class AwsConfig:
-    artifact_bucket: str = ""      # S3 bucket for pipeline data and artifacts
-    ecr_repo_prefix: str = ""      # ECR repo prefix (empty = use local Docker images)
-    endpoint: str = ""             # AWS endpoint URL (empty = use real AWS)
-    roles: RolesConfig = field(default_factory=RolesConfig)
-
-@dataclass
-class RolesConfig:
-    pipeline: str = ""   # IAM role ARN for Step Functions
-    lambda_: str = ""    # IAM role ARN for Lambda execution
 
 @dataclass
 class LambdaConfig:
+    package_type: str = "image"  # "image" or "zip"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
     env: dict[str, str] = field(default_factory=dict)
 
+
 @dataclass
 class LokkiConfig:
-    aws: AwsConfig = field(default_factory=AwsConfig)
-    lambda: LambdaConfig = field(default_factory=LambdaConfig)
+    # Top-level fields
     build_dir: str = "lokki-build"
+
+    # AWS configuration (from [aws] table)
+    artifact_bucket: str = ""
+    image_repository: str = ""  # "local", "docker.io", or ECR prefix
+    aws_endpoint: str = ""
+    stepfunctions_role: str = ""
+    lambda_execution_role: str = ""
+
+    # Nested config
+    lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "LokkiConfig": ...
+    def from_dict(cls, d: dict) -> "LokkiConfig":
+        """Create a LokkiConfig from a dictionary."""
+        aws_config = d.get("aws", {})
+        lambda_config = d.get("lambda", {})
+        logging_config = d.get("logging", {})
+
+        lambda_cfg = LambdaConfig(
+            package_type=lambda_config.get("package_type", "image"),
+            timeout=lambda_config.get("timeout", 900),
+            memory=lambda_config.get("memory", 512),
+            image_tag=lambda_config.get("image_tag", "latest"),
+            env=lambda_config.get("env", {}),
+        )
+        return cls(
+            build_dir=d.get("build_dir", "lokki-build"),
+            artifact_bucket=aws_config.get("artifact_bucket", ""),
+            image_repository=aws_config.get("image_repository", ""),
+            aws_endpoint=aws_config.get("endpoint", ""),
+            stepfunctions_role=aws_config.get("stepfunctions_role", ""),
+            lambda_execution_role=aws_config.get("lambda_execution_role", ""),
+            lambda_cfg=lambda_cfg,
+            logging=LoggingConfig(
+                level=logging_config.get("level", "INFO"),
+                format=logging_config.get("format", "human"),
+                progress_interval=logging_config.get("progress_interval", 10),
+                show_timestamps=logging_config.get("show_timestamps", True),
+            ),
+        )
+```
+
+### Example lokki.toml
+
+```toml
+# lokki.toml
+
+# Output directory for build artifacts (default: lokki-build)
+build_dir = "lokki-build"
+
+[aws]
+
+# S3 bucket for intermediate pipeline data and build artifacts
+artifact_bucket = "my-lokki-artifacts"
+
+# Docker repository: "local", "docker.io", or ECR prefix
+image_repository = "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject"
+
+# AWS endpoint for local development (e.g., LocalStack)
+endpoint = "http://localhost:4566"
+
+# IAM role ARNs
+stepfunctions_role = "arn:aws:iam::123456789::role/lokki-stepfunctions-role"
+lambda_execution_role = "arn:aws:iam::123456789::role/lokki-lambda-execution-role"
+
+[lambda]
+package_type = "image"
+timeout = 900
+memory = 512
+image_tag = "latest"
+
+[lambda.env]
+LOG_LEVEL = "INFO"
+
+[logging]
+level = "INFO"
+format = "human"
+```
+
+[logging]
+level = "INFO"
+format = "human"
 ```
 
 ### Environment variable overrides
 
-After loading and merging the YAML files, specific fields can be overridden by environment variables. This is primarily useful inside Lambda functions at runtime, where the full `lokki.yml` is not available.
+After loading and merging the TOML files, specific fields can be overridden by environment variables. This is primarily useful inside Lambda functions at runtime, where the full `lokki.toml` is not available.
 
 | Environment variable | Overrides field |
 |---|---|
-| `LOKKI_ARTIFACT_BUCKET` | `aws.artifact_bucket` |
-| `LOKKI_ECR_REPO_PREFIX` | `aws.ecr_repo_prefix` |
+| `LOKKI_ARTIFACT_BUCKET` | `artifact_bucket` |
+| `LOKKI_IMAGE_REPOSITORY` | `image_repository` |
+| `LOKKI_AWS_ENDPOINT` | `aws_endpoint` |
 | `LOKKI_BUILD_DIR` | `build_dir` |
+| `LOKKI_LOG_LEVEL` | `logging.level` |
 
 ### Usage at build time vs runtime
 
-At **build time** (`python flow_script.py build`), `load_config()` reads both YAML files from the filesystem and uses the merged result to populate the CloudFormation template and Dockerfiles (e.g. IAM role ARNs, ECR prefix, artifact bucket name). The flow name is derived directly from the `@flow`-decorated function name (e.g. `birds_flow` → `"birds-flow"`, lowercased and underscores replaced with hyphens) and is not configurable — it is baked into the CloudFormation resource names and S3 key prefixes at build time.
+At **build time** (`python flow_script.py build`), `load_config()` reads both TOML files from the filesystem and uses the merged result to populate the CloudFormation template and Dockerfiles (e.g. IAM role ARNs, image repository, artifact bucket name). The flow name is derived directly from the `@flow`-decorated function name (e.g. `birds_flow` → `"birds-flow"`, lowercased and underscores replaced with hyphens) and is not configurable — it is baked into the CloudFormation resource names and S3 key prefixes at build time.
 
-At **Lambda runtime**, the YAML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda.env` in the config.
+At **Lambda runtime**, the TOML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda.env` in the config.
 
 ---
 
@@ -1004,7 +1071,7 @@ class Deployer:
         Builder.build(graph, config)
 
         # 3. Push Lambda images
-        self._push_images(config.aws.ecr_repo_prefix)
+        self._push_images(config.image_repository)
 
         # 4. Deploy CloudFormation
         self._deploy_stack(config)
@@ -1034,8 +1101,8 @@ class Deployer:
             Capabilities=["CAPABILITY_IAM"],
             Parameters=[
                 {"ParameterKey": "FlowName", "ParameterValue": config.flow_name},
-                {"ParameterKey": "S3Bucket", "ParameterValue": config.aws.artifact_bucket},
-                {"ParameterKey": "ECRRepoPrefix", "ParameterValue": config.aws.ecr_repo_prefix},
+                {"ParameterKey": "S3Bucket", "ParameterValue": config.artifact_bucket},
+                {"ParameterKey": "ImageRepository", "ParameterValue": config.image_repository},
                 {"ParameterKey": "ImageTag", "ParameterValue": self.image_tag},
             ],
         )
@@ -1074,8 +1141,8 @@ elif command == "deploy":
 For Lambda container images, all steps share a single Docker image. The deploy command:
 
 1. Builds a single Docker image from `lokki-build/lambdas/Dockerfile`
-2. Tags with `<ecr_repo_prefix>/lokki:<image_tag>`
-3. Pushes to ECR using `docker push`
+2. Tags with `<image_repository>/lokki:<image_tag>`
+3. Pushes to registry using `docker push`
 4. Each Lambda function in CloudFormation references the same image URI
 
 **Handler Dispatch:**
@@ -1109,13 +1176,13 @@ For local development and testing, lokki supports ZIP-based deployment with SAM 
 
 ### Configuration
 
-In `lokki.yml`, set `package_type: zip`:
+In `lokki.toml`, set `package_type = "zip"`:
 
-```yaml
-lambda:
-  package_type: zip  # Use "zip" for LocalStack testing; "image" for production
-  timeout: 900
-  memory: 512
+```toml
+[lambda]
+package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+timeout = 900
+memory = 512
 ```
 
 For LocalStack, configure the endpoint:
@@ -1146,7 +1213,7 @@ lokki-build/
 ### Single ZIP Package
 
 Instead of per-step Docker images, a single `function.zip` is created containing:
-- All dependencies (boto3, pyyaml, etc.)
+- All dependencies (boto3, etc.)
 - lokki runtime code
 - User's flow module (e.g., `birds_flow_example.py`)
 

@@ -5,7 +5,7 @@
 ### T1.1 — Initialize project with uv ✅
 - Configured `pyproject.toml` with:
   - Package metadata (name, version, description, requires-python >=3.13)
-  - Dependencies: `boto3`, `stepfunctions`, `pyyaml`
+  - Dependencies: `boto3`
   - Dev dependencies: `pytest`, `mypy`, `ruff`, `moto`
   - Build system: hatchling
   - Tool configuration for ruff and mypy
@@ -53,7 +53,7 @@ lokki/
 - `LokkiConfig`: Main config with all fields and `from_dict()` constructor
 
 ### T2.4 — load_config function ✅
-- Loads global (`~/.lokki/lokki.yml`) and local (`./lokki.yml`) configs
+- Loads global (`~/.lokki/lokki.toml`) and local (`./lokki.toml`) configs
 - Deep-merges with local taking precedence
 - Applies environment variable overrides:
   - `LOKKI_ARTIFACT_BUCKET`
@@ -62,7 +62,7 @@ lokki/
 
 ### T2.5 — Unit tests ✅
 - Written in `tests/test_config.py`
-- 19 tests covering `_deep_merge`, `_load_yaml`, config dataclasses, `load_config`
+- 19 tests covering `_deep_merge`, `_load_toml`, config dataclasses, `load_config`
 - All tests pass
 
 ---
@@ -468,3 +468,48 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 - **Total tests:** 85
 - **All tests pass**
 - **SAM local invoke:** Successfully writes to LocalStack S3
+
+---
+
+## Milestone 17 — TOML Configuration Format
+
+### T17.1 — Update config file naming ✅
+- Changed config filename from `lokki.yml` to `lokki.toml`
+- Updated `GLOBAL_CONFIG_PATH` and `LOCAL_CONFIG_PATH` to use `.toml`
+
+### T17.2 — Update config loading ✅
+- Replaced `yaml.safe_load()` with `tomllib.load()`
+- Updated `_load_yaml()` to `_load_toml()` 
+- Opens file in binary mode (`"rb"`) as required by tomllib
+
+### T17.3 — Update configuration schema documentation ✅
+- Updated docs to use TOML format
+- Removed `pyyaml` from dependencies
+
+### T17.4 — Environment variable handling ✅
+- Environment variable overrides work with TOML config
+- All existing env vars (`LOKKI_ARTIFACT_BUCKET`, etc.) function correctly
+
+### T17.6 — Update tests ✅
+- Updated config tests to use TOML fixtures
+- All tests pass
+
+### T17.7 — Update builder integration ✅
+- Updated error messages to reference `lokki.toml`
+
+### T17.8 — Update documentation ✅
+- Updated AGENTS.md with TOML examples
+- Updated all docs to use TOML format
+
+### T17.9 — Remove stepfunctions dependency ✅
+- Removed `stepfunctions` pip package from dependencies
+- State machine generation builds ASL JSON directly as Python dict (no imports needed)
+- No references to stepfunctions package in codebase
+
+---
+
+## Test Results
+
+- **Total tests:** 87
+- **All tests pass**
+- **Linting:** All checks pass
