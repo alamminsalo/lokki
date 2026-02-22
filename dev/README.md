@@ -47,18 +47,17 @@ This section describes how to run a full integration test of your lokki flow loc
 
 ### Step 1: Configure for LocalStack
 
-Create or update `lokki.yml` in your project:
+Create or update `lokki.toml` in your project:
 
-```yaml
-aws:
-  endpoint: http://localhost:4566
-  artifact_bucket: lokki
-  ecr_repo_prefix: ""
+```toml
+[aws]
+endpoint = "http://localhost:4566"
+artifact_bucket = "lokki"
 
-lambda:
-  package_type: zip
-  timeout: 900
-  memory: 512
+[lambda]
+package_type = "zip"
+timeout = 900
+memory = 512
 ```
 
 ### Step 2: Build the Flow
@@ -174,21 +173,21 @@ Note: This requires the path to be accessible during Docker build (e.g., via a v
 
 ## Configuration
 
-Make sure your `lokki.yml` has the correct settings for LocalStack:
+Make sure your `lokki.toml` has the correct settings for LocalStack:
 
-```yaml
-aws:
-  artifact_bucket: lokki-artifacts
-  endpoint: http://localhost:4566
-  ecr_repo_prefix: ""  # Use local Docker images
+```toml
+[aws]
+artifact_bucket = "lokki-artifacts"
+endpoint = "http://localhost:4566"
 
-lambda:
-  package_type: zip
-  timeout: 60
-  memory: 256
-  image_tag: latest
-  env:
-    LOG_LEVEL: DEBUG
+[lambda]
+package_type = "zip"
+timeout = 60
+memory = 256
+image_tag = "latest"
+
+[lambda.env]
+LOG_LEVEL = "DEBUG"
 ```
 
 ## Notes

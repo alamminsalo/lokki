@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://pypi.org/project/lokki/)
 [![Test Coverage](https://img.shields.io/badge/coverage-77%25-yellow)](https://github.com/anomalyco/lokki/actions)
-[![Tests](https://img.shields.io/badge/tests-152%20passed-green)](https://github.com/anomalyco/lokki/actions)
+[![Tests](https://img.shields.io/badge/tests-234%20passed-green)](https://github.com/anomalyco/lokki/actions)
 
 A Python library for defining, building, and deploying data pipelines to AWS Step Functions.
 
@@ -11,8 +11,10 @@ A Python library for defining, building, and deploying data pipelines to AWS Ste
 - **Simple Python decorators** - Define pipelines using `@step` and `@flow` decorators
 - **Local execution** - Test your flows locally before deploying
 - **AWS Step Functions** - Deploy to AWS Step Functions with Distributed Map for parallel processing
-- **Lambda packaging** - Auto-generates Docker images for each step
+- **Lambda packaging** - Auto-generates Docker images or ZIP archives for each step
 - **CloudFormation** - Generates complete CloudFormation templates for deployment
+- **Retry configuration** - Configure automatic retries for failed steps
+- **Flow parameters** - Pass parameters to flows at runtime
 
 ## Installation
 
@@ -35,7 +37,7 @@ from lokki import flow, step
 
 @step
 def get_birds() -> list[str]:
-    return ["goose", "duck", "seagul"]
+    return ["goose", "duck", "seagull"]
 
 @step
 def flap_bird(bird: str) -> str:
@@ -58,7 +60,7 @@ Run locally:
 
 ```bash
 python birds_flow.py run
-# Output: flappy goose, flappy duck, flappy seagul
+# Output: flappy goose, flappy duck, flappy seagull
 ```
 
 Build for deployment:
@@ -68,37 +70,48 @@ python birds_flow.py build
 ```
 
 This creates:
-- `lokki-build/lambdas/` - One directory per step with Dockerfile and handler
+- `lokki-build/lambdas/` - One directory per step with Dockerfile or ZIP
 - `lokki-build/statemachine.json` - AWS Step Functions state machine
 - `lokki-build/template.yaml` - CloudFormation template
 
 ## Configuration
 
-Create a `lokki.yml` in your project:
+Create a `lokki.toml` in your project:
 
-```yaml
-artifact_bucket: my-lokki-artifacts
-ecr_repo_prefix: 123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
-build_dir: lokki-build
+```toml
+# lokki.toml
+build_dir = "lokki-build"
 
-lambda_defaults:
-  timeout: 900
-  memory: 512
-  image_tag: latest
+[aws]
+artifact_bucket = "my-lokki-artifacts"
+image_repository = "local"  # or ECR prefix like "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject"
+endpoint = ""  # for LocalStack: "http://localhost:4566"
 
-lambda_env:
-  LOG_LEVEL: INFO
+[lambda]
+package_type = "image"  # or "zip" for simpler deployments
+timeout = 900
+memory = 512
+image_tag = "latest"
+
+[lambda.env]
+LOG_LEVEL = "INFO"
+
+[logging]
+level = "INFO"
+format = "human"  # or "json"
 ```
 
 ### Configuration Precedence
 
-Environment variables override YAML config:
+Environment variables override TOML config (highest to lowest):
 
 | Environment Variable | Config Field |
 |---------------------|--------------|
-| `LOKKI_ARTIFACT_BUCKET` | `artifact_bucket` |
-| `LOKKI_ECR_REPO_PREFIX` | `ecr_repo_prefix` |
+| `LOKKI_ARTIFACT_BUCKET` | `aws.artifact_bucket` |
+| `LOKKI_IMAGE_REPOSITORY` | `aws.image_repository` |
+| `LOKKI_AWS_ENDPOINT` | `aws.endpoint` |
 | `LOKKI_BUILD_DIR` | `build_dir` |
+| `LOKKI_LOG_LEVEL` | `logging.level` |
 
 ## Flow Syntax
 
@@ -122,21 +135,127 @@ def my_flow():
     return get_data().map(process).agg(summarize)
 ```
 
-### Chaining
+### Chaining Methods
 
-- `.map(step)` - Run step in parallel for each item in the list
-- `.agg(step)` - Aggregate results from map into a single value
-- Chain multiple maps: `step1().map(step2).map(step3).agg(agg_step)`
+- `.map(step)` - Run step in parallel for each item in the list (fan-out)
+- `.agg(step)` - Aggregate results from map into a single value (fan-in)
+- `.next(step)` - Run step sequentially after the previous step
+
+Chain multiple maps: `step1().map(step2).map(step3).agg(agg_step)`
+
+### Sequential Steps with `.next()`
+
+```python
+@step
+def fetch_data():
+    return [1, 2, 3]
+
+@step
+def process(item):
+    return item * 2
+
+@step
+def save(result):
+    return {"result": result}
+
+@flow
+def sequential_flow():
+    return fetch_data().map(process).next(save)
+```
+
+### Flow Parameters
+
+Pass parameters to flows at runtime:
+
+```python
+@step
+def fetch_data(limit: int, offset: int = 0):
+    return list(range(limit))[offset:]
+
+@step
+def process(item):
+    return item * 2
+
+@flow
+def paginated_flow(limit: int = 100, offset: int = 0):
+    return fetch_data(limit=limit, offset=offset).map(process)
+```
+
+Run with parameters:
+
+```bash
+python flow.py run --limit 50 --offset 10
+```
+
+### Retry Configuration
+
+Configure automatic retries for failed steps:
+
+```python
+from lokki import flow, step
+from lokki.decorators import RetryConfig
+
+@step
+def unreliable_step(data):
+    import random
+    if random.random() < 0.5:
+        raise ValueError("Random failure")
+    return data
+
+@flow
+def flow_with_retry():
+    return unreliable_step(retry=RetryConfig(retries=3, delay=1.0, backoff=2.0))
+```
+
+Retry options:
+- `retries` - Number of retry attempts (default: 0)
+- `delay` - Initial delay between retries in seconds (default: 1.0)
+- `backoff` - Backoff multiplier for delay (default: 2.0)
 
 ## CLI Commands
 
 ```bash
-python my_flow.py run     # Run locally
-python my_flow.py build   # Build deployment artifacts
-python my_flow.py --help  # Show help
+python my_flow.py run              # Run locally with optional params
+python my_flow.py build            # Build deployment artifacts
+python my_flow.py deploy           # Build and deploy to AWS
+python my_flow.py show             # Show execution status
+python my_flow.py logs             # Fetch CloudWatch logs
+python my_flow.py destroy          # Destroy the CloudFormation stack
+python my_flow.py --help           # Show help
+```
+
+### Run Command
+
+```bash
+python flow.py run --param1 value1 --param2 value2
+```
+
+### Deploy Command
+
+```bash
+python flow.py deploy --stack-name my-stack --region us-east-1
+```
+
+### Show Command
+
+```bash
+python flow.py show                    # Show last 10 executions
+python flow.py show --n 5              # Show last 5 executions
+python flow.py show --run <run_id>      # Show specific execution
+```
+
+### Logs Command
+
+```bash
+python flow.py logs                     # Fetch logs from last hour
+python flow.py logs --start 2024-01-15T10:00:00Z
+python flow.py logs --tail              # Tail logs in real-time
+python flow.py logs --run <run_id>      # Filter by run ID
 ```
 
 ## Deployment
+
+### Option 1: Docker Images (Default)
 
 1. Build your flow:
    ```bash
@@ -157,8 +276,52 @@ python my_flow.py --help  # Show help
      --parameter-overrides \
        FlowName=my-flow \
        S3Bucket=my-bucket \
-       ECRRepoPrefix=123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject
+       ImageRepository=123456789.dkr.ecr.us-east-1.amazonaws.com/myproject
    ```
+
+### Option 2: ZIP Archives (Simpler)
+
+For simpler deployments without Docker:
+
+```toml
+[lambda]
+package_type = "zip"
+```
+
+```bash
+python my_flow.py deploy
+```
+
+The Lambda code will be uploaded directly as ZIP archives - no ECR push needed.
+
+## Local Development with LocalStack
+
+Test your flows locally before deploying to AWS:
+
+1. Start LocalStack:
+   ```bash
+   cd dev
+   docker-compose up -d
+   ```
+
+2. Configure for LocalStack:
+   ```toml
+   [aws]
+   artifact_bucket = "lokki"
+   endpoint = "http://localhost:4566"
+   image_repository = "local"
+
+   [lambda]
+   package_type = "zip"
+   ```
+
+3. Build and deploy:
+   ```bash
+   python flow.py build
+   python flow.py deploy --confirm
+   ```
+
+See `dev/README.md` for more detailed LocalStack testing instructions.
 
 ## Architecture
 

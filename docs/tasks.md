@@ -912,3 +912,37 @@ _Purpose_: Enhance code readability and reduce LOC through extraction, consolida
 
 - Run `uv run pytest` to verify no regressions
 - Fix any test failures related to import changes
+
+---
+
+## Milestone 25 — Documentation Update
+
+_Purpose_: Update documentation to reflect current implementation and add missing features.
+
+### T25.1 — Update README.md
+
+- Fix configuration section: change `lokki.yml` → `lokki.toml`
+- Update YAML syntax → TOML syntax in examples
+- Add missing configuration fields from requirements.md
+- Add missing CLI commands: `deploy`, `show`, `logs`, `destroy`
+- Add `.next()` chaining syntax documentation
+- Add flow-level kwargs documentation
+- Add retry configuration documentation
+- Add ZIP deployment option documentation
+- Add LocalStack testing documentation reference
+
+### T25.2 — Fix dev/README.md
+
+- Change all `lokki.yml` references to `lokki.toml`
+- Update YAML config examples to TOML
+- Fix any outdated command examples
+
+### T25.3 — Fix dev/deploy-localstack.sh
+
+- Change config file reference from `lokki.yml` to `lokki.toml`
+
+### T25.4 — Verify documentation consistency
+
+- Check that all config field names match actual implementation
+- Verify all CLI commands documented are implemented
+- Ensure examples are accurate

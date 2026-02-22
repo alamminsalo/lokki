@@ -8,8 +8,8 @@ LOCALSTACK_HOST="${LOCALSTACK_HOST:-localhost}"
 LOCALSTACK_PORT="${LOCALSTACK_PORT:-4566}"
 ENDPOINT_URL="http://${LOCALSTACK_HOST}:${LOCALSTACK_PORT}"
 
-FLOW_FILE="${FLOW_FILE:-$PROJECT_DIR/examples/birds_flow_example.py}"
-CONFIG_FILE="${CONFIG_FILE:-$PROJECT_DIR/examples/lokki.yml}"
+FLOW_FILE="${FLOW_FILE:-$PROJECT_DIR/examples/weather/weather.py}"
+CONFIG_FILE="${CONFIG_FILE:-$PROJECT_DIR/examples/weather/lokki.toml}"
 
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
