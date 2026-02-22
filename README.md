@@ -22,10 +22,10 @@ A Python library for defining, building, and deploying data pipelines to AWS Ste
 pip install lokki
 ```
 
-Or install from source:
+Or install by uv (recommended):
 
 ```bash
-uv sync
+uv add lokki
 ```
 
 ## Quick Start
