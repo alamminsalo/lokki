@@ -110,19 +110,25 @@ class FlowGraph:
     def _validate(self) -> None:
         """Validate the resolved graph for common errors."""
         open_map_blocks: dict[int, MapBlock] = {}
+        in_map_block: bool = False
 
         for entry in self.entries:
             if isinstance(entry, MapOpenEntry):
-                if entry.source._map_block is not None:
-                    open_map_blocks[id(entry.source._map_block)] = (
-                        entry.source._map_block
+                if in_map_block:
+                    raise ValueError(
+                        "Nested .map() calls are not supported. "
+                        "Use .next() to chain steps inside a map block, "
+                        "or close with .agg() before opening a new .map()"
                     )
+                open_map_blocks[id(entry.source._map_block)] = entry.source._map_block
+                in_map_block = True
 
             if isinstance(entry, MapCloseEntry):
                 if entry.agg_step._map_block is not None:
                     block_id = id(entry.agg_step._map_block)
                     if block_id in open_map_blocks:
                         del open_map_blocks[block_id]
+                        in_map_block = False
 
         if open_map_blocks:
             block = list(open_map_blocks.values())[0]

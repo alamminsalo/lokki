@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Weather data analysis with DuckDB using lokki"
 requires-python = ">=3.13"
 dependencies = [
-  "lokki>=0.3.1",
+  "lokki>=0.3.3",
   "duckdb>=1.0.0",
   "requests>=2.31.0",
   "geopy>=2.4.0",

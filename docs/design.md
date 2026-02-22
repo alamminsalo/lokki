@@ -254,22 +254,72 @@ def weather_flow(location="New York", start_date="2024-01-01"):
 - Flow-level kwargs are **always** keyword-only parameters
 - This pattern eliminates the need to thread parameters through intermediate steps
 
+### Flow-level parameters with `.map()` and `.agg()`
+
+The `.map()` and `.agg()` methods also support flow-level parameters:
+
+```python
+@step
+def get_items():
+    return [1, 2, 3]
+
+@step
+def process_item(item, multiplier):
+    return item * multiplier
+
+@step
+def aggregate_all(results, initial_value=0):
+    return sum(results) + initial_value
+
+@flow
+def flow_with_map_params(multiplier=2, initial_value=10):
+    return (
+        get_items()
+        .map(process_item, multiplier=multiplier)
+        .agg(aggregate_all, initial_value=initial_value)
+    )
+```
+
+**Behavior:**
+- `.map(step, **flow_kwargs)` - Each mapped step receives flow kwargs in addition to the item
+- `.agg(step, **flow_kwargs)` - The aggregation step receives flow kwargs in addition to the collected results
+
+**Parameter resolution for `.map()`:**
+```python
+@step
+def process_with_config(item, config_value):
+    # item: each element from previous step's list
+    # config_value: flow kwargs passed via .map()
+    return item * config_value
+
+@flow
+def map_flow(config_value=5):
+    return get_items().map(process_with_config, config_value=config_value)
+```
+
+**Parameter resolution for `.agg()`:**
+```python
+@step
+def aggregate_with_seed(results, seed=0):
+    # results: collected list from map block
+    # seed: flow kwargs passed via .agg()
+    return sum(results) + seed
+
+@flow
+def agg_flow(seed=100):
+    return get_items().map(process_item).agg(aggregate_with_seed, seed=seed)
+```
+
 **Comparison:**
 
-| Method | Input | Output | Use Case |
-|--------|-------|--------|------------|
-| `.map(step)` | list | list (per-item) | Parallel processing |
-| `.agg(step)` | list | single value | Aggregation |
-| `.next(step)` | previous output | any | Sequential chain |
-| `.next(step, kwarg=val)` | prev output + kwargs | any | Sequential with flow params |
-
-**Comparison:**
-
-| Method | Input | Output | Use Case |
-|--------|-------|--------|------------|
-| `.map(step)` | list | list (per-item) | Parallel processing |
-| `.agg(step)` | list | single value | Aggregation |
-| `.next(step)` | any | any | Sequential/linear chain |
+| Method | Input | Flow kwargs | Output | Use Case |
+|--------|-------|-------------|--------|------------|
+| `.map(step)` | list | no | list (per-item) | Parallel processing |
+| `.map(step, kwarg=val)` | list + kwargs | yes | list (per-item) | Parallel with config |
+| `.agg(step)` | list | no | single value | Aggregation |
+| `.agg(step, kwarg=val)` | list + kwargs | yes | single value | Aggregation with config |
+| `.next(step)` | previous output | no | any | Sequential chain |
+| `.next(step, kwarg=val)` | prev output + kwargs | yes | any | Sequential with config |
 
 **Error conditions:**
 - Flow ending with an open Map block (without `.agg()`) must raise an exception

@@ -708,3 +708,53 @@ _Purpose_: Allow passing flow-level parameters directly to steps via `.next(step
 - Test flow kwargs without previous step
 - Test chaining with flow kwargs
 - Test error handling for invalid kwargs
+
+---
+
+## Milestone 21 — Flow-level Parameters in `.map()` and `.agg()`
+
+_Purpose_: Extend flow-level parameters support to `.map()` and `.agg()` methods.
+
+### T21.1 — Update MapBlock decorators
+
+- Modify `MapBlock.__init__()` to initialize `_flow_kwargs`
+- Modify `MapBlock.map()` to accept `**kwargs` and store on inner step
+- Modify `MapBlock.agg()` to accept `**kwargs` and store on aggregation step
+
+### T21.2 — Update runner.py for map blocks
+
+- Modify `_run_map()` to handle flow kwargs for mapped steps
+- Modify `_run_agg()` to handle flow kwargs for aggregation step
+
+### T21.3 — Unit tests
+
+- Test flow kwargs with `.map()`
+- Test flow kwargs with `.agg()`
+- Test combined usage with `.map().agg()`
+- Test error handling
+
+---
+
+## Milestone 22 — Validate Nested .map() Blocks
+
+_Purpose_: Detect and report nested `.map()` blocks which are not supported.
+
+### T22.1 — Update graph.py validation
+
+- In `FlowGraph._validate()`, detect when a MapBlock is opened inside another MapBlock
+- Add check: if `entry.source._map_block` is not None, it means we're inside a map block and opening another one
+- Raise ValueError with clear message: "Nested .map() calls are not supported"
+
+### T22.2 — Update design.md
+
+- Clarify the correct usage: `.map().next()` continues in the same map block, `.map().agg().map()` opens new map blocks
+
+### T22.3 — Fix nyc_taxi example
+
+- Change `.map().map()` to `.map().next()` to chain steps within the same map block
+
+### T22.4 — Unit tests
+
+- Test that nested `.map()` raises ValueError
+- Test that `.map().next().agg()` works correctly
+- Test error handling for invalid kwargs

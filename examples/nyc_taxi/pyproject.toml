@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["lokki>=0.3.1", "pandas>=3.0.1", "pyarrow>=23.0.1"]
+dependencies = ["lokki>=0.3.2", "pandas>=3.0.1", "pyarrow>=23.0.1"]
 
 [[tool.uv.index]]
 url = "http://localhost:8080/simple"
-default = true
+priority = "supplemental"

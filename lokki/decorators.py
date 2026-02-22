@@ -29,9 +29,10 @@ class StepNode:
         self._default_kwargs = kwargs
         return self
 
-    def map(self, step_node: StepNode) -> MapBlock:
-        """Start a Map block that runs the next step in parallel for each item."""
+    def map(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
+        """Start a Map block with flow-level kwargs."""
         block = MapBlock(source=self, inner_head=step_node)
+        step_node._flow_kwargs = kwargs
         self._map_block = block
         return block
 
@@ -57,6 +58,7 @@ class MapBlock:
         self.inner_head = inner_head
         self.inner_tail = inner_head
         self._next: StepNode | None = None
+        self._flow_kwargs: dict[str, Any] = {}
 
     @property
     def inner_steps(self) -> list[StepNode]:
@@ -70,9 +72,10 @@ class MapBlock:
             current = current._next
         return steps
 
-    def map(self, step_node: StepNode) -> MapBlock:
-        """Add another step to the inner chain of the Map block."""
+    def map(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
+        """Add another step to the inner chain with flow-level kwargs."""
         step_node._prev = self.inner_tail
+        step_node._flow_kwargs = kwargs
         self.inner_tail._next = step_node
         self.inner_tail = step_node
         return self
@@ -85,10 +88,11 @@ class MapBlock:
         self.inner_tail = step_node
         return self
 
-    def agg(self, step_node: StepNode) -> StepNode:
-        """Close the Map block and attach an aggregation step."""
+    def agg(self, step_node: StepNode, **kwargs: Any) -> StepNode:
+        """Close the Map block and attach an aggregation step with flow-level kwargs."""
         step_node._closes_map_block = True
         step_node._map_block = self
+        step_node._flow_kwargs = kwargs
         self._next = step_node
         return step_node
 

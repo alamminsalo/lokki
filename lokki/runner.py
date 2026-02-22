@@ -184,9 +184,15 @@ class LocalRunner:
         map_logger.start()
 
         def run_step_for_item(
-            fn: Callable[[Any], Any], item_data: Any, item_idx: int
+            fn: Callable[[Any], Any],
+            item_data: Any,
+            item_idx: int,
+            flow_kwargs: dict[str, Any],
         ) -> Any:
-            result = fn(item_data)
+            if flow_kwargs:
+                result = fn(item_data, **flow_kwargs)
+            else:
+                result = fn(item_data)
             return item_idx, result
 
         item_data_by_idx = {item["index"]: item["item"] for item in manifest}
@@ -195,11 +201,14 @@ class LocalRunner:
         for _step_idx, step_node in enumerate(inner_steps):
             step_name = step_node.name
             fn = step_node.fn
+            flow_kwargs = getattr(step_node, "_flow_kwargs", {})
 
             with ThreadPoolExecutor() as executor:
                 futures = {}
                 for item_idx, item_data in current_results.items():
-                    future = executor.submit(run_step_for_item, fn, item_data, item_idx)
+                    future = executor.submit(
+                        run_step_for_item, fn, item_data, item_idx, flow_kwargs
+                    )
                     futures[future] = item_idx
 
                 new_results: dict[int, Any] = {}
@@ -247,7 +256,12 @@ class LocalRunner:
             result_urls.append(str(result_path))
 
         inputs = [store.read(url) for url in result_urls]
-        result = entry.agg_step.fn(inputs)
+
+        flow_kwargs = getattr(entry.agg_step, "_flow_kwargs", {})
+        if flow_kwargs:
+            result = entry.agg_step.fn(inputs, **flow_kwargs)
+        else:
+            result = entry.agg_step.fn(inputs)
 
         step_name = entry.agg_step.name
         store.write(flow_name, run_id, step_name, result)
