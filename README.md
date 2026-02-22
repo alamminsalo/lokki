@@ -115,25 +115,37 @@ Environment variables override TOML config (highest to lowest):
 
 ## Flow Syntax
 
-### Basic Steps
+### Basic Example
 
 ```python
+from lokki import step, flow, main
+
 @step
 def get_data():
     return [1, 2, 3]
 
 @step
-def process(item):
-    return item * 2
+def process_item(item, mult):
+    return item * mult
+
+@step
+def process_item_2(item):
+    return item * item
 
 @step  
-def summarize(items):
+def sum_items(items):
     return sum(items)
 
 @flow
-def my_flow():
-    return get_data().map(process).agg(summarize)
+def my_flow(mult=2):
+    return get_data().map(process_item, mult=mult).next(process_item_2).agg(sum_items)
+
+if __name__ == "__main__":
+    main(my_flow)
+
 ```
+
+The example gets item list, maps them through two processing functions and aggregates the result.
 
 ### Chaining Methods
 
@@ -141,27 +153,7 @@ def my_flow():
 - `.agg(step)` - Aggregate results from map into a single value (fan-in)
 - `.next(step)` - Run step sequentially after the previous step
 
-Chain multiple maps: `step1().map(step2).map(step3).agg(agg_step)`
-
-### Sequential Steps with `.next()`
-
-```python
-@step
-def fetch_data():
-    return [1, 2, 3]
-
-@step
-def process(item):
-    return item * 2
-
-@step
-def save(result):
-    return {"result": result}
-
-@flow
-def sequential_flow():
-    return fetch_data().map(process).next(save)
-```
+Chain multiple maps: `step1().map(step2).next(step3).agg(agg_step)`
 
 ### Flow Parameters
 
@@ -173,12 +165,15 @@ def fetch_data(limit: int, offset: int = 0):
     return list(range(limit))[offset:]
 
 @step
-def process(item):
-    return item * 2
+def process(item, mult):
+    return item * mult
 
 @flow
-def paginated_flow(limit: int = 100, offset: int = 0):
-    return fetch_data(limit=limit, offset=offset).map(process)
+def paginated_flow(limit: int = 100, offset: int = 0, mult: int = 2):
+    return fetch_data(limit=limit, offset=offset).map(process, mult=mult)
+
+if __name__ == "__main__":
+    main(paginated_flow)
 ```
 
 Run with parameters:
