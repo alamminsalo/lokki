@@ -18,9 +18,9 @@ def set_endpoint(endpoint: str) -> None:
     _endpoint = endpoint
 
 
-def _get_s3_client():
+def _get_s3_client() -> Any:
     """Get S3 client with optional endpoint URL."""
-    kwargs = {}
+    kwargs: dict[str, str] = {}
     if _endpoint:
         kwargs["endpoint_url"] = _endpoint
     return boto3.client("s3", **kwargs)

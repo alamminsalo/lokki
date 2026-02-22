@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from lokki._store import LocalStore
-from lokki.decorators import RetryConfig
+from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
 
@@ -118,7 +118,7 @@ class LocalRunner:
 
     def _execute_step(
         self,
-        node,
+        node: StepNode,
         store: LocalStore,
         flow_name: str,
         run_id: str,

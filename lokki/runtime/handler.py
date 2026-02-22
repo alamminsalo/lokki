@@ -40,7 +40,7 @@ def make_handler(
             if cfg.flow_name
             else os.environ.get("LOKKI_FLOW_NAME", "unknown")
         )
-        bucket = cfg.aws.artifact_bucket or os.environ.get("LOKKI_S3_BUCKET", "")
+        bucket = cfg.artifact_bucket or os.environ.get("LOKKI_S3_BUCKET", "")
         endpoint = os.environ.get("LOKKI_AWS_ENDPOINT", "")
         run_id = event.get("run_id", "unknown")
         step_name = fn.__name__

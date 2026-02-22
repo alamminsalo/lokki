@@ -139,7 +139,8 @@ def _fetch_log_events(
             kwargs["filterPattern"] = filter_pattern
 
         response = logs_client.filter_log_events(**kwargs)
-        return response.get("events", [])
+        events: list[dict[str, Any]] = response.get("events", [])
+        return events
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ResourceNotFoundException":
@@ -193,12 +194,13 @@ def _tail_log_events(
 
         response = logs_client.filter_log_events(**kwargs)
         events = response.get("events", [])
+        result: list[dict[str, Any]] = events
 
         if last_timestamps:
             last_ts = last_timestamps.get(log_group, 0)
-            events = [e for e in events if e["timestamp"] > last_ts]
+            result = [e for e in result if e["timestamp"] > last_ts]
 
-        return events
+        return result
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ResourceNotFoundException":

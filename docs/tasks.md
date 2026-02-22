@@ -946,3 +946,143 @@ _Purpose_: Update documentation to reflect current implementation and add missin
 - Check that all config field names match actual implementation
 - Verify all CLI commands documented are implemented
 - Ensure examples are accurate
+
+---
+
+## Milestone 26 — Type Safety Improvements
+
+_Purpose_: Fix mypy errors and add type stubs for better type safety.
+
+### T26.1 — Add type stubs dependencies
+
+- Add `boto3-stubs` to dev dependencies in pyproject.toml
+- Add `types-PyYAML` to dev dependencies
+
+### T26.2 — Fix graph.py type error
+
+- Fix `MapBlock | None` assignment issue at line 123
+- Add proper null handling
+
+### T26.3 — Fix state_machine.py duplicate definition
+
+- Remove duplicate `to_pascal` definition/import
+
+### T26.4 — Fix return type annotations
+
+- Add proper return types to functions returning `Any`
+- Add type annotations to untyped function arguments
+
+### T26.5 — Run mypy to verify
+
+- Run `uv run mypy lokki/` to ensure all errors are fixed
+- Fix any remaining errors
+
+---
+
+## Milestone 27 — Test Coverage Improvements
+
+_Purpose_: Increase test coverage for under-tested modules.
+
+### T27.1 — Add tests for _utils.py
+
+- Add tests for `to_pascal()`, `to_kebab()`, `get_step_names()`
+- Target: 90%+ coverage
+
+### T27.2 — Add tests for logs.py
+
+- Add tests for `_tail_logs()` function
+- Add tests for error handling paths
+- Target: 80%+ coverage
+
+### T27.3 — Add tests for cli.py
+
+- Add tests for `_handle_show()`, `_handle_logs()`, `_handle_destroy()`
+- Add tests for error handling paths
+- Target: 80%+ coverage
+
+### T27.4 — Add tests for deploy.py
+
+- Add tests for `_validate_credentials()` Docker checks
+- Add tests for `_push_images()` path handling
+- Target: 80%+ coverage
+
+### T27.5 — Run coverage report
+
+- Run `uv run pytest --cov=lokki` to verify coverage improvements
+- Target overall: 85%+ coverage
+
+---
+
+## Milestone 28 — Security Improvements
+
+_Purpose_: Add security scanning and improve input validation.
+
+### T28.1 — Add pip-audit to dev dependencies
+
+- Add `pip-audit` to dev dependencies in pyproject.toml
+
+### T28.2 — Add pre-commit hook for security
+
+- Add `.pre-commit-config.yaml` with:
+  - `detect-secrets` or `gitleaks` for secrets scanning
+  - `ruff` for linting
+  - `mypy` for type checking
+
+### T28.3 — Add input validation improvements
+
+- Add bounds checking for numeric parameters
+- Add S3 URL validation improvements
+
+### T28.4 — Document security policy
+
+- Create `SECURITY.md` with vulnerability reporting instructions
+
+---
+
+## Milestone 29 — CI/CD Setup
+
+_Purpose_: Add continuous integration workflow.
+
+### T29.1 — Create GitHub Actions workflow
+
+- Create `.github/workflows/ci.yml` with:
+  - Python 3.13 build
+  - pytest test runner
+  - mypy type checking
+  - ruff linting
+  - Coverage reporting
+
+### T29.2 — Add coverage reporting
+
+- Add `coverage-badge` to generate coverage badge
+- Configure codecov integration (optional)
+
+### T29.3 — Add pip-audit to CI
+
+- Add pip-audit check to catch vulnerable dependencies
+
+---
+
+## Milestone 30 — Integration Tests
+
+_Purpose_: Add end-to-end integration tests with LocalStack.
+
+### T30.1 — Create integration test fixtures
+
+- Add pytest fixtures for LocalStack S3
+- Add pytest fixtures for LocalStack Lambda
+
+### T30.2 — Add full flow integration tests
+
+- Test complete flow: build → deploy → execute → verify
+- Test ZIP deployment path
+- Test error handling during deployment
+
+### T30.3 — Add Lambda handler tests
+
+- Test Lambda handler with mock events
+- Test error handling in Lambda runtime
+
+### T30.4 — Document integration testing
+
+- Add integration test instructions to dev/README.md

@@ -120,7 +120,9 @@ class FlowGraph:
                         "Use .next() to chain steps inside a map block, "
                         "or close with .agg() before opening a new .map()"
                     )
-                open_map_blocks[id(entry.source._map_block)] = entry.source._map_block
+                map_block = entry.source._map_block
+                if map_block is not None:
+                    open_map_blocks[id(map_block)] = map_block
                 in_map_block = True
 
             if isinstance(entry, MapCloseEntry):

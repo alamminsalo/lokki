@@ -4,21 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from lokki._utils import to_pascal
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 if TYPE_CHECKING:
     from lokki.decorators import RetryConfig
 
-# Backward compatibility
-to_pascal = to_pascal
-_to_pascal = to_pascal
 
-
-def _exception_to_error_equals(exc_type: type) -> str:
+def _exception_to_error_equals(exc_type: type[Exception]) -> str:
     """Map Python exception types to AWS Step Functions error names."""
-    exc_map = {
+    exc_map: dict[type[Exception], str] = {
         Exception: "Lambda.ServiceException",
         ConnectionError: "Lambda.SdkClientException",
         TimeoutError: "Lambda.AWSException",
@@ -45,7 +40,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
-            state_name = to_pascal(entry.node.name)
+            state_name = _to_pascal(entry.node.name)
             state = _task_state(entry.node, config, graph.name)
             states[state_name] = state
             state_order.append(state_name)
@@ -56,13 +51,13 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             prev_state = state_name
 
         elif isinstance(entry, MapOpenEntry):
-            source_name = to_pascal(entry.source.name)
+            source_name = _to_pascal(entry.source.name)
             inner_states = {}
 
-            step_names = [to_pascal(step_node.name) for step_node in entry.inner_steps]
+            step_names = [_to_pascal(step_node.name) for step_node in entry.inner_steps]
 
             for i, step_node in enumerate(entry.inner_steps):
-                step_name = to_pascal(step_node.name)
+                step_name = _to_pascal(step_node.name)
                 inner_states[step_name] = {
                     "Type": "Task",
                     "Resource": _lambda_arn(config, step_node.name, graph.name),
@@ -114,7 +109,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             prev_state = map_state_name
 
         elif isinstance(entry, MapCloseEntry):
-            state_name = to_pascal(entry.agg_step.name)
+            state_name = _to_pascal(entry.agg_step.name)
             state = _task_state(entry.agg_step, config, graph.name)
             states[state_name] = state
             state_order.append(state_name)
@@ -177,6 +172,10 @@ def _lambda_arn(config: LokkiConfig, step_name: str, flow_name: str) -> str:
     )
 
 
-def to_pascal(name: str) -> str:
+def __to_pascal(name: str) -> str:
     """Convert snake_case to PascalCase."""
     return "".join(word.capitalize() for word in name.split("_"))
+
+
+# Backward compatibility - keep _to_pascal available as well
+_to_pascal = __to_pascal
