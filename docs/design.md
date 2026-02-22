@@ -360,20 +360,6 @@ MapCloseEntry(agg_step=join_birds)
 
 ## 5. CLI Entry Point
 
-Each flow script calls `flow_fn()` (by the decorated function name) at the bottom (injected by the `@flow` decorator or added explicitly by the user):
-
-```python
-# at bottom of flow_script.py — auto-injected or written manually
-@flow
-def flow_fn():
-#...
-
-if __name__ == "__main__":
-    flow_fn()
-```
-
-## 5. CLI Entry Point
-
 The CLI is implemented using Python's `argparse` module for consistent command-line parsing and help text. Each flow script uses the `main` function from lokki as the entry point:
 
 ```python

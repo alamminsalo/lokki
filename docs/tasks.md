@@ -142,7 +142,7 @@ _Depends on: M3_
 - `run` → resolves `FlowGraph`, calls `LocalRunner.run(graph)`
 - Anything else → prints usage and exits with code 1
 
-**T4.2** Ensure the `@flow` decorator arranges for `main` to be callable from `if __name__ == "__main__"` — either by injecting the guard automatically or documenting the manual pattern clearly.
+**T4.2** The `@flow` decorator is combined with an explicit `main(flow_fn)` call in the `if __name__ == "__main__"` block. Users add `main(my_flow)` at the bottom of their script.
 
 ---
 
