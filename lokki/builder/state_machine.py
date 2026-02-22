@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+
+if TYPE_CHECKING:
+    from lokki.decorators import RetryConfig
+
+
+def _exception_to_error_equals(exc_type: type) -> str:
+    """Map Python exception types to AWS Step Functions error names."""
+    exc_map = {
+        Exception: "Lambda.ServiceException",
+        ConnectionError: "Lambda.SdkClientException",
+        TimeoutError: "Lambda.AWSException",
+        OSError: "Lambda.SdkClientException",
+        IOError: "Lambda.SdkClientException",
+    }
+    return exc_map.get(exc_type, f"java.lang.RuntimeException.{exc_type.__name__}")
 
 
 def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]:
@@ -119,12 +134,34 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
 def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str, Any]:
     """Generate a Task state for a step."""
-    return {
+    state: dict[str, Any] = {
         "Type": "Task",
         "Resource": _lambda_arn(config, step_node.name, flow_name),
         "ResultPath": "$.result",
         "Next": None,
     }
+
+    retry_config = getattr(step_node, "retry", None)
+    if retry_config and retry_config.retries > 0:
+        state["Retry"] = _build_retry_field(retry_config)
+
+    return state
+
+
+def _build_retry_field(retry_config: RetryConfig) -> list[dict[str, Any]]:
+    """Build Step Functions Retry field from RetryConfig."""
+    error_equals = [
+        _exception_to_error_equals(exc_type) for exc_type in retry_config.exceptions
+    ]
+
+    return [
+        {
+            "ErrorEquals": error_equals,
+            "IntervalSeconds": int(retry_config.delay),
+            "MaxAttempts": retry_config.retries + 1,
+            "BackoffRate": retry_config.backoff,
+        }
+    ]
 
 
 def _lambda_arn(config: LokkiConfig, step_name: str, flow_name: str) -> str:

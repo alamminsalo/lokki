@@ -7,12 +7,14 @@ import json
 import pickle
 import shutil
 import tempfile
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from lokki.decorators import RetryConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
 
@@ -113,56 +115,93 @@ class LocalRunner:
     ) -> None:
         node = entry.node
         step_name = node.name
+        retry_config = node.retry
 
         step_logger = StepLogger(step_name, self.logger)
         step_logger.start()
 
         start_time = datetime.now()
-        try:
-            result = None
-            if node._prev is not None:
-                prev_path = store._get_path(
-                    flow_name, run_id, node._prev.name, "output.pkl.gz"
-                )
-                if prev_path.exists():
-                    result = store.read(str(prev_path))
+        last_exception: Exception | None = None
 
-            flow_kwargs = getattr(node, "_flow_kwargs", {})
+        for attempt in range(retry_config.retries + 1):
+            try:
+                result = self._execute_step(node, store, flow_name, run_id, params)
 
-            if result is not None:
-                if node._default_args or node._default_kwargs or flow_kwargs:
-                    result = node.fn(
-                        result,
-                        *node._default_args,
-                        **node._default_kwargs,
-                        **flow_kwargs,
+                duration = (datetime.now() - start_time).total_seconds()
+                store.write(flow_name, run_id, step_name, result)
+
+                if isinstance(result, list):
+                    manifest_items = [
+                        {"item": item, "index": i} for i, item in enumerate(result)
+                    ]
+                    store.write_manifest(flow_name, run_id, step_name, manifest_items)
+
+                step_logger.complete(duration)
+                return
+            except Exception as e:
+                if not self._is_retriable(e, retry_config):
+                    raise
+                last_exception = e
+                if attempt < retry_config.retries:
+                    delay = min(
+                        retry_config.delay * (retry_config.backoff**attempt),
+                        retry_config.max_delay,
                     )
+                    self.logger.info(
+                        f"Step '{step_name}' failed (attempt {attempt + 1}/"
+                        f"{retry_config.retries + 1}), retrying in {delay:.1f}s: {e}"
+                    )
+                    time.sleep(delay)
                 else:
-                    result = node.fn(result)
-            elif node._default_args or node._default_kwargs:
-                result = node.fn(*node._default_args, **node._default_kwargs)
-            elif flow_kwargs:
-                result = node.fn(**flow_kwargs)
-            elif params:
-                result = node.fn(**params)
+                    duration = (datetime.now() - start_time).total_seconds()
+                    step_logger.fail(duration, e)
+
+        if last_exception:
+            raise last_exception
+
+    def _is_retriable(self, error: Exception, retry_config: RetryConfig) -> bool:
+        """Check if the error is an instance of any retriable exception type."""
+        return any(isinstance(error, exc_type) for exc_type in retry_config.exceptions)
+
+    def _execute_step(
+        self,
+        node,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        params: dict[str, Any],
+    ) -> Any:
+        """Execute a single step function without retry logic."""
+        result = None
+        if node._prev is not None:
+            prev_path = store._get_path(
+                flow_name, run_id, node._prev.name, "output.pkl.gz"
+            )
+            if prev_path.exists():
+                result = store.read(str(prev_path))
+
+        flow_kwargs = getattr(node, "_flow_kwargs", {})
+
+        if result is not None:
+            if node._default_args or node._default_kwargs or flow_kwargs:
+                result = node.fn(
+                    result,
+                    *node._default_args,
+                    **node._default_kwargs,
+                    **flow_kwargs,
+                )
             else:
-                result = node.fn()
+                result = node.fn(result)
+        elif node._default_args or node._default_kwargs:
+            result = node.fn(*node._default_args, **node._default_kwargs)
+        elif flow_kwargs:
+            result = node.fn(**flow_kwargs)
+        elif params:
+            result = node.fn(**params)
+        else:
+            result = node.fn()
 
-            duration = (datetime.now() - start_time).total_seconds()
-
-            store.write(flow_name, run_id, step_name, result)
-
-            if isinstance(result, list):
-                manifest_items = [
-                    {"item": item, "index": i} for i, item in enumerate(result)
-                ]
-                store.write_manifest(flow_name, run_id, step_name, manifest_items)
-
-            step_logger.complete(duration)
-        except Exception as e:
-            duration = (datetime.now() - start_time).total_seconds()
-            step_logger.fail(duration, e)
-            raise
+        return result
 
     def _run_map(
         self, store: LocalStore, flow_name: str, run_id: str, entry: MapOpenEntry
@@ -188,12 +227,30 @@ class LocalRunner:
             item_data: Any,
             item_idx: int,
             flow_kwargs: dict[str, Any],
+            retry_config: RetryConfig,
         ) -> Any:
-            if flow_kwargs:
-                result = fn(item_data, **flow_kwargs)
-            else:
-                result = fn(item_data)
-            return item_idx, result
+            last_exception: Exception | None = None
+            for attempt in range(retry_config.retries + 1):
+                try:
+                    if flow_kwargs:
+                        result = fn(item_data, **flow_kwargs)
+                    else:
+                        result = fn(item_data)
+                    return result
+                except Exception as e:
+                    if not any(
+                        isinstance(e, exc_type) for exc_type in retry_config.exceptions
+                    ):
+                        raise
+                    last_exception = e
+                    if attempt < retry_config.retries:
+                        delay = min(
+                            retry_config.delay * (retry_config.backoff**attempt),
+                            retry_config.max_delay,
+                        )
+                        time.sleep(delay)
+            if last_exception:
+                raise last_exception
 
         item_data_by_idx = {item["index"]: item["item"] for item in manifest}
         current_results: dict[int, Any] = dict(item_data_by_idx)
@@ -202,18 +259,25 @@ class LocalRunner:
             step_name = step_node.name
             fn = step_node.fn
             flow_kwargs = getattr(step_node, "_flow_kwargs", {})
+            retry_config = step_node.retry
 
             with ThreadPoolExecutor() as executor:
                 futures = {}
                 for item_idx, item_data in current_results.items():
                     future = executor.submit(
-                        run_step_for_item, fn, item_data, item_idx, flow_kwargs
+                        run_step_for_item,
+                        fn,
+                        item_data,
+                        item_idx,
+                        flow_kwargs,
+                        retry_config,
                     )
                     futures[future] = item_idx
 
                 new_results: dict[int, Any] = {}
                 for future in as_completed(futures):
-                    item_idx, result = future.result()
+                    result = future.result()
+                    item_idx = futures[future]
                     new_results[item_idx] = result
 
                     item_result_path = store._get_path(

@@ -5,20 +5,28 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from lokki import s3
 from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
 
+if TYPE_CHECKING:
+    from lokki.decorators import RetryConfig
+
 
 def make_handler(
     fn: Callable[..., Any],
+    retry_config: RetryConfig | None = None,
 ) -> Callable[[dict[str, Any], Any], dict[str, Any]]:
     """Create a Lambda handler for a step function.
 
+    Note: Retry logic for deployed flows is handled by AWS Step Functions,
+    not by this handler. The retry_config is accepted for consistency.
+
     Args:
         fn: The step function to wrap
+        retry_config: Retry config (unused in Lambda - Step Functions handles retries)
 
     Returns:
         A lambda_handler function compatible with AWS Lambda

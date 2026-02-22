@@ -3,18 +3,45 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from lokki.graph import FlowGraph
 
 
+@dataclass
+class RetryConfig:
+    """Configuration for step retry behavior."""
+
+    retries: int = 0
+    delay: float = 1.0
+    backoff: float = 1.0
+    max_delay: float = 60.0
+    exceptions: tuple[type, ...] = (Exception,)
+
+    def __post_init__(self) -> None:
+        if self.retries < 0:
+            raise ValueError("retries must be non-negative")
+        if self.delay <= 0:
+            raise ValueError("delay must be positive")
+        if self.backoff <= 0:
+            raise ValueError("backoff must be positive")
+        if self.max_delay <= 0:
+            raise ValueError("max_delay must be positive")
+
+
 class StepNode:
     """Represents a single step in the pipeline."""
 
-    def __init__(self, fn: Callable[..., Any]) -> None:
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        retry: RetryConfig | None = None,
+    ) -> None:
         self.fn = fn
         self.name = fn.__name__
+        self.retry = retry or RetryConfig()
         self._default_args: tuple[Any, ...] = ()
         self._default_kwargs: dict[str, Any] = {}
         self._flow_kwargs: dict[str, Any] = {}
@@ -97,9 +124,44 @@ class MapBlock:
         return step_node
 
 
-def step(fn: Callable[..., Any]) -> StepNode:
-    """Decorate a function as a pipeline step."""
-    return StepNode(fn)
+def step(
+    fn: Callable[..., Any] | None = None,
+    *,
+    retry: RetryConfig | dict[str, Any] | None = None,
+) -> StepNode | Callable[[Callable[..., Any]], StepNode]:
+    """Decorate a function as a pipeline step.
+
+    Args:
+        fn: The function to decorate as a step.
+        retry: Optional retry configuration. Can be a RetryConfig instance or a dict
+               with keys: retries, delay, backoff, max_delay, exceptions.
+
+    Example:
+        @step
+        def my_step(data):
+            return process(data)
+
+        @step(retry={"retries": 3, "delay": 2})
+        def unreliable_step(data):
+            return risky_call(data)
+    """
+
+    def decorator(fn: Callable[..., Any]) -> StepNode:
+        if retry is None:
+            config = RetryConfig()
+        elif isinstance(retry, RetryConfig):
+            config = retry
+        elif isinstance(retry, dict):
+            config = RetryConfig(**retry)
+        else:
+            raise TypeError(
+                f"retry must be RetryConfig, dict, or None, got {type(retry).__name__}"
+            )
+        return StepNode(fn, retry=config)
+
+    if fn is None:
+        return decorator
+    return decorator(fn)
 
 
 def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:

@@ -57,9 +57,12 @@ class TestTaskState:
 
     def test_task_state_structure(self) -> None:
         """Test task state has correct structure."""
+        from lokki.decorators import RetryConfig
+
         config = MagicMock(spec=LokkiConfig)
         mock_step = MagicMock()
         mock_step.name = "my_step"
+        mock_step.retry = RetryConfig()
 
         state = _task_state(mock_step, config, "test-flow")
 
@@ -67,6 +70,24 @@ class TestTaskState:
         assert "Resource" in state
         assert state["ResultPath"] == "$.result"
         assert state["Next"] is None
+        assert "Retry" not in state
+
+    def test_task_state_with_retry(self) -> None:
+        """Test task state includes retry when configured."""
+        from lokki.decorators import RetryConfig
+
+        config = MagicMock(spec=LokkiConfig)
+        mock_step = MagicMock()
+        mock_step.name = "my_step"
+        mock_step.retry = RetryConfig(retries=3, delay=2, backoff=2.0)
+
+        state = _task_state(mock_step, config, "test-flow")
+
+        assert state["Type"] == "Task"
+        assert "Retry" in state
+        assert state["Retry"][0]["MaxAttempts"] == 4
+        assert state["Retry"][0]["IntervalSeconds"] == 2
+        assert state["Retry"][0]["BackoffRate"] == 2.0
 
 
 class TestBuildStateMachineSimple:

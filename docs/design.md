@@ -84,10 +84,19 @@ The `lokki/runtime/` subpackage is the only code that runs inside deployed Lambd
 ```python
 # decorators.py (simplified)
 
+@dataclass
+class RetryConfig:
+    retries: int = 0
+    delay: float = 1.0
+    backoff: float = 1.0
+    max_delay: float = 60.0
+    exceptions: tuple[type, ...] = (Exception,)
+
 class StepNode:
-    def __init__(self, fn):
+    def __init__(self, fn, retry: RetryConfig | None = None):
         self.fn = fn
         self.name = fn.__name__
+        self.retry = retry or RetryConfig()
         self._next: StepNode | None = None
         self._map_block: MapBlock | None = None
 
@@ -128,10 +137,30 @@ class MapBlock:
         return step_node
 
 
-def step(fn):
-    node = StepNode(fn)
+def step(fn, retry: RetryConfig | None = None):
+    node = StepNode(fn, retry=retry)
     return node
 ```
+
+### Retry Configuration
+
+Each step can optionally specify a retry policy via the `retry` parameter:
+
+```python
+@step(retry={"retries": 3, "delay": 2, "backoff": 2})
+def fetch_data(url: str) -> dict:
+    return requests.get(url).json()
+```
+
+**RetryConfig fields:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `retries` | `int` | 0 | Maximum retry attempts |
+| `delay` | `float` | 1.0 | Initial delay in seconds |
+| `backoff` | `float` | 1.0 | Exponential backoff multiplier |
+| `max_delay` | `float` | 60.0 | Maximum delay cap |
+| `exceptions` | `tuple[type]` | `(Exception,)` | Exception types to retry |
 
 ### `@flow`
 
@@ -629,6 +658,35 @@ class LocalRunner:
 - Map fan-out is executed using `concurrent.futures.ThreadPoolExecutor` (or `ProcessPoolExecutor` for CPU-bound steps — defaulting to threads for simplicity in v1).
 - Intermediate outputs are stored as `<tmpdir>/<step_name>.pkl.gz`.
 
+### Retry Handling
+
+When a step has retry configuration, the local runner implements retry logic:
+
+```python
+def _run_task_with_retry(self, node: StepNode, input_data: Any, store: LocalStore) -> Any:
+    """Execute a step with retry logic."""
+    config = node.retry
+    last_exception: Exception | None = None
+    
+    for attempt in range(config.retries + 1):
+        try:
+            result = self._execute_step(node.fn, input_data)
+            return result
+        except config.exceptions as e:
+            last_exception = e
+            if attempt < config.retries:
+                delay = min(config.delay * (config.backoff ** attempt), config.max_delay)
+                time.sleep(delay)
+    
+    raise last_exception
+```
+
+- The step function is executed once initially, plus `retries` additional attempts on failure
+- Between retries, exponential backoff is applied: `delay × backoff^attempt`
+- Delay is capped at `max_delay` seconds
+- Only configured exception types trigger retries (default: all exceptions)
+- If all retries fail, the last exception is raised
+
 ---
 
 ## 7. Build Pipeline
@@ -755,6 +813,46 @@ Each Task state's output is a small JSON object containing only the S3 URL of th
 ### State naming
 
 States are named after the Python function: `GetBirds`, `FlapBird`, `JoinBirds` (PascalCase). The state machine is constructed directly as a Python dict in Amazon States Language format.
+
+### Retry Configuration
+
+When a step has retry configuration, the Task state includes a `Retry` field:
+
+```json
+{
+  "Type": "Task",
+  "Resource": "arn:aws:lambda:us-east-1:123456789:function:getBirds",
+  "Retry": [
+    {
+      "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSException", "Lambda.SdkClientException"],
+      "IntervalSeconds": 2,
+      "MaxAttempts": 3,
+      "BackoffRate": 2.0
+    }
+  ],
+  "Next": "FlapBird"
+}
+```
+
+**Retry field generation rules:**
+
+| Retry Config | Step Functions Field |
+|--------------|---------------------|
+| `retries` | `MaxAttempts` (retries + 1 for initial attempt) |
+| `delay` | `IntervalSeconds` (rounded to integer) |
+| `backoff` | `BackoffRate` |
+| `exceptions` | `ErrorEquals` — maps Python exception to AWS error types |
+
+**Exception mapping:**
+
+| Python Exception | AWS ErrorEquals |
+|-----------------|-----------------|
+| `Exception` (default) | All standard Lambda errors |
+| `ConnectionError` | `Lambda.SdkClientException` |
+| `TimeoutError` | `Lambda.AWSException` |
+| Custom | Custom error name |
+
+> **Note**: AWS Step Functions retry behavior differs from local execution. The initial invocation counts as attempt 1, and `MaxAttempts` includes the initial attempt. For example, `retries: 3` means initial call + 3 retries = 4 total attempts, so `MaxAttempts` is set to 4.
 
 ---
 
@@ -960,7 +1058,7 @@ The build process writes one of these per step, importing the correct function f
 `lokki/runtime/handler.py` contains `make_handler`, which wraps any user step function so it can run inside Lambda. This is the only lokki code that executes in production.
 
 ```python
-def make_handler(fn: Callable) -> Callable:
+def make_handler(fn: Callable, retry_config: RetryConfig | None = None) -> Callable:
     def lambda_handler(event: dict, context) -> dict:
         import inspect
         from lokki.s3 import read, write
@@ -1001,6 +1099,8 @@ manifest_key = f"lokki/{flow_name}/{run_id}/{step_name}/map_manifest.json"
 s3.put_object(Body=json.dumps(manifest), ...)
 return {"map_manifest_key": manifest_key, "run_id": run_id}
 ```
+
+> **Note**: For deployed flows, retry logic is handled by AWS Step Functions using the `Retry` field in the state machine definition. The Lambda handler doesn't implement retry logic — it just executes the step function once. The retry configuration is used during build time to generate the appropriate Step Functions retry policy.
 
 ---
 

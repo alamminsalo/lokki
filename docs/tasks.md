@@ -758,3 +758,68 @@ _Purpose_: Detect and report nested `.map()` blocks which are not supported.
 - Test that nested `.map()` raises ValueError
 - Test that `.map().next().agg()` works correctly
 - Test error handling for invalid kwargs
+
+---
+
+## Milestone 23 — Step Retry Configuration
+
+_Purpose_: Allow steps to specify retry policies for handling transient failures. Retry is implemented in both local runner and AWS Step Functions deployment.
+
+### T23.1 — Add RetryConfig dataclass
+
+- Add `RetryConfig` dataclass in `decorators.py`:
+  - `retries: int = 0` - maximum retry attempts
+  - `delay: float = 1.0` - initial delay in seconds
+  - `backoff: float = 1.0` - exponential backoff multiplier
+  - `max_delay: float = 60.0` - maximum delay cap
+  - `exceptions: tuple[type, ...] = (Exception,)` - exception types to catch
+
+### T23.2 — Update StepNode to accept retry config
+
+- Modify `StepNode.__init__` to accept optional `retry` parameter
+- Store retry config on the step node
+
+### T23.3 — Update step decorator to accept retry parameter
+
+- Modify `step()` function to accept `retry` keyword argument
+- Pass retry config to StepNode constructor
+
+### T23.4 — Update FlowGraph to include retry config
+
+- Ensure retry config is preserved through graph resolution
+- Expose retry config in TaskEntry for builders to use
+
+### T23.5 — Implement retry in LocalRunner
+
+- Add `_run_task_with_retry()` method in `runner.py`
+- Implement exponential backoff logic
+- Handle configurable exception types
+- Log retry attempts at INFO level
+
+### T23.6 — Update Lambda handler to accept retry config
+
+- Modify `make_handler()` to accept retry config parameter
+- Pass retry config when generating handler (for potential future use)
+
+### T23.7 — Update state machine generation for retry
+
+- Modify `state_machine.py` to generate `Retry` field in Task states
+- Map retry config to Step Functions retry field:
+  - `retries` → `MaxAttempts` (retries + 1)
+  - `delay` → `IntervalSeconds`
+  - `backoff` → `BackoffRate`
+- Map exception types to AWS error names
+
+### T23.8 — Unit tests for retry config
+
+- Create `tests/test_retry.py`
+- Test RetryConfig dataclass defaults and custom values
+- Test decorator accepts retry parameter
+- Test retry logic in LocalRunner
+- Test state machine retry field generation
+
+### T23.9 — Integration test for retry
+
+- Create a flow with a failing step that succeeds on retry
+- Verify local execution retries correctly
+- Verify build generates correct retry field

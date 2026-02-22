@@ -496,6 +496,74 @@ When `package_type: zip` is set:
 
 ---
 
+## Step Retry Configuration
+
+Each `@step` can optionally specify a retry policy to handle transient failures. The retry configuration is passed as a dictionary to the `retry` parameter of the `@step` decorator.
+
+### Basic Usage
+
+```python
+from lokki import flow, step
+
+@step(retry={"retries": 3, "delay": 2})
+def fetch_data(url: str) -> dict:
+    # This step will retry up to 3 times with 2 second delay on failure
+    return requests.get(url).json()
+
+@step(retry={"retries": 5, "delay": 1, "backoff": 2})
+def process_item(item: dict) -> dict:
+    # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    return transform(item)
+```
+
+### Retry Policy Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `retries` | `int` | 0 | Maximum number of retry attempts |
+| `delay` | `float` | 1.0 | Initial delay between retries in seconds |
+| `backoff` | `float` | 1.0 | Multiplier for exponential backoff (delay × backoff^attempt) |
+| `max_delay` | `float` | 60.0 | Maximum delay cap in seconds |
+| `exceptions` | `list[type]` | `[Exception]` | Tuple of exception types to catch and retry |
+
+### Retry Behavior
+
+- **Retries**: Number of additional attempts after the initial try
+- **Delay**: Initial wait time before first retry
+- **Exponential Backoff**: Each subsequent retry waits longer (delay × backoff^attempt)
+- **Max Delay**: Capped to prevent excessive waiting
+- **Exception Filtering**: Only specified exceptions trigger retries (default: all exceptions)
+
+### Examples
+
+**Simple retry with defaults:**
+```python
+@step(retry={"retries": 3})
+def unstable_operation(data):
+    return risky_call(data)
+```
+
+**Custom exceptions and exponential backoff:**
+```python
+@step(retry={
+    "retries": 5,
+    "delay": 2,
+    "backoff": 1.5,
+    "exceptions": [ConnectionError, TimeoutError]
+})
+def reliable_api_call(data):
+    return api.post(data)
+```
+
+**Retry disabled (default):**
+```python
+@step  # No retry, fails immediately on any exception
+def fragile_step(data):
+    return delicate_operation(data)
+```
+
+---
+
 ## Non-Functional Requirements
 
 - **Single deployment target**: AWS Step Functions (no other cloud providers in scope).
@@ -506,7 +574,12 @@ When `package_type: zip` is set:
 
 ---
 
-## Local Testing with LocalStack
+## Out of Scope (v1)
+
+- Non-AWS deployment targets
+- Conditional branching / dynamic routing between steps
+- Streaming or incremental step outputs
+- Web UI or dashboard
 
 ### Purpose
 
@@ -590,6 +663,5 @@ aws --endpoint-url=http://localhost:4566 s3 cp s3://lokki/.../output.pkl.gz -
 
 - Non-AWS deployment targets
 - Conditional branching / dynamic routing between steps
-- Step retries and error handling configuration (beyond Step Functions defaults)
 - Streaming or incremental step outputs
 - Web UI or dashboard

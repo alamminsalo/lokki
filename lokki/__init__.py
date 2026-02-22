@@ -7,10 +7,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
-from lokki.decorators import flow, step
+from lokki.decorators import RetryConfig, flow, step
 from lokki.graph import FlowGraph
 
-__all__ = ["flow", "step", "main"]
+__all__ = ["flow", "step", "main", "RetryConfig"]
 
 
 def _get_flow_params(
