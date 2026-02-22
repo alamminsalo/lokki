@@ -7,19 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import boto3
-
-
-class DeployError(Exception):
-    """Raised when deployment fails."""
-
-    pass
-
-
-class DockerNotAvailableError(DeployError):
-    """Raised when Docker is not available."""
-
-    pass
+from lokki._aws import get_cf_client, get_ecr_client, get_sts_client
+from lokki._errors import DeployError, DockerNotAvailableError
 
 
 class Deployer:
@@ -37,15 +26,9 @@ class Deployer:
         self.endpoint = endpoint
         self.package_type = package_type
 
-        endpoint_kwargs: dict[str, str] = {}
-        if endpoint:
-            endpoint_kwargs["endpoint_url"] = endpoint
-
-        self.cf_client = boto3.client(
-            "cloudformation", region_name=region, **endpoint_kwargs
-        )
-        self.ecr_client = boto3.client("ecr", region_name=region, **endpoint_kwargs)
-        self.sts_client = boto3.client("sts", **endpoint_kwargs)
+        self.cf_client = get_cf_client(endpoint, region)
+        self.ecr_client = get_ecr_client(endpoint, region)
+        self.sts_client = get_sts_client(endpoint)
         self._account_id: str | None = None
 
     @property

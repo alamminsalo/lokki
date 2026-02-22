@@ -1,4 +1,4 @@
-"""Unit tests for CLI parameter handling in lokki.__init__."""
+"""Unit tests for CLI parameter handling in lokki.cli."""
 
 import argparse
 import sys
@@ -7,13 +7,14 @@ from unittest.mock import patch
 import pytest
 
 from lokki import flow, main, step
+from lokki import cli
 
 
 class TestGetFlowParams:
     """Tests for _get_flow_params function."""
 
     def test_no_params(self) -> None:
-        from lokki.__init__ import _get_flow_params
+        from lokki.cli import _get_flow_params
 
         @flow
         def empty_flow():
@@ -23,7 +24,7 @@ class TestGetFlowParams:
         assert params == {}
 
     def test_single_param(self) -> None:
-        from lokki.__init__ import _get_flow_params
+        from lokki.cli import _get_flow_params
 
         @flow
         def single_param_flow(start_date: str):
@@ -34,7 +35,7 @@ class TestGetFlowParams:
         assert params["start_date"].annotation is str
 
     def test_multiple_params(self) -> None:
-        from lokki.__init__ import _get_flow_params
+        from lokki.cli import _get_flow_params
 
         @flow
         def multi_param_flow(start_date: str, limit: int = 100):
@@ -49,59 +50,59 @@ class TestCoerceValue:
     """Tests for _coerce_value function."""
 
     def test_string(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("hello", str) == "hello"
 
     def test_int(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("42", int) == 42
 
     def test_int_invalid(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         with pytest.raises(ValueError, match="Invalid integer value"):
             _coerce_value("abc", int)
 
     def test_float(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("3.14", float) == 3.14
 
     def test_float_invalid(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         with pytest.raises(ValueError, match="Invalid float value"):
             _coerce_value("abc", float)
 
     def test_bool_true(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("true", bool) is True
         assert _coerce_value("1", bool) is True
         assert _coerce_value("yes", bool) is True
 
     def test_bool_false(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("false", bool) is False
         assert _coerce_value("0", bool) is False
         assert _coerce_value("no", bool) is False
 
     def test_bool_invalid(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         with pytest.raises(ValueError, match="Invalid boolean value"):
             _coerce_value("maybe", bool)
 
     def test_list_str(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("a,b,c", list[str]) == ["a", "b", "c"]
 
     def test_list_int(self) -> None:
-        from lokki.__init__ import _coerce_value
+        from lokki.cli import _coerce_value
 
         assert _coerce_value("1,2,3", list[int]) == [1, 2, 3]
 
@@ -110,7 +111,7 @@ class TestParseFlowParams:
     """Tests for _parse_flow_params function."""
 
     def test_no_params(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def empty_flow():
@@ -121,7 +122,7 @@ class TestParseFlowParams:
         assert params == {}
 
     def test_optional_params_use_defaults(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def optional_flow(limit: int = 100):
@@ -132,7 +133,7 @@ class TestParseFlowParams:
         assert params == {}
 
     def test_mandatory_params_required(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def mandatory_flow(start_date: str):
@@ -143,7 +144,7 @@ class TestParseFlowParams:
             _parse_flow_params(mandatory_flow, args)
 
     def test_provided_params_parsed(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def test_flow(start_date: str, limit: int = 100):
@@ -157,7 +158,7 @@ class TestParseFlowParams:
         assert params == {"start_date": "2024-01-15"}
 
     def test_type_coercion(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def typed_flow(count: int, flag: bool):
@@ -171,7 +172,7 @@ class TestParseFlowParams:
         assert params == {"count": 42, "flag": True}
 
     def test_invalid_type_raises(self) -> None:
-        from lokki.__init__ import _parse_flow_params
+        from lokki.cli import _parse_flow_params
 
         @flow
         def typed_flow(count: int):

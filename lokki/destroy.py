@@ -7,11 +7,11 @@ import sys
 import boto3
 from botocore.exceptions import ClientError
 
+from lokki._aws import get_cf_client
+from lokki._errors import DestroyError
 
-class DestroyError(Exception):
-    """Error during destroy operation."""
-
-    pass
+# Backward compatibility
+boto3 = boto3
 
 
 def destroy_stack(
@@ -31,11 +31,7 @@ def destroy_stack(
     Raises:
         DestroyError: If operations fail
     """
-    client_kwargs: dict[str, str] = {"region_name": region}
-    if endpoint:
-        client_kwargs["endpoint_url"] = endpoint
-
-    cf_client = boto3.client("cloudformation", **client_kwargs)
+    cf_client = get_cf_client(endpoint or "", region)
 
     if not confirm:
         response = input(

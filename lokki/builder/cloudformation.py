@@ -6,8 +6,16 @@ from typing import Any
 
 import yaml
 
+from lokki._utils import to_pascal
+from lokki.builder._graph import get_step_names
 from lokki.config import LokkiConfig
-from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+from lokki.graph import FlowGraph
+
+# Backward compatibility
+get_step_names = get_step_names
+_to_pascal = to_pascal
+_get_step_names = get_step_names
+to_pascal = to_pascal
 
 
 def build_template(
@@ -67,7 +75,7 @@ def build_template(
         },
     }
 
-    step_names = _get_step_names(graph)
+    step_names = get_step_names(graph)
     package_type = config.lambda_cfg.package_type
 
     for step_name in step_names:
@@ -81,7 +89,7 @@ def build_template(
         env_vars.update(config.lambda_cfg.env)
 
         if package_type == "zip":
-            resources[_to_pascal(step_name) + "Function"] = {
+            resources[to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
@@ -98,7 +106,7 @@ def build_template(
                 },
             }
         else:
-            resources[_to_pascal(step_name) + "Function"] = {
+            resources[to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
@@ -190,28 +198,3 @@ def build_template(
     }
 
     return yaml.dump(template, default_flow_style=False, sort_keys=False)
-
-
-def _get_step_names(graph: FlowGraph) -> set[str]:
-    """Extract unique step names from graph."""
-    names = set()
-    for entry in graph.entries:
-        if isinstance(entry, TaskEntry):
-            names.add(entry.node.name)
-        elif isinstance(entry, MapOpenEntry):
-            names.add(entry.source.name)
-            for step in entry.inner_steps:
-                names.add(step.name)
-        elif isinstance(entry, MapCloseEntry):
-            names.add(entry.agg_step.name)
-    return names
-
-
-def _to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    return "".join(word.capitalize() for word in name.split("_"))
-
-
-def _get_module_name(graph: FlowGraph) -> str:
-    """Get the module name from the flow graph name."""
-    return graph.name.replace("-", "_")

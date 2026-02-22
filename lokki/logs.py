@@ -10,11 +10,11 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from lokki._aws import get_logs_client
+from lokki._errors import LogsError
 
-class LogsError(Exception):
-    """Error during logs operation."""
-
-    pass
+# Backward compatibility
+boto3 = boto3
 
 
 def fetch_logs(
@@ -48,7 +48,7 @@ def fetch_logs(
     if endpoint:
         client_kwargs["endpoint_url"] = endpoint
 
-    logs_client = boto3.client("logs", **client_kwargs)
+    logs_client = get_logs_client(endpoint or "", region)
 
     try:
         _fetch_and_print_logs(

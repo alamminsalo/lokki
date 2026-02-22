@@ -8,11 +8,11 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from lokki._aws import get_sfn_client
+from lokki._errors import ShowError
 
-class ShowError(Exception):
-    """Error during show operation."""
-
-    pass
+# Backward compatibility
+boto3 = boto3
 
 
 def show_executions(
@@ -47,7 +47,7 @@ def show_executions(
     if endpoint:
         client_kwargs["endpoint_url"] = endpoint
 
-    sf_client = boto3.client("stepfunctions", **client_kwargs)
+    sf_client = get_sfn_client(endpoint or "", region)
 
     try:
         if run_id:

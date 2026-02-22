@@ -823,3 +823,92 @@ _Purpose_: Allow steps to specify retry policies for handling transient failures
 - Create a flow with a failing step that succeeds on retry
 - Verify local execution retries correctly
 - Verify build generates correct retry field
+
+---
+
+## Milestone 24 — Code Refactoring
+
+_Purpose_: Enhance code readability and reduce LOC through extraction, consolidation, and elimination of duplication.
+
+### T24.1 — Create _utils.py with shared utilities
+
+- Create `lokki/_utils.py` with:
+  - `to_pascal(name: str) -> str` - convert snake_case to PascalCase
+  - `to_kebab(name: str) -> str` - convert snake_case to kebab-case
+- Update imports in `builder/cloudformation.py`, `builder/state_machine.py`, `builder/sam_template.py`
+
+### T24.2 — Create _errors.py with centralized errors
+
+- Create `lokki/_errors.py` with:
+  - `DeployError`
+  - `DockerNotAvailableError`
+  - `ShowError`
+  - `LogsError`
+  - `DestroyError`
+- Update imports in `deploy.py`, `show.py`, `logs.py`, `destroy.py`
+
+### T24.3 — Create _aws.py with AWS client factory
+
+- Create `lokki/_aws.py` with helper functions:
+  - `get_s3_client(endpoint: str = "") -> boto3.client`
+  - `get_sfn_client(endpoint: str = "", region: str = "us-east-1") -> boto3.client`
+  - `get_cf_client(endpoint: str = "", region: str = "us-east-1") -> boto3.client`
+  - `get_logs_client(endpoint: str = "", region: str = "us-east-1") -> boto3.client`
+  - `get_ecr_client(endpoint: str = "", region: str = "us-east-1") -> boto3.client`
+- Update imports in `deploy.py`, `show.py`, `logs.py`, `destroy.py`
+
+### T24.4 — Create _store.py with LocalStore
+
+- Extract `LocalStore` class from `runner.py` to `lokki/_store.py`
+- Move `_to_json_safe()` helper to the new module
+- Update imports in `runner.py`
+
+### T24.5 — Extract CLI to cli.py
+
+- Create `lokki/cli.py` with:
+  - `_get_flow_params()` - moved from __init__.py
+  - `_coerce_value()` - moved from __init__.py
+  - `_parse_flow_params()` - moved from __init__.py
+  - `_get_step_names()` - moved from __init__.py
+  - `_handle_run()` - NEW - extracted command handler
+  - `_handle_build()` - NEW - extracted command handler
+  - `_handle_deploy()` - NEW - extracted command handler
+  - `_handle_show()` - NEW - extracted command handler
+  - `_handle_logs()` - NEW - extracted command handler
+  - `_handle_destroy()` - NEW - extracted command handler
+  - `main()` - refactored to use handlers
+- Update `lokki/__init__.py` to import from cli.py
+
+### T24.6 — Create builder/_graph.py
+
+- Create `lokki/builder/_graph.py` with:
+  - `get_step_names(graph: FlowGraph) -> set[str]` - consolidated from cloudformation, state_machine, sam_template
+- Update imports in builder modules
+
+### T24.7 — Update builder modules
+
+- Update `builder/cloudformation.py`:
+  - Use `_utils.to_pascal()` instead of local function
+  - Use `builder._graph.get_step_names()` instead of local function
+  - Remove `_to_pascal()`, `_get_step_names()`, `_get_module_name()`
+- Update `builder/state_machine.py`:
+  - Use `_utils.to_pascal()` instead of local function
+  - Remove `_to_pascal()`
+- Update `builder/sam_template.py`:
+  - Use `_utils.to_pascal()` instead of local function
+  - Use `builder._graph.get_step_names()` instead of local function
+  - Remove `_to_pascal()`, `_get_step_names()`, `_get_module_name()`
+
+### T24.8 — Update runtime handler
+
+- Update `runtime/handler.py` to use `s3` module's existing functions if applicable
+
+### T24.9 — Update pyproject.toml
+
+- Verify package discovery works with new module structure
+- Ensure all modules are properly included in the package
+
+### T24.10 — Run all tests
+
+- Run `uv run pytest` to verify no regressions
+- Fix any test failures related to import changes
