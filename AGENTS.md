@@ -42,28 +42,30 @@ Services required:
 
 When testing with example projects:
 
-1. **Update and publish lokki to pypiserver:**
+1. **Bump version and publish lokki to pypiserver:**
    ```bash
-   # Bump version in pyproject.toml
+   # Edit pyproject.toml - bump version number (e.g., 0.3.0 -> 0.3.1)
+   # Build the package
    uv build
    # Upload to local pypiserver (no auth required)
    uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
    ```
 
-2. **Sync example project:**
+2. **Update example project to use new version:**
    ```bash
-   cd examples/nyc_taxi
+   # Edit examples/weather/pyproject.toml - update lokki version constraint
+   cd examples/weather
    uv sync
    ```
 
 3. **Run deployment commands:**
    ```bash
-   python nyc_taxi.py run   # Run locally
-   python nyc_taxi.py build # Build artifacts
-   python nyc_taxi.py deploy --confirm  # Deploy to LocalStack
-   python nyc_taxi.py show   # Show executions (requires real AWS)
-   python nyc_taxi.py logs   # Fetch logs (requires real AWS)
-   python nyc_taxi.py destroy --confirm  # Destroy stack
+   python weather.py run   # Run locally
+   python weather.py build # Build artifacts
+   python weather.py deploy --confirm  # Deploy to LocalStack
+   python weather.py show   # Show executions (requires real AWS)
+   python weather.py logs   # Fetch logs (requires real AWS)
+   python weather.py destroy --confirm  # Destroy stack
    ```
 
 Note: `show` and `logs` commands require real AWS or LocalStack with full service support.

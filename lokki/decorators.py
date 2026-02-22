@@ -17,6 +17,7 @@ class StepNode:
         self.name = fn.__name__
         self._default_args: tuple[Any, ...] = ()
         self._default_kwargs: dict[str, Any] = {}
+        self._flow_kwargs: dict[str, Any] = {}
         self._next: StepNode | None = None
         self._prev: StepNode | None = None
         self._map_block: MapBlock | None = None
@@ -34,9 +35,10 @@ class StepNode:
         self._map_block = block
         return block
 
-    def next(self, step_node: StepNode) -> StepNode:
-        """Chain a step after the current one sequentially."""
+    def next(self, step_node: StepNode, **kwargs: Any) -> StepNode:
+        """Chain a step with flow-level kwargs."""
         step_node._prev = self
+        step_node._flow_kwargs = kwargs
         self._next = step_node
         return step_node
 
@@ -75,9 +77,10 @@ class MapBlock:
         self.inner_tail = step_node
         return self
 
-    def next(self, step_node: StepNode) -> MapBlock:
-        """Add a step to the inner chain of the Map block (before agg)."""
+    def next(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
+        """Add step to inner chain (before agg) with flow-level kwargs."""
         step_node._prev = self.inner_tail
+        step_node._flow_kwargs = kwargs
         self.inner_tail._next = step_node
         self.inner_tail = step_node
         return self

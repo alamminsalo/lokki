@@ -680,3 +680,31 @@ _Purpose_: Implement AWS integration commands for viewing run status, fetching l
 - Test stack deletion with mocked boto3
 - Test confirmation prompt
 - Test error handling
+
+---
+
+## Milestone 20 — Flow-level Parameters in `.next()`
+
+_Purpose_: Allow passing flow-level parameters directly to steps via `.next(step, param=val)` without threading through intermediate steps.
+
+### T20.1 — Update decorators.py
+
+- Modify `StepNode.next()` to accept `**kwargs`
+- Store flow kwargs on `StepNode._flow_kwargs` attribute
+- Apply same changes to `MapBlock.next()`
+
+### T20.2 — Update runner.py
+
+- Modify `_run_task()` to handle flow kwargs
+- Merge flow kwargs with step execution:
+  - If previous result exists: `fn(result, **flow_kwargs)`
+  - If no previous result: `fn(**flow_kwargs)`
+- Test with various combinations
+
+### T20.3 — Unit tests
+
+- Create `tests/test_flow_kwargs.py`
+- Test basic flow kwargs passing
+- Test flow kwargs without previous step
+- Test chaining with flow kwargs
+- Test error handling for invalid kwargs

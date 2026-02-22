@@ -203,6 +203,66 @@ The `.next()` method is implemented on both `StepNode` and `MapBlock`:
 - On `StepNode`: chains to the next step directly
 - On `MapBlock`: adds the step to the inner chain (before `.agg()`)
 
+### Flow-level parameters with `.next()`
+
+The `.next()` method supports passing flow-level parameters directly to steps, avoiding the need to thread parameters through intermediate steps:
+
+```python
+@step
+def get_data():
+    return [1, 2, 3]
+
+@step
+def process_multiplied(items, multiplier):
+    return [item * multiplier for item in items]
+
+@step
+def save(result):
+    return f"Result: {result}"
+
+@flow
+def flow_with_params(multiplier=2):
+    # Flow input 'multiplier' is passed directly to process_multiplied
+    return get_data().next(process_multiplied, multiplier=multiplier).next(save)
+```
+
+**Behavior:**
+- `.next(step, **flow_kwargs)` accepts keyword arguments that are injected into the step
+- The step function receives:
+  - **First positional argument**: previous step's output (passed automatically)
+  - **Keyword arguments**: flow-level parameters from `.next()` call
+
+**Parameter resolution:**
+```python
+@step
+def fetch_weather(previous_output, start_date, end_date):
+    # previous_output: result from previous step (e.g., tuple(lat, lon))
+    # start_date, end_date: flow kwargs passed via .next()
+    lat, lon = previous_output
+    return fetch(lat, lon, start_date, end_date)
+
+@flow
+def weather_flow(location="New York", start_date="2024-01-01"):
+    return (
+        geocode_location(location)  # Returns (lat, lon)
+        .next(fetch_weather, start_date=start_date, end_date="2024-01-31")
+    )
+```
+
+**Key points:**
+- The first parameter is **always** the previous step's output
+- Flow-level kwargs are **always** keyword-only parameters
+- This pattern eliminates the need to thread parameters through intermediate steps
+
+**Comparison:**
+
+| Method | Input | Output | Use Case |
+|--------|-------|--------|------------|
+| `.map(step)` | list | list (per-item) | Parallel processing |
+| `.agg(step)` | list | single value | Aggregation |
+| `.next(step)` | previous output | any | Sequential chain |
+| `.next(step, kwarg=val)` | prev output + kwargs | any | Sequential with flow params |
+
 **Comparison:**
 
 | Method | Input | Output | Use Case |

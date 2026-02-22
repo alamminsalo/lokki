@@ -127,15 +127,22 @@ class LocalRunner:
                 if prev_path.exists():
                     result = store.read(str(prev_path))
 
+            flow_kwargs = getattr(node, "_flow_kwargs", {})
+
             if result is not None:
-                if node._default_args or node._default_kwargs:
+                if node._default_args or node._default_kwargs or flow_kwargs:
                     result = node.fn(
-                        result, *node._default_args, **node._default_kwargs
+                        result,
+                        *node._default_args,
+                        **node._default_kwargs,
+                        **flow_kwargs,
                     )
                 else:
                     result = node.fn(result)
             elif node._default_args or node._default_kwargs:
                 result = node.fn(*node._default_args, **node._default_kwargs)
+            elif flow_kwargs:
+                result = node.fn(**flow_kwargs)
             elif params:
                 result = node.fn(**params)
             else:
