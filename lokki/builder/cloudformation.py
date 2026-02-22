@@ -10,7 +10,11 @@ from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
-def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> str:
+def build_template(
+    graph: FlowGraph,
+    config: LokkiConfig,
+    module_name: str,
+) -> str:
     """Build a CloudFormation template for the flow."""
     resources: dict[str, dict[str, Any]] = {}
 
@@ -49,11 +53,11 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
                                 "Effect": "Allow",
                                 "Action": ["s3:GetObject", "s3:PutObject"],
                                 "Resource": [
-                                    "arn:aws:s3:::"
-                                    + "{{Param:S3Bucket}}"
-                                    + "/lokki/"
-                                    + "{{Param:FlowName}}"
-                                    + "/*"
+                                    {
+                                        "Fn::Sub": (
+                                            "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
+                                        )
+                                    }
                                 ],
                             }
                         ],
@@ -68,9 +72,9 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
 
     for step_name in step_names:
         env_vars = {
-            "LOKKI_S3_BUCKET": "{{Param:S3Bucket}}",
-            "LOKKI_FLOW_NAME": "{{Param:FlowName}}",
-            "LOKKI_AWS_ENDPOINT": "{{Param:AWSEndpoint}}",
+            "LOKKI_S3_BUCKET": {"Ref": "S3Bucket"},
+            "LOKKI_FLOW_NAME": {"Ref": "FlowName"},
+            "LOKKI_AWS_ENDPOINT": {"Ref": "AWSEndpoint"},
             "LOKKI_STEP_NAME": step_name,
             "LOKKI_MODULE_NAME": module_name,
         }
@@ -80,13 +84,13 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
             resources[_to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
-                    "FunctionName": "{{Param:FlowName}}-" + step_name,
+                    "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
                     "PackageType": "ZipFile",
                     "Code": {
-                        "S3Bucket": "{{Param:S3Bucket}}",
-                        "S3Key": "lambdas/function.zip",
+                        "S3Bucket": {"Ref": "S3Bucket"},
+                        "S3Key": {"Fn::Sub": "lokki/${FlowName}/lambdas/function.zip"},
                     },
-                    "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
+                    "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
                     "Timeout": config.lambda_cfg.timeout,
                     "MemorySize": config.lambda_cfg.memory,
                     "Environment": {"Variables": env_vars},
@@ -97,12 +101,12 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
             resources[_to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
-                    "FunctionName": "{{Param:FlowName}}-" + step_name,
+                    "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
                     "PackageType": "Image",
                     "Code": {
-                        "ImageUri": "{{Param:ECRRepoPrefix}}/lokki:{{Param:ImageTag}}"
+                        "ImageUri": {"Fn::Sub": "${ECRRepoPrefix}/lokki:${ImageTag}"}
                     },
-                    "Role": "{{GetAtt:LambdaExecutionRole.Arn}}",
+                    "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
                     "Timeout": config.lambda_cfg.timeout,
                     "MemorySize": config.lambda_cfg.memory,
                     "Environment": {"Variables": env_vars},
@@ -132,7 +136,12 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
                                 "Effect": "Allow",
                                 "Action": ["lambda:InvokeFunction"],
                                 "Resource": [
-                                    "arn:aws:lambda:${{AWS::Region}}:${{AWS::AccountId}}:function:{{Param:FlowName}}-*"
+                                    {
+                                        "Fn::Sub": (
+                                            "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:"
+                                            "function:${FlowName}-*"
+                                        )
+                                    }
                                 ],
                             }
                         ],
@@ -147,13 +156,29 @@ def build_template(graph: FlowGraph, config: LokkiConfig, module_name: str) -> s
                                 "Effect": "Allow",
                                 "Action": ["s3:GetObject", "s3:PutObject"],
                                 "Resource": [
-                                    "arn:aws:s3:::{{Param:S3Bucket}}/lokki/{{Param:FlowName}}/*"
+                                    {
+                                        "Fn::Sub": (
+                                            "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
+                                        )
+                                    }
                                 ],
                             }
                         ],
                     },
                 },
             ],
+        },
+    }
+
+    resources["StateMachine"] = {
+        "Type": "AWS::StepFunctions::StateMachine",
+        "Properties": {
+            "DefinitionS3Location": {
+                "Bucket": {"Ref": "S3Bucket"},
+                "Key": {"Fn::Sub": "lokki/${FlowName}/statemachine.json"},
+            },
+            "RoleArn": {"Fn::GetAtt": ["StepFunctionsExecutionRole", "Arn"]},
+            "StateMachineName": {"Fn::Sub": "${FlowName}"},
         },
     }
 

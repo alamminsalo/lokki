@@ -18,15 +18,24 @@ def build_sam_template(
     """Build a SAM template for local testing with sam local."""
     resources: dict[str, dict[str, Any]] = {}
 
+    parameters = {
+        "S3Bucket": {"Type": "String", "Description": "S3 bucket for artifacts"},
+        "AWSEndpoint": {
+            "Type": "String",
+            "Default": "http://host.docker.internal:4566",
+            "Description": "AWS endpoint for local testing",
+        },
+    }
+
     step_names = _get_step_names(graph)
     package_type = config.lambda_cfg.package_type
 
     for step_name in step_names:
         env_vars = {
             "Variables": {
-                "LOKKI_S3_BUCKET": "lokki",
+                "LOKKI_S3_BUCKET": {"Ref": "S3Bucket"},
                 "LOKKI_FLOW_NAME": graph.name,
-                "LOKKI_AWS_ENDPOINT": "http://host.docker.internal:4566",
+                "LOKKI_AWS_ENDPOINT": {"Ref": "AWSEndpoint"},
                 "LOKKI_STEP_NAME": step_name,
                 "LOKKI_MODULE_NAME": module_name,
             }
@@ -126,6 +135,7 @@ def build_sam_template(
     template = {
         "AWSTemplateFormatVersion": "2010-09-09",
         "Description": f"Lokki flow: {graph.name} (SAM for local testing)",
+        "Parameters": parameters,
         "Resources": resources,
         "Outputs": {},
     }

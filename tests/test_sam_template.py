@@ -118,10 +118,13 @@ class TestBuildSamTemplateSimple:
             resources = template["Resources"]
 
             env = resources["Step1Function"]["Properties"]["Environment"]["Variables"]
-            assert env["LOKKI_S3_BUCKET"] == "lokki"
+            assert env["LOKKI_S3_BUCKET"] == {"Ref": "S3Bucket"}
             assert env["LOKKI_FLOW_NAME"] == "test-flow"
             assert "LOKKI_AWS_ENDPOINT" in env
             assert env["LOKKI_STEP_NAME"] == "step1"
+
+            params = template.get("Parameters", {})
+            assert "S3Bucket" in params
 
     def test_custom_environment_variables(self) -> None:
         """Test custom environment variables are included."""
