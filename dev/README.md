@@ -69,7 +69,6 @@ python flow_script.py build
 This generates:
 - `lokki-build/lambdas/function.zip` - Lambda package
 - `lokki-build/statemachine.json` - Step Functions state machine
-- `lokki-build/sam.yaml` - SAM template for local testing
 - `lokki-build/template.yaml` - CloudFormation template
 
 ### Step 3: Deploy to LocalStack
@@ -89,7 +88,7 @@ Test a specific Lambda function locally:
 
 ```bash
 cd lokki-build
-sam local invoke GetBirdsFunction --template sam.yaml --region us-east-1
+aws lambda invoke --function-name birds-flow-get_birds --payload '{}' response.json --endpoint-url http://localhost:4566
 ```
 
 Expected output:
@@ -145,11 +144,8 @@ aws --endpoint-url=http://localhost:4566 --region us-east-1 \
 Use the provided scripts for common workflows:
 
 ```bash
-# Deploy and test individual functions
+# Deploy to LocalStack
 ./dev/deploy-localstack.sh
-
-# Test Lambda functions only
-./dev/test-sam-local.sh
 ```
 
 ## Alternative: Path-based development

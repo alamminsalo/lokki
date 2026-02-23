@@ -408,7 +408,7 @@ Implemented sequential chaining with `.next()` method:
 
 ## New Feature — ZIP Package Deployment with SAM/LocalStack
 
-Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStack:
+Implemented ZIP-based Lambda deployment for local testing with LocalStack:
 
 ### T15.1 — Single ZIP Package with Dispatcher Handler ✅
 - Modified `lambda_pkg.py` to generate single `function.zip`
@@ -416,61 +416,39 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 - Single `handler.py` dispatcher reads `LOKKI_STEP_NAME` env var to route to correct step
 - Handles `StepNode` objects by extracting `.fn` attribute
 
-### T15.2 — SAM Template for Local Testing ✅
-- Updated `sam_template.py` to use `CodeUri: lambdas/function.zip`
-- Uses single `Handler: handler.lambda_handler` for all functions
-- Sets `LOKKI_AWS_ENDPOINT: http://host.docker.internal:4566` for SAM local invoke
-- Sets `LOKKI_S3_BUCKET` and `LOKKI_FLOW_NAME` env vars
-
-### T15.3 — CloudFormation Template Updates ✅
+### T15.2 — CloudFormation ZIP Support ✅
 - Added explicit `Handler: handler.lambda_handler` for ZIP package type
 - Uses `PackageType: ZipFile` instead of `Image`
 
-### T15.4 — S3 Module Endpoint Support ✅
+### T15.3 — S3 Module Endpoint Support ✅
 - Added `set_endpoint()` function to configure S3 endpoint globally
 - `_get_s3_client()` uses configured endpoint for all S3 operations
-- Enables Lambda runtime to write to LocalStack during `sam local invoke`
+- Enables Lambda runtime to write to LocalStack
 
-### T15.5 — Runtime Handler Endpoint Configuration ✅
+### T15.4 — Runtime Handler Endpoint Configuration ✅
 - Reads `LOKKI_AWS_ENDPOINT` from environment
 - Calls `s3.set_endpoint()` to configure S3 client
 - All S3 writes (output, map manifest) use configured endpoint
 
-### T15.6 — Deploy to LocalStack ✅
+### T15.5 — Deploy to LocalStack ✅
 - Added `package_type` parameter to `Deployer` class
 - For LocalStack (when `aws.endpoint` is configured), uses AWS CLI with `--endpoint-url`
-- Falls back to AWS CLI when `samlocal` is not available
 - Skips Docker image push for ZIP deployments
-
-### T15.7 — Build Integration ✅
-- Builder generates SAM template (`sam.yaml`) alongside CloudFormation template
-- `lokki-build/sam.yaml` used for LocalStack deployments
-- `lokki-build/template.yaml` still used for real AWS deployments
 
 ---
 
 ## Milestone 16 — Step Functions Local Deployment
 
-### T16.1 — SAM Template State Machine Resource ✅
-- Added `AWS::Serverless::StateMachine` resource to SAM template
-- Reference the generated `statemachine.json`
-- Added IAM role for Step Functions execution
-
-### T16.2 — SAM Local Start-API ✅ (N/A)
-- SAM CLI does not support local Step Functions API
-- Use AWS CLI directly with LocalStack for Step Functions
-
-### T16.3 — LocalStack Step Functions Support ✅
+### T16.1 — LocalStack Step Functions Support ✅
 - State machine and Lambda functions deploy to LocalStack
-- Individual Lambda functions can be tested via `sam local invoke`
-- Step Functions deployed via SAM fallback to manual AWS CLI usage
+- Individual Lambda functions can be tested via AWS CLI
+- Step Functions deployed via AWS CLI
 
-### T16.4 — Integration Test ✅
-- Individual Lambda testing works: `sam local invoke GetBirdsFunction`
+### T16.2 — Integration Test ✅
+- Lambda testing works via AWS CLI
 - Full pipeline testing requires AWS CLI state machine creation
 
-### T16.5 — Dev Scripts ✅
-- `dev/test-sam-local.sh` - Test individual Lambda functions
+### T16.3 — Dev Scripts ✅
 - `dev/deploy-localstack.sh` - Deploy to LocalStack
 - Scripts already exist and work
 
@@ -487,7 +465,7 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 - Created `lokki/_utils.py` with:
   - `to_pascal(name: str) -> str` - convert snake_case to PascalCase
   - `to_kebab(name: str) -> str` - convert snake_case to kebab-case
-- Updated imports in `builder/cloudformation.py`, `builder/state_machine.py`, `builder/sam_template.py`
+- Updated imports in `builder/cloudformation.py`, `builder/state_machine.py`
 
 ### T24.2 — Create _errors.py with centralized errors ✅
 - Created `lokki/_errors.py` with:
@@ -525,7 +503,6 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 ### T24.7 — Update builder modules ✅
 - Updated `builder/cloudformation.py` to use `_utils.to_pascal()` and `builder._graph.get_step_names()`
 - Updated `builder/state_machine.py` to use `_utils.to_pascal()`
-- Updated `builder/sam_template.py` to use `_utils.to_pascal()` and `builder._graph.get_step_names()`
 - Removed duplicate functions (`_to_pascal`, `_get_step_names`, `_get_module_name`)
 
 ### T24.8 — Update runtime handler ✅

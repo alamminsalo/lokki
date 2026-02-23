@@ -395,7 +395,7 @@ _Depends on: M11, M12_
 
 ## Milestone 15 — Local Testing with LocalStack
 
-**Purpose**: Enable full pipeline testing locally using LocalStack and SAM CLI. This provides an AWS simulation environment that catches deployment and integration issues early.
+**Purpose**: Enable full pipeline testing locally using LocalStack. This provides an AWS simulation environment that catches deployment and integration issues early.
 
 ### T15.1 — ZIP Package with Dispatcher Handler ✅
 
@@ -405,15 +405,13 @@ _Depends on: M11, M12_
 - Create dispatcher `handler.py` that reads `LOKKI_STEP_NAME` env var to route to correct step
 - Handle both `StepNode` and raw function objects
 
-### T15.2 — SAM Template for Local Testing ✅
+### T15.2 — CloudFormation ZIP Support ✅
 
 **Status**: COMPLETED
 
-- Generate `sam.yaml` alongside `template.yaml`
-- Use `CodeUri: lambdas/function.zip` for Lambda functions
-- Use single `Handler: handler.lambda_handler` for all functions
-- Set `LOKKI_AWS_ENDPOINT` for SAM local invoke connectivity
-- Set `LOKKI_S3_BUCKET` and `LOKKI_FLOW_NAME` env vars
+- Add `PackageType: ZipFile` support in CloudFormation template
+- Add explicit `Handler` property for ZIP packages
+- Use shared handler in ZIP packages
 
 ### T15.3 — CloudFormation ZIP Support ✅
 
@@ -439,64 +437,31 @@ _Depends on: M11, M12_
 - Configure S3 client with endpoint for Lambda runtime
 - Write manifest using configured endpoint
 
-### T15.6 — Deploy to LocalStack ✅
-
-**Status**: COMPLETED
-
-- Detect LocalStack via `aws.endpoint` configuration
-- Use AWS CLI with `--endpoint-url` for LocalStack deployment
-- Skip Docker image push for ZIP deployments
-- Fall back to AWS CLI when `samlocal` is not available
-
-### T15.7 — Build Integration ✅
-
-**Status**: COMPLETED
-
-- Generate both CloudFormation and SAM templates
-- SAM template used for LocalStack deployments
-- CloudFormation template used for real AWS
-
 ---
 
 ## Milestone 16 — Step Functions Local Deployment
 
 **Purpose**: Deploy and test the full Step Functions state machine locally using LocalStack. This enables end-to-end pipeline testing without real AWS.
 
-### T16.1 — SAM Template State Machine Resource ✅
-
-**Status**: COMPLETED
-
-- Add `AWS::Serverless::StateMachine` resource to `sam.yaml`
-- Reference the generated `statemachine.json`
-- Configure IAM role for state machine
-
-### T16.2 — SAM Local Start-API ✅
-
-**Status**: COMPLETED (N/A - not applicable)
-
-- SAM CLI does not support local Step Functions API
-- Use AWS CLI directly with LocalStack for Step Functions operations
-
-### T16.3 — LocalStack Step Functions Support ✅
+### T16.1 — LocalStack Step Functions Support ✅
 
 **Status**: COMPLETED
 
 - Test state machine deployment to LocalStack via AWS CLI
 - Step Functions resources deploy but require manual state machine creation
-- Lambdas can be tested individually via `sam local invoke`
+- Lambdas can be tested individually via AWS CLI
 
-### T16.4 — Integration Test ✅
+### T16.2 — Integration Test ✅
 
 **Status**: COMPLETED
 
-- Individual Lambda functions can be tested via `sam local invoke`
+- Individual Lambda functions can be tested via AWS CLI
 - Full pipeline requires manual Step Functions state machine creation via AWS CLI
 
-### T16.5 — Dev Scripts ✅
+### T16.3 — Dev Scripts ✅
 
 **Status**: COMPLETED
 
-- `dev/test-sam-local.sh` — Test individual Lambda functions
 - `dev/deploy-localstack.sh` — Deploy full pipeline to LocalStack
 - `dev/run-localstack.sh` — Run pipeline and verify results
 
@@ -600,13 +565,6 @@ _Depends on: M11, M12_
 - Test State Machine definition
 - Test parameters handling
 - Test ZIP package type support
-
-### T18.5 — Test sam_template.py ✅
-
-- Create `tests/test_sam_template.py`
-- Test `build_sam_template` function
-- Test ZIP package support
-- Test environment variables in template
 
 ### T18.6 — Test builder.py ✅
 
@@ -845,7 +803,7 @@ _Purpose_: Enhance code readability and reduce LOC through extraction, consolida
 - Create `lokki/_utils.py` with:
   - `to_pascal(name: str) -> str` - convert snake_case to PascalCase
   - `to_kebab(name: str) -> str` - convert snake_case to kebab-case
-- Update imports in `builder/cloudformation.py`, `builder/state_machine.py`, `builder/sam_template.py`
+- Update imports in `builder/cloudformation.py`, `builder/state_machine.py`
 
 ### T24.2 — Create _errors.py with centralized errors
 
@@ -892,7 +850,7 @@ _Purpose_: Enhance code readability and reduce LOC through extraction, consolida
 ### T24.6 — Create builder/_graph.py
 
 - Create `lokki/builder/_graph.py` with:
-  - `get_step_names(graph: FlowGraph) -> set[str]` - consolidated from cloudformation, state_machine, sam_template
+  - `get_step_names(graph: FlowGraph) -> set[str]` - consolidated from cloudformation, state_machine
 - Update imports in builder modules
 
 ### T24.7 — Update builder modules
@@ -904,10 +862,6 @@ _Purpose_: Enhance code readability and reduce LOC through extraction, consolida
 - Update `builder/state_machine.py`:
   - Use `_utils.to_pascal()` instead of local function
   - Remove `_to_pascal()`
-- Update `builder/sam_template.py`:
-  - Use `_utils.to_pascal()` instead of local function
-  - Use `builder._graph.get_step_names()` instead of local function
-  - Remove `_to_pascal()`, `_get_step_names()`, `_get_module_name()`
 
 ### T24.8 — Update runtime handler
 
@@ -1340,7 +1294,7 @@ _Purpose_: Create comprehensive API documentation and add docstrings to source c
 
 ### T34.6 — Add docstrings to builder modules
 
-- Add module-level docstrings to builder.py, state_machine.py, cloudformation.py, lambda_pkg.py, sam_template.py
+- Add module-level docstrings to builder.py, state_machine.py, cloudformation.py, lambda_pkg.py
 - Add docstrings to Builder class and build functions
 
 ### T34.7 — Add docstrings to deploy.py

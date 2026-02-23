@@ -713,11 +713,10 @@ lokki-build/
 │       ├── Dockerfile
 │       └── handler.py
 ├── statemachine.json
-├── template.yaml
-└── sam.yaml                    # For LocalStack testing
+└── template.yaml
 ```
 
-> **Note**: For ZIP-based deployments (used for LocalStack testing), the structure differs. See [Section 17: Local Deployment with SAM/LocalStack](#17-local-deployment-with-samlocalstack).
+> **Note**: For ZIP-based deployments (used for LocalStack testing), the structure differs.
 
 Build steps in order:
 
@@ -1728,8 +1727,7 @@ lokki-build/
 │   ├── lokki/          # lokki runtime code
 │   └── birds_flow_example.py  # User's flow module
 ├── statemachine.json
-├── template.yaml        # CloudFormation (for real AWS)
-└── sam.yaml            # SAM template (for LocalStack)
+└── template.yaml        # CloudFormation template
 ```
 
 ### Single ZIP Package
@@ -1758,34 +1756,6 @@ step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 from lokki.runtime.handler import make_handler
 lambda_handler = make_handler(step_func)
 ```
-
-### SAM Template
-
-The `sam.yaml` template defines Lambda functions using the ZIP package:
-
-```yaml
-GetBirdsFunction:
-  Type: AWS::Serverless::Function
-  Properties:
-    FunctionName: birds-flow-get_birds
-    Runtime: python3.13
-    Handler: handler.lambda_handler
-    CodeUri: lambdas/function.zip
-    Environment:
-      Variables:
-        LOKKI_S3_BUCKET: lokki
-        LOKKI_FLOW_NAME: birds-flow
-        LOKKI_AWS_ENDPOINT: http://host.docker.internal:4566
-        LOKKI_STEP_NAME: get_birds
-        LOKKI_MODULE_NAME: birds_flow_example
-```
-
-**Key environment variables:**
-- `LOKKI_S3_BUCKET`: S3 bucket for pipeline data
-- `LOKKI_FLOW_NAME`: Name of the flow
-- `LOKKI_AWS_ENDPOINT`: Endpoint for SAM local invoke (LocalStack)
-- `LOKKI_STEP_NAME`: Name of the step to invoke
-- `LOKKI_MODULE_NAME`: Python module containing the flow
 
 ### S3 Endpoint Configuration
 
@@ -1826,25 +1796,22 @@ python flow_script.py deploy --stack-name lokki-test --region us-east-1
 Output:
 ```
 Skipping Docker image push for ZIP deployment
-Using SAM template for LocalStack deployment...
 ✓ Deployed stack 'lokki-test'
 ```
 
-### Test Locally with SAM CLI
+### Test with AWS CLI
 
-After deployment, test individual Lambda functions:
+After deployment, test using AWS CLI:
 
 ```bash
-cd lokki-build
-
 # Invoke a specific function
-sam local invoke GetBirdsFunction --template sam.yaml --region us-east-1
+aws lambda invoke --function-name birds-flow-get_birds --payload '{}' response.json --endpoint-url http://localhost:4566
 
-# Or start a local Lambda endpoint
-sam local start-lambda --template sam.yaml --port 3001
+# Or start a local Lambda endpoint and invoke
+aws lambda invoke --endpoint-url http://localhost:4566 --function-name <function-name> --payload '{}' response.json
 ```
 
-The Lambda container will write to LocalStack S3, which can be verified:
+The Lambda will write to LocalStack S3, which can be verified:
 
 ```bash
 aws --endpoint-url=http://localhost:4566 s3 ls lokki/
@@ -1856,7 +1823,7 @@ aws --endpoint-url=http://localhost:4566 s3 ls lokki/
 |------|---------|
 | Build | `python flow_script.py build` |
 | Deploy to LocalStack | `python flow_script.py deploy` |
-| Test function | `sam local invoke GetBirdsFunction` |
+| Test function | `aws lambda invoke ... --endpoint-url http://localhost:4566` |
 | List S3 contents | `aws --endpoint-url=http://localhost:4566 s3 ls lokki/` |
 
 ---

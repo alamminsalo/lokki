@@ -707,7 +707,6 @@ Local testing with LocalStack and SAM CLI provides an environment that **simulat
 | Component | Role |
 |-----------|------|
 | **LocalStack** | Local AWS cloud stack (S3, Lambda, Step Functions, CloudFormation) |
-| **SAM CLI** | Local Lambda invocation and deployment |
 | **ZIP Deployment** | Package type for Lambda functions (required for LocalStack) |
 
 ### Configuration
@@ -731,7 +730,6 @@ package_type = "zip"  # Required for LocalStack
 | Start LocalStack | `localstack start -d` | Start LocalStack services |
 | Build | `python flow_script.py build` | Generate deployment artifacts |
 | Deploy | `python flow_script.py deploy` | Deploy to LocalStack |
-| Test Lambda | `sam local invoke GetBirdsFunction` | Test individual functions |
 | Test Pipeline | `aws stepfunctions start-execution ...` | Run full pipeline |
 | Verify S3 | `aws s3 ls s3://lokki/` | Check outputs |
 
@@ -741,12 +739,12 @@ package_type = "zip"  # Required for LocalStack
 # Build first
 python flow_script.py build
 
-# Invoke a specific Lambda function locally
+# Invoke a specific Lambda function locally using AWS CLI
 cd lokki-build
-sam local invoke GetBirdsFunction --template sam.yaml
+aws lambda invoke --function-name <function-name> --payload '{}' response.json
 
-# Or start local Lambda endpoint
-sam local start-lambda --template sam.yaml --port 3001
+# Or test via the local endpoint after deploy
+aws lambda invoke --endpoint-url http://localhost:4566 --function-name <function-name> --payload '{}' response.json
 ```
 
 ### Verifying Pipeline Execution

@@ -269,7 +269,6 @@ Creates:
 - `lokki-build/lambdas/` - Lambda packages (Dockerfiles or ZIPs)
 - `lokki-build/statemachine.json` - AWS Step Functions state machine
 - `lokki-build/template.yaml` - CloudFormation template
-- `lokki-build/sam.yaml` - SAM template (for LocalStack)
 
 ---
 
