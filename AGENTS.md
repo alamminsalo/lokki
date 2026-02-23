@@ -139,6 +139,7 @@ class TestClassName:
 | File | Purpose |
 |------|---------|
 | README.md | Project overview, quickstart, and usage examples |
+| docs/api.md | API reference for decorators, CLI, and configuration |
 | docs/requirements.md | User requirements and configuration reference |
 | docs/design.md | Architecture and implementation details |
 | docs/tasks.md | Planned milestones |

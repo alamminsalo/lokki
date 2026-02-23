@@ -1,4 +1,14 @@
-"""Configuration loading and management for lokki."""
+"""Configuration loading and management for lokki.
+
+This module provides configuration management for lokki pipelines.
+Configuration is loaded from TOML files with environment variable overrides.
+
+Configuration precedence (highest to lowest):
+1. Environment variables
+2. Local config (./lokki.toml)
+3. Global config (~/.lokki/lokki.toml)
+4. Default values
+"""
 
 import os
 import tomllib
@@ -36,7 +46,15 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 @dataclass
 class LambdaConfig:
-    """Lambda configuration."""
+    """Lambda function configuration.
+
+    Attributes:
+        package_type: Package type - "image" (Docker) or "zip".
+        timeout: Lambda timeout in seconds.
+        memory: Lambda memory in MB.
+        image_tag: Docker image tag for Lambda.
+        env: Environment variables passed to Lambda functions.
+    """
 
     package_type: str = "image"  # "image" or "zip"
     timeout: int = 900
@@ -47,7 +65,16 @@ class LambdaConfig:
 
 @dataclass
 class BatchConfig:
-    """AWS Batch configuration."""
+    """AWS Batch job configuration.
+
+    Attributes:
+        job_queue: AWS Batch job queue name.
+        job_definition_name: Base name for job definitions.
+        timeout_seconds: Default job timeout in seconds.
+        vcpu: Default number of vCPUs for jobs.
+        memory_mb: Default memory in MB for jobs.
+        image: Docker image for jobs (defaults to Lambda image if empty).
+    """
 
     job_queue: str = ""
     job_definition_name: str = ""
@@ -59,7 +86,20 @@ class BatchConfig:
 
 @dataclass
 class LokkiConfig:
-    """Main lokki configuration."""
+    """Main lokki configuration.
+
+    Attributes:
+        build_dir: Output directory for build artifacts.
+        artifact_bucket: S3 bucket for pipeline data and artifacts.
+        image_repository: Docker repository ("local", "docker.io", or ECR prefix).
+        aws_endpoint: AWS endpoint for local development (e.g., LocalStack).
+        stepfunctions_role: ARN of existing Step Functions execution role.
+        lambda_execution_role: ARN of existing Lambda execution role.
+        lambda_cfg: Lambda function configuration.
+        batch_cfg: AWS Batch job configuration.
+        flow_name: Name of the flow (derived from function name).
+        logging: Logging configuration.
+    """
 
     # Top-level fields
     build_dir: str = "lokki-build"

@@ -1284,3 +1284,62 @@ _Purpose_: Add Step Functions Map state concurrency limit to control parallel ex
 
 - Add concurrency_limit usage to docs/design.md
 - Add example to README
+
+---
+
+## Milestone 34 — API Documentation
+
+_Purpose_: Create comprehensive API documentation and add docstrings to source code.
+
+### T34.1 — Create docs/api.md
+
+- Create comprehensive API reference document covering:
+  - `@step` decorator with all parameters (retry, job_type, vcpu, memory_mb, timeout_seconds)
+  - `@flow` decorator
+  - StepNode chaining methods (`.map()`, `.next()`, `.agg()`)
+  - MapBlock methods
+  - RetryConfig dataclass
+  - CLI commands (run, build, deploy, show, logs, destroy)
+  - Configuration schema (all TOML fields)
+  - Environment variables
+  - Complete usage examples
+
+### T34.2 — Add docstrings to decorators.py
+
+- Add module-level docstring
+- Add class docstrings to StepNode, MapBlock
+- Add comprehensive docstrings to step(), flow() functions
+- Document all parameters and examples
+
+### T34.3 — Add docstrings to config.py
+
+- Add module-level docstring with configuration overview
+- Add docstrings to LambdaConfig, BatchConfig, LokkiConfig dataclasses
+- Document all configuration fields
+- Add configuration precedence explanation
+
+### T34.4 — Add docstrings to runner.py
+
+- Add module-level docstring
+- Add docstrings to LocalRunner class and run() method
+
+### T34.5 — Add docstrings to s3.py
+
+- Add module-level docstring with serialization explanation
+- Document write(), read(), write_manifest(), set_endpoint() functions
+
+### T34.6 — Add docstrings to builder modules
+
+- Add module-level docstrings to builder.py, state_machine.py, cloudformation.py, lambda_pkg.py, sam_template.py
+- Add docstrings to Builder class and build functions
+
+### T34.7 — Add docstrings to deploy.py
+
+- Add module-level docstring
+- Add docstrings to Deployer class and deploy methods
+
+### T34.8 — Add remaining docstrings
+
+- Add docstrings to graph.py (FlowGraph, TaskEntry, MapOpenEntry, MapCloseEntry)
+- Add docstrings to logging.py
+- Add docstrings to cli.py

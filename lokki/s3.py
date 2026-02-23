@@ -1,4 +1,16 @@
-"""S3 read/write utilities with gzip pickle serialization."""
+"""S3 read/write utilities with gzip pickle serialization.
+
+This module provides functions for reading and writing Python objects
+to/from S3 using gzip compression and pickle serialization.
+
+The serialization format:
+1. Serialize object with pickle (HIGHEST_PROTOCOL)
+2. Compress with gzip
+3. Upload to S3
+
+This keeps all pipeline data in S3 and enables passing large objects
+between steps without hitting Step Functions payload size limits.
+"""
 
 from __future__ import annotations
 
