@@ -347,72 +347,7 @@ python flow.py destroy [--confirm]
 ## Configuration
 
 Create a `lokki.toml` file in your project root.
-
-### Full Configuration Schema
-
-```toml
-# Build output directory
-build_dir = "lokki-build"
-
-[aws]
-# S3 bucket for pipeline data and artifacts
-artifact_bucket = "my-bucket"
-
-# Docker repository: "local", "docker.io", or ECR prefix
-image_repository = "123456789.dkr.ecr.us-east-1.amazonaws.com/myproject"
-
-# AWS endpoint for local development
-endpoint = ""
-
-[lambda]
-# Package type: "image" (Docker) or "zip"
-package_type = "image"
-
-# Lambda timeout in seconds
-timeout = 900
-
-# Lambda memory in MB
-memory = 512
-
-# Docker image tag
-image_tag = "latest"
-
-[lambda.env]
-# Environment variables passed to Lambda
-LOG_LEVEL = "INFO"
-
-[batch]
-# AWS Batch job queue
-job_queue = ""
-
-# AWS Batch job definition name
-job_definition_name = ""
-
-# Default job timeout in seconds
-timeout_seconds = 3600
-
-# Default vCPUs for Batch jobs
-vcpu = 2
-
-# Default memory in MB for Batch jobs
-memory_mb = 4096
-
-# Docker image for Batch jobs (defaults to Lambda image)
-image = ""
-
-[logging]
-# Log level: DEBUG, INFO, WARNING, ERROR
-level = "INFO"
-
-# Log format: "human" or "json"
-format = "human"
-
-# Progress update interval (number of items)
-progress_interval = 10
-
-# Show timestamps in logs
-show_timestamps = true
-```
+See [docs/config.md](./config.md)
 
 ### Environment Variables
 
