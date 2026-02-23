@@ -52,7 +52,23 @@ class JobTypeConfig:
 
 
 class StepNode:
-    """Represents a single step in the pipeline."""
+    """Represents a single step in a pipeline.
+
+    A StepNode wraps a function and provides methods for chaining steps together:
+    - `.map(step)` - Run step in parallel for each item in a list (fan-out)
+    - `.next(step)` - Run step sequentially after current step
+    - `.agg(step)` - Aggregate results from parallel execution
+      (must be called on MapBlock)
+
+    Attributes:
+        fn: The wrapped function.
+        name: Function name.
+        retry: Retry configuration for transient failures.
+        job_type: Execution backend ("lambda" or "batch").
+        vcpu: vCPUs for Batch jobs (overrides global config).
+        memory_mb: Memory in MB for Batch jobs (overrides global config).
+        timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
+    """
 
     def __init__(
         self,
@@ -110,7 +126,18 @@ class StepNode:
 
 
 class MapBlock:
-    """Represents a Map block opened by .map()."""
+    """Represents a Map block for parallel processing.
+
+    Created by calling `.map()` on a StepNode. Contains:
+    - source: The step that produces the list of items to process
+    - inner_steps: Steps to run for each item (chain via `.map()` or `.next()`)
+    - concurrency_limit: Optional limit on parallel iterations
+
+    Methods:
+        .map(step) - Add step to run for each item
+        .next(step) - Add step to run for each item (alias for .map())
+        .agg(step) - Close block and aggregate results
+    """
 
     def __init__(
         self,
@@ -181,19 +208,6 @@ def step(
         vcpu: Number of vCPUs for Batch jobs (overrides global config).
         memory_mb: Memory in MB for Batch jobs (overrides global config).
         timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
-
-    Example:
-        @step
-        def my_step(data):
-            return process(data)
-
-        @step(retry={"retries": 3, "delay": 2})
-        def unreliable_step(data):
-            return risky_call(data)
-
-        @step(job_type="batch", vcpu=8, memory_mb=16384)
-        def heavy_compute(data):
-            return expensive_operation(data)
     """
 
     def decorator(fn: Callable[..., Any]) -> StepNode:
@@ -222,7 +236,17 @@ def step(
 
 
 def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
-    """Decorate a function as a pipeline flow."""
+    """Decorate a function as a pipeline flow.
+
+    The decorated function must return a chain of steps (StepNode or MapBlock).
+    The flow name is derived from the function name (snake_case -> kebab-case).
+
+    Args:
+        fn: A function that returns a step chain, e.g., step1().map(step2)
+
+    Returns:
+        A wrapper that constructs a FlowGraph when called.
+    """
 
     def wrapper(*args: Any, **kwargs: Any) -> FlowGraph:
         from lokki.graph import FlowGraph

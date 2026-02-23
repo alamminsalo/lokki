@@ -1,4 +1,12 @@
-"""Build orchestrator for lokki flows."""
+"""Build orchestrator for lokki flows.
+
+This module provides the Builder class which orchestrates the build process
+to generate deployment artifacts:
+- Lambda packages (Dockerfiles or ZIPs)
+- AWS Step Functions state machine (JSON)
+- AWS CloudFormation template (YAML)
+- SAM template (YAML, for LocalStack testing)
+"""
 
 from __future__ import annotations
 
@@ -29,6 +37,15 @@ def _get_flow_module_name(
 
 
 class Builder:
+    """Orchestrates building deployment artifacts for lokki flows.
+
+    The Builder generates all necessary files for deploying a flow to AWS:
+    - Lambda packages (Docker images or ZIP archives)
+    - Step Functions state machine definition
+    - CloudFormation template
+    - SAM template (for LocalStack)
+    """
+
     @staticmethod
     def build(
         graph: FlowGraph,

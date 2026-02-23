@@ -1,4 +1,11 @@
-"""Deployment utilities for lokki flows."""
+"""Deployment utilities for lokki flows.
+
+This module provides the Deployer class for deploying lokki flows to AWS.
+It handles:
+- Docker image building and pushing to ECR
+- CloudFormation stack creation/update
+- ZIP-based deployment to Lambda
+"""
 
 from __future__ import annotations
 
@@ -12,6 +19,19 @@ from lokki._errors import DeployError, DockerNotAvailableError
 
 
 class Deployer:
+    """Deploys lokki flows to AWS.
+
+    Handles building Docker images, pushing to ECR, and deploying
+    CloudFormation stacks for lambda-based deployments.
+
+    Attributes:
+        stack_name: Name of the CloudFormation stack.
+        region: AWS region for deployment.
+        image_tag: Docker image tag.
+        endpoint: AWS endpoint URL (for LocalStack).
+        package_type: "image" (Docker) or "zip" (Lambda ZIP).
+    """
+
     def __init__(
         self,
         stack_name: str,

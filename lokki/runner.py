@@ -1,4 +1,8 @@
-"""Local execution engine for lokki flows."""
+"""Local execution engine for lokki flows.
+
+This module provides the LocalRunner class for executing flows locally.
+It mimics AWS Step Functions behavior using local filesystem storage.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +25,12 @@ LocalStore = LocalStore
 
 
 class LocalRunner:
+    """Executes lokki flows locally.
+
+    LocalRunner mimics AWS Step Functions behavior by executing flows
+    on the local machine using filesystem storage for inter-step data.
+    """
+
     def __init__(self, logging_config: LoggingConfig | None = None) -> None:
         self.logging_config = logging_config or LoggingConfig()
         self.logger = get_logger("lokki.runner", self.logging_config)
