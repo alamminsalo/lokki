@@ -1028,7 +1028,7 @@ CMD ["handler.lambda_handler"]
 
 ### ZIP Archive Packaging
 
-When `package_type = "zip"` is configured in `lokki.toml`, the build process generates ZIP archives instead of Docker images. This is useful for LocalStack testing or simpler deployment setups.
+When `package_type = "zip"` is configured in `lokki.toml`, the build process generates ZIP archives instead of Docker images. ZIP is a fully supported deployment target suitable for production use cases where Docker images are not preferred.
 
 **Directory structure** (`lokki-build/lambdas/<step_name>/`):
 
@@ -1701,7 +1701,7 @@ In `lokki.toml`, set `package_type = "zip"`:
 
 ```toml
 [lambda]
-package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+package_type = "zip"  # Use "zip" or "image" - both are valid deployment targets
 timeout = 900
 memory = 512
 ```

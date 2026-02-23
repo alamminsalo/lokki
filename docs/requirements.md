@@ -406,8 +406,7 @@ lambda_execution_role = "arn:aws:iam::123456789::role/lokki-lambda-execution-rol
 [lambda]
 # Deployment package type: "image" (default) or "zip"
 # - image: Docker container image pushed to ECR
-# - zip: ZIP archive uploaded directly to Lambda
-# Use "zip" for LocalStack testing or simpler deployments
+# - zip: ZIP archive uploaded directly to Lambda (fully supported)
 package_type = "image"
 
 # Docker base image for Lambda functions
