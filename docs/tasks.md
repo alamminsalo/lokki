@@ -15,8 +15,16 @@ lokki/
 ├── decorators.py
 ├── graph.py
 ├── runner.py
-├── s3.py
 ├── config.py
+├── _aws.py
+├── _utils.py
+├── _errors.py
+├── logging.py
+├── store/
+│   ├── __init__.py
+│   ├── protocol.py
+│   ├── local.py
+│   └── s3.py
 ├── builder/
 │   ├── __init__.py
 │   ├── builder.py
@@ -25,7 +33,9 @@ lokki/
 │   └── cloudformation.py
 └── runtime/
     ├── __init__.py
-    └── handler.py
+    ├── handler.py
+    ├── batch.py
+    └── batch_main.py
 ```
 
 **T1.3** Write `lokki/__init__.py` exporting the public API: `flow`, `step`, `main`.

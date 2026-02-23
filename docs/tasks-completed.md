@@ -18,8 +18,16 @@ lokki/
 ├── decorators.py            # @step and @flow decorators
 ├── graph.py                 # FlowGraph execution model
 ├── runner.py                # Local execution engine
-├── s3.py                    # S3 read/write utilities
 ├── config.py                # Configuration loading
+├── _aws.py                  # AWS client factories
+├── _utils.py                # Utility functions
+├── _errors.py               # Error classes
+├── logging.py               # Logging utilities
+├── store/
+│   ├── __init__.py          # Exports: DataStore, LocalStore, S3Store
+│   ├── protocol.py          # DataStore Protocol definition
+│   ├── local.py             # LocalStore implementation
+│   └── s3.py               # S3Store implementation
 ├── builder/
 │   ├── __init__.py
 │   ├── builder.py           # Build orchestrator
@@ -28,7 +36,9 @@ lokki/
 │   └── cloudformation.py    # CloudFormation YAML generation
 └── runtime/
     ├── __init__.py
-    └── handler.py wrapper
+    ├── handler.py           # Lambda handler wrapper
+    ├── batch.py             # AWS Batch handler wrapper
+    └── batch_main.py        # AWS Batch entry point
 ```
 
 ###           # Lambda handler T1.3 — Write lokki/__init__.py ✅

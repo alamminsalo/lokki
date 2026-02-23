@@ -39,8 +39,14 @@ lokki/
 │   │   └── cloudformation.py   # Generates CloudFormation YAML
 │   ├── runtime/
 │   │   ├── __init__.py
-│   │   └── handler.py           # Lambda handler wrapper (runs inside Lambda)
-│   ├── s3.py                    # S3 read/write with gzip pickle
+│   │   ├── handler.py           # Lambda handler wrapper (runs inside Lambda)
+│   │   ├── batch.py             # AWS Batch handler wrapper
+│   │   └── batch_main.py       # AWS Batch entry point
+│   ├── store/
+│   │   ├── __init__.py         # Exports: DataStore, LocalStore, S3Store
+│   │   ├── protocol.py         # DataStore Protocol definition
+│   │   ├── local.py            # LocalStore implementation
+│   │   └── s3.py               # S3Store implementation
 │   └── config.py                # Configuration loading
 ├── pyproject.toml
 ├── uv.lock
@@ -1091,7 +1097,7 @@ The build process writes one of these per step, importing the correct function f
 def make_handler(fn: Callable, retry_config: RetryConfig | None = None) -> Callable:
     def lambda_handler(event: dict, context) -> dict:
         import inspect
-        from lokki.s3 import read, write
+        from lokki.store import S3Store
         from lokki.config import get_config
 
         cfg = get_config()  # reads env vars: LOKKI_S3_BUCKET, LOKKI_FLOW_NAME
@@ -1970,7 +1976,7 @@ def make_batch_handler(
     """Create a handler for AWS Batch jobs."""
     
     def batch_handler(event: dict[str, Any]) -> dict[str, Any]:
-        from lokki import s3
+        from lokki.store import S3Store
         from lokki._aws import get_batch_client
         
         cfg = load_config()
