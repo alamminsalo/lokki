@@ -184,7 +184,7 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
     try:
         deployer = Deployer(
             stack_name=stack_name,
-            region=args.region or "us-east-1",
+            region=args.region or config.aws_region,
             image_tag=args.image_tag,
             endpoint=config.aws_endpoint,
             package_type=config.lambda_cfg.package_type,
@@ -233,7 +233,7 @@ def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) ->
         print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
         sys.exit(1)
 
-    region = "us-east-1"
+    region = config.aws_region
     endpoint = config.aws_endpoint
 
     show(
@@ -268,7 +268,7 @@ def _handle_logs(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) ->
         sys.exit(1)
 
     step_names = _get_step_names(graph)
-    region = "us-east-1"
+    region = config.aws_region
     endpoint = config.aws_endpoint
 
     logs(
@@ -308,7 +308,7 @@ def _handle_destroy(
         sys.exit(1)
 
     stack_name = f"{graph.name}-stack"
-    region = "us-east-1"
+    region = config.aws_region
     endpoint = config.aws_endpoint
 
     destroy(
