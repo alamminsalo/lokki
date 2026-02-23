@@ -251,6 +251,37 @@ class TestMapBlock:
         assert step1._next is step2
         assert step2._next is step3
 
+    def test_map_block_concurrency_limit(self) -> None:
+        """Test that .map() accepts concurrency_limit parameter."""
+
+        @step
+        def source() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def inner(item: str) -> str:
+            return item.upper()
+
+        block = source.map(inner, concurrency_limit=10)
+
+        assert isinstance(block, MapBlock)
+        assert block.concurrency_limit == 10
+
+    def test_map_block_concurrency_limit_none_by_default(self) -> None:
+        """Test that concurrency_limit defaults to None."""
+
+        @step
+        def source() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def inner(item: str) -> str:
+            return item.upper()
+
+        block = source.map(inner)
+
+        assert block.concurrency_limit is None
+
 
 class TestFlowDecorator:
     """Tests for @flow decorator."""

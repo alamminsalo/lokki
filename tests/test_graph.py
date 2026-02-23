@@ -126,6 +126,50 @@ class TestFlowGraphMapBlock:
         assert graph.entries[1].inner_steps[0].name == "transform"
         assert graph.entries[1].inner_steps[1].name == "validate"
 
+    def test_map_block_concurrency_limit(self) -> None:
+        """Test that concurrency_limit is preserved in MapOpenEntry."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b", "c"]
+
+        @step
+        def process_item(item: str) -> str:
+            return item.upper()
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        get_items().map(process_item, concurrency_limit=10).agg(aggregate)
+
+        graph = FlowGraph(name="test-flow", head=aggregate)
+
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert graph.entries[1].concurrency_limit == 10
+
+    def test_map_block_concurrency_limit_none_by_default(self) -> None:
+        """Test that concurrency_limit defaults to None."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def process_item(item: str) -> str:
+            return item.upper()
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        get_items().map(process_item).agg(aggregate)
+
+        graph = FlowGraph(name="test-flow", head=aggregate)
+
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert graph.entries[1].concurrency_limit is None
+
 
 class TestFlowGraphValidation:
     """Tests for FlowGraph validation."""

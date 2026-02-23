@@ -79,7 +79,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 else:
                     inner_states[step_name]["End"] = True
 
-            map_state = {
+            map_state: dict[str, Any] = {
                 "Type": "Map",
                 "ItemReader": {
                     "Resource": "arn:aws:states:::s3:getObject",
@@ -108,6 +108,9 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 },
                 "Next": None,
             }
+
+            if entry.concurrency_limit is not None:
+                map_state["MaxConcurrency"] = entry.concurrency_limit
 
             map_state_name = f"{source_name}Map"
             states[map_state_name] = map_state

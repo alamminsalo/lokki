@@ -230,6 +230,58 @@ class TestBuildStateMachineMap:
         assert inner_states["Transform"]["Next"] == "Validate"
         assert inner_states["Validate"]["End"] is True
 
+    def test_map_block_with_concurrency_limit(self) -> None:
+        """Test state machine with Map block concurrency_limit."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b", "c"]
+
+        @step
+        def process(item: str) -> str:
+            return item.upper()
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        get_items().map(process, concurrency_limit=10).agg(aggregate)
+
+        graph = FlowGraph(name="test-flow", head=aggregate)
+
+        config = LokkiConfig()
+        sm = build_state_machine(graph, config)
+
+        map_state = sm["States"]["GetItemsMap"]
+        assert map_state["Type"] == "Map"
+        assert map_state["MaxConcurrency"] == 10
+
+    def test_map_block_without_concurrency_limit(self) -> None:
+        """Test state machine with Map block without concurrency_limit."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def process(item: str) -> str:
+            return item.upper()
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        get_items().map(process).agg(aggregate)
+
+        graph = FlowGraph(name="test-flow", head=aggregate)
+
+        config = LokkiConfig()
+        sm = build_state_machine(graph, config)
+
+        map_state = sm["States"]["GetItemsMap"]
+        assert map_state["Type"] == "Map"
+        assert "MaxConcurrency" not in map_state
+
 
 class TestBuildStateMachineComplex:
     """Tests for complex state machine scenarios."""

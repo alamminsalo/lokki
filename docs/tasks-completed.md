@@ -691,6 +691,35 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 
 ---
 
+## Milestone 33 — Map Concurrency Limit ✅
+
+### T33.1 — Add concurrency_limit to MapBlock ✅
+- Added `concurrency_limit: int | None = None` parameter to `MapBlock.__init__()`
+- Stored concurrency_limit on the MapBlock instance
+
+### T33.2 — Update StepNode.map() to accept concurrency_limit ✅
+- Modified `StepNode.map()` to accept `concurrency_limit` parameter
+- Passed it to the newly created `MapBlock`
+
+### T33.3 — Update graph.py MapOpenEntry ✅
+- Added `concurrency_limit: int | None` field to `MapOpenEntry` dataclass
+- Updated FlowGraph resolution to populate this field from MapBlock
+
+### T33.4 — Update state machine generation ✅
+- Modified `state_machine.py` to add `MaxConcurrency` to Map state when set
+
+### T33.5 — Update SAM template generation ✅
+- Added MaxConcurrency to Map state in SAM template (if applicable)
+
+### T33.6 — Unit tests ✅
+- Added tests for concurrency_limit in decorators, graph, and state machine modules
+- All tests pass (271 total)
+
+### T33.7 — Update documentation ✅
+- Added concurrency_limit usage to docs/design.md with example
+
+---
+
 ## File Statistics
 
 | Metric | Value |
@@ -699,6 +728,7 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 | Total lines | ~3,000 |
 | Test files | 15 |
 | Test coverage | ~80%+ |
+| Tests | 271 |
 
 ---
 

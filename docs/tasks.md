@@ -1244,3 +1244,43 @@ _Purpose_: Add support for running steps as AWS Batch jobs in addition to Lambda
 - Ensure `docs/requirements.md` reflects Batch support
 - Ensure `docs/design.md` reflects Batch architecture
 - Add example to README showing Batch usage
+
+---
+
+## Milestone 33 — Map Concurrency Limit
+
+_Purpose_: Add Step Functions Map state concurrency limit to control parallel execution.
+
+### T33.1 — Add concurrency_limit to MapBlock
+
+- Add `concurrency_limit: int | None = None` parameter to `MapBlock.__init__()`
+- Store concurrency_limit on the MapBlock instance
+
+### T33.2 — Update StepNode.map() to accept concurrency_limit
+
+- Modify `StepNode.map()` to accept `concurrency_limit` parameter
+- Pass it to the newly created `MapBlock`
+
+### T33.3 — Update graph.py MapOpenEntry
+
+- Add `concurrency_limit: int | None` field to `MapOpenEntry` dataclass
+- Update FlowGraph resolution to populate this field from MapBlock
+
+### T33.4 — Update state machine generation
+
+- Modify `state_machine.py` to add `MaxConcurrency` to Map state when set
+- Map the concurrency_limit value to the AWS Step Functions MaxConcurrency field
+
+### T33.5 — Update SAM template generation
+
+- Add MaxConcurrency to Map state in SAM template if applicable
+
+### T33.6 — Unit tests
+
+- Add tests for concurrency_limit in decorators and graph
+- Add tests for state machine MaxConcurrency generation
+
+### T33.7 — Update documentation
+
+- Add concurrency_limit usage to docs/design.md
+- Add example to README
