@@ -35,6 +35,18 @@ def build_template(
         "PackageType": {"Type": "String", "Default": config.lambda_cfg.package_type},
     }
 
+    has_batch_steps = _has_batch_steps(graph)
+
+    if has_batch_steps:
+        parameters["BatchJobQueue"] = {
+            "Type": "String",
+            "Default": config.batch_cfg.job_queue,
+        }
+        parameters["BatchJobDefinitionName"] = {
+            "Type": "String",
+            "Default": config.batch_cfg.job_definition_name,
+        }
+
     resources["LambdaExecutionRole"] = {
         "Type": "AWS::IAM::Role",
         "Properties": {
@@ -178,6 +190,106 @@ def build_template(
         },
     }
 
+    if has_batch_steps:
+        batch_image = config.batch_cfg.image or "${ECRRepoPrefix}/lokki:${ImageTag}"
+        resources["BatchExecutionRole"] = {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                            "Action": "sts:AssumeRole",
+                        }
+                    ],
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "S3Access",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": ["s3:GetObject", "s3:PutObject"],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": (
+                                                "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
+                                            )
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "PolicyName": "LogsAccess",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                    ],
+                                    "Resource": "*",
+                                }
+                            ],
+                        },
+                    },
+                ],
+            },
+        }
+
+        resources["BatchJobDefinition"] = {
+            "Type": "AWS::Batch::JobDefinition",
+            "Properties": {
+                "JobDefinitionName": {"Ref": "BatchJobDefinitionName"},
+                "Type": "container",
+                "ContainerProperties": {
+                    "Image": {"Fn::Sub": batch_image},
+                    "Vcpus": config.batch_cfg.vcpu,
+                    "Memory": config.batch_cfg.memory_mb,
+                    "JobRoleArn": {"Fn::GetAtt": ["BatchExecutionRole", "Arn"]},
+                    "LogConfiguration": {
+                        "LogDriver": "awslogs",
+                        "Options": {
+                            "awslogs-group": "/aws/batch/${FlowName}",
+                            "awslogs-region": {"Ref": "AWS::Region"},
+                            "awslogs-stream-prefix": "batch",
+                        },
+                    },
+                },
+                "RetryStrategy": {"Attempts": 1},
+            },
+        }
+
+        sfn_role = resources["StepFunctionsExecutionRole"]
+        sfn_role["Properties"]["Policies"].append(
+            {
+                "PolicyName": "BatchAccess",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "batch:SubmitJob",
+                                "batch:DescribeJobs",
+                                "batch:TerminateJob",
+                            ],
+                            "Resource": "*",
+                        }
+                    ],
+                },
+            }
+        )
+
     resources["StateMachine"] = {
         "Type": "AWS::StepFunctions::StateMachine",
         "Properties": {
@@ -198,3 +310,21 @@ def build_template(
     }
 
     return yaml.dump(template, default_flow_style=False, sort_keys=False)
+
+
+def _has_batch_steps(graph: FlowGraph) -> bool:
+    """Check if the graph has any Batch steps."""
+    from lokki.graph import MapCloseEntry, MapOpenEntry, TaskEntry
+
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            if entry.job_type == "batch":
+                return True
+        elif isinstance(entry, MapOpenEntry):
+            for step in entry.inner_steps:
+                if getattr(step, "job_type", "lambda") == "batch":
+                    return True
+        elif isinstance(entry, MapCloseEntry):
+            if getattr(entry.agg_step, "job_type", "lambda") == "batch":
+                return True
+    return False

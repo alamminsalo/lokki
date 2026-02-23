@@ -69,7 +69,7 @@ def fetch_weather(
     return weather_data
 
 
-@step
+@step(job_type="batch", vcpu=4, memory_mb=8192)
 def run_duckdb_analysis(weather_data: list[dict]) -> dict:
     """Run all analyses in a single DuckDB connection."""
     con = duckdb.connect()

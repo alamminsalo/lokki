@@ -27,6 +27,8 @@ FROM public.ecr.aws/lambda/python:{image_tag}
 COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
 COPY handler.py ${{LAMBDA_TASK_ROOT}}/handler.py
+COPY batch.py ${{LAMBDA_TASK_ROOT}}/batch.py
+COPY batch_main.py ${{LAMBDA_TASK_ROOT}}/batch_main.py
 
 ENV LAMBDA_TASK_ROOT=/var/task
 
@@ -57,6 +59,35 @@ if step_func is None:
 from lokki.runtime.handler import make_handler
 
 lambda_handler = make_handler(step_func)
+"""
+
+BATCH_HANDLER_TEMPLATE = """import os
+import sys
+
+# Add current directory to path for module imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+step_name = os.environ.get("LOKKI_STEP_NAME", "")
+if not step_name:
+    raise ValueError("LOKKI_STEP_NAME environment variable not set")
+
+module_name = os.environ.get("LOKKI_MODULE_NAME", "")
+if not module_name:
+    raise ValueError("LOKKI_MODULE_NAME environment variable not set")
+
+import importlib
+
+mod = importlib.import_module(module_name)
+
+step_node = getattr(mod, step_name, None)
+if step_node is None:
+    raise ValueError(f"Step function '{step_name}' not found in module '{module_name}'")
+
+step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
+
+from lokki.runtime.batch import make_batch_handler
+
+batch_handler = make_batch_handler(step_func)
 """
 
 
@@ -99,6 +130,15 @@ def _generate_docker_packages(
 
     handler_content = SHARED_HANDLER_TEMPLATE
     (lambdas_dir / "handler.py").write_text(handler_content)
+
+    batch_handler_content = BATCH_HANDLER_TEMPLATE
+    (lambdas_dir / "batch.py").write_text(batch_handler_content)
+
+    runtime_dir = Path(__file__).parent.parent / "runtime"
+    batch_main_src = runtime_dir / "batch_main.py"
+    if batch_main_src.exists():
+        batch_main_content = batch_main_src.read_text()
+        (lambdas_dir / "batch_main.py").write_text(batch_main_content)
 
     pyproject_src = Path(__file__).parent.parent.parent / "pyproject.toml"
     pyproject_target = lambdas_dir / "pyproject.toml"

@@ -10,6 +10,10 @@ class TaskEntry:
     """A single task step in the execution graph."""
 
     node: StepNode
+    job_type: str = "lambda"
+    vcpu: int | None = None
+    memory_mb: int | None = None
+    timeout_seconds: int | None = None
 
 
 @dataclass
@@ -78,7 +82,15 @@ class FlowGraph:
                 and id(current._map_block) not in processed_blocks
             ):
                 processed_blocks.add(id(current._map_block))
-                self.entries.append(TaskEntry(node=current))
+                self.entries.append(
+                    TaskEntry(
+                        node=current,
+                        job_type=current.job_type,
+                        vcpu=current.vcpu,
+                        memory_mb=current.memory_mb,
+                        timeout_seconds=current.timeout_seconds,
+                    )
+                )
                 self._resolve_map_block(current._map_block)
                 if (
                     current._map_block._next is not None
@@ -87,7 +99,15 @@ class FlowGraph:
                     processed_nodes.add(id(current._map_block._next))
                 current = current._map_block._next
             else:
-                self.entries.append(TaskEntry(node=current))
+                self.entries.append(
+                    TaskEntry(
+                        node=current,
+                        job_type=current.job_type,
+                        vcpu=current.vcpu,
+                        memory_mb=current.memory_mb,
+                        timeout_seconds=current.timeout_seconds,
+                    )
+                )
                 current = current._next
 
         self._validate()

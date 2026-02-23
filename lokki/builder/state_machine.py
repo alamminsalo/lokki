@@ -41,7 +41,11 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             state_name = _to_pascal(entry.node.name)
-            state = _task_state(entry.node, config, graph.name)
+            job_type = entry.job_type or "lambda"
+            if job_type == "batch":
+                state = _batch_task_state(entry, config, graph.name)
+            else:
+                state = _task_state(entry.node, config, graph.name)
             states[state_name] = state
             state_order.append(state_name)
 
@@ -58,16 +62,22 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
             for i, step_node in enumerate(entry.inner_steps):
                 step_name = _to_pascal(step_node.name)
-                inner_states[step_name] = {
-                    "Type": "Task",
-                    "Resource": _lambda_arn(config, step_node.name, graph.name),
-                    "ResultPath": "$.result",
-                }
+                job_type = getattr(step_node, "job_type", "lambda") or "lambda"
+                if job_type == "batch":
+                    inner_states[step_name] = _batch_task_state_from_node(
+                        step_node, config, graph.name
+                    )
+                else:
+                    inner_states[step_name] = {
+                        "Type": "Task",
+                        "Resource": _lambda_arn(config, step_node.name, graph.name),
+                        "ResultPath": "$.result",
+                    }
 
                 if i < len(entry.inner_steps) - 1:
                     inner_states[step_name]["Next"] = step_names[i + 1]
                 else:
-                    inner_states[step_name]["End"] = True  # type: ignore[assignment]
+                    inner_states[step_name]["End"] = True
 
             map_state = {
                 "Type": "Map",
@@ -110,7 +120,11 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
         elif isinstance(entry, MapCloseEntry):
             state_name = _to_pascal(entry.agg_step.name)
-            state = _task_state(entry.agg_step, config, graph.name)
+            job_type = getattr(entry.agg_step, "job_type", "lambda") or "lambda"
+            if job_type == "batch":
+                state = _batch_task_state_from_node(entry.agg_step, config, graph.name)
+            else:
+                state = _task_state(entry.agg_step, config, graph.name)
             states[state_name] = state
             state_order.append(state_name)
 
@@ -133,10 +147,90 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
 
 def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str, Any]:
-    """Generate a Task state for a step."""
+    """Generate a Task state for a Lambda step."""
     state: dict[str, Any] = {
         "Type": "Task",
         "Resource": _lambda_arn(config, step_node.name, flow_name),
+        "ResultPath": "$.result",
+        "Next": None,
+    }
+
+    retry_config = getattr(step_node, "retry", None)
+    if retry_config and retry_config.retries > 0:
+        state["Retry"] = _build_retry_field(retry_config)
+
+    return state
+
+
+def _batch_task_state(
+    entry: Any, config: LokkiConfig, flow_name: str
+) -> dict[str, Any]:
+    """Generate a Task state for a Batch step."""
+    vcpu = entry.vcpu if entry.vcpu is not None else config.batch_cfg.vcpu
+    memory_mb = (
+        entry.memory_mb if entry.memory_mb is not None else config.batch_cfg.memory_mb
+    )
+
+    state: dict[str, Any] = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::batch:submitJob.sync",
+        "Parameters": {
+            "JobDefinition": {"Ref": "BatchJobDefinition"},
+            "JobName.$": f"States.Format('{flow_name}-{{}}', $.step_name)",
+            "JobQueue": {"Ref": "BatchJobQueue"},
+            "ContainerOverrides": {
+                "Vcpus": vcpu,
+                "Memory": memory_mb,
+            },
+            "Environment": [
+                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
+                {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
+                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
+                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.result.result_url"},
+            ],
+        },
+        "ResultPath": "$.result",
+        "Next": None,
+    }
+
+    retry_config = getattr(entry, "retry", None)
+    if retry_config and retry_config.retries > 0:
+        state["Retry"] = _build_retry_field(retry_config)
+
+    return state
+
+
+def _batch_task_state_from_node(
+    step_node: Any, config: LokkiConfig, flow_name: str
+) -> dict[str, Any]:
+    """Generate a Task state for a Batch step from a StepNode."""
+    vcpu = step_node.vcpu if step_node.vcpu is not None else config.batch_cfg.vcpu
+    memory_mb = (
+        step_node.memory_mb
+        if step_node.memory_mb is not None
+        else config.batch_cfg.memory_mb
+    )
+
+    state: dict[str, Any] = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::batch:submitJob.sync",
+        "Parameters": {
+            "JobDefinition": {"Ref": "BatchJobDefinition"},
+            "JobName.$": f"States.Format('{flow_name}-{{}}', $.step_name)",
+            "JobQueue": {"Ref": "BatchJobQueue"},
+            "ContainerOverrides": {
+                "Vcpus": vcpu,
+                "Memory": memory_mb,
+            },
+            "Environment": [
+                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
+                {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
+                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
+                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.item.result_url"},
+            ],
+        },
         "ResultPath": "$.result",
         "Next": None,
     }
