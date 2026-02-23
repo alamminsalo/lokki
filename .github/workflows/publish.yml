@@ -57,19 +57,19 @@ jobs:
       # Install dependencies
       # ---------------------------
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --dev --frozen
 
       # ---------------------------
       # Run tests
       # ---------------------------
       - name: Test
-        run: pytest
+        run: uv run pytest
 
       # ---------------------------
       # Lint
       # ---------------------------
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       # ---------------------------
       # Build wheel + sdist
