@@ -7,9 +7,13 @@ import json
 import pickle
 import shutil
 import tempfile
+from collections.abc import Sequence
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 from lokki.store.protocol import DataStore
 
@@ -66,7 +70,7 @@ class LocalStore(DataStore):
         flow_name: str | None = None,
         run_id: str | None = None,
         step_name: str | None = None,
-        items: list[dict[str, Any]] | None = None,
+        items: Sequence[dict[str, Any]] | None = None,
         *,
         bucket: str | None = None,
         key: str | None = None,

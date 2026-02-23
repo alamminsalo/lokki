@@ -322,7 +322,7 @@ def _has_batch_steps(graph: FlowGraph) -> bool:
     return False
 
 
-def _build_batch_environment(config: LokkiConfig) -> list[dict[str, str]]:
+def _build_batch_environment(config: LokkiConfig) -> list[dict[str, Any]]:
     """Build environment variables for Batch jobs from config."""
     env = [
         {"Name": "LOKKI_S3_BUCKET", "Value": {"Ref": "S3Bucket"}},
