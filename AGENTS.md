@@ -1,4 +1,10 @@
-# AGENTS.md - Development Guidelines for lokki
+# AGENTS.md - Development Guidelines for lokki (lokkiflow pypi package)
+
+## Getting Started
+
+Before working on the codebase, read:
+- **README.md** - Project overview, quickstart, and usage examples
+- **docs/*.md** - Spec files with requirements, design, and tasks
 
 ## Requirements
 
@@ -42,7 +48,7 @@ Services required:
 
 When testing with example projects:
 
-1. **Bump version and publish lokki to pypiserver:**
+1. **Bump version and publish lokkiflow to pypiserver:**
    ```bash
    # Edit pyproject.toml - bump version number (e.g., 0.3.0 -> 0.3.1)
    # Build the package
@@ -53,7 +59,7 @@ When testing with example projects:
 
 2. **Update example project to use new version:**
    ```bash
-   # Edit examples/weather/pyproject.toml - update lokki version constraint
+   # Edit examples/weather/pyproject.toml - update lokkiflow version constraint
    cd examples/weather
    uv sync
    ```
@@ -132,6 +138,7 @@ class TestClassName:
 
 | File | Purpose |
 |------|---------|
+| README.md | Project overview, quickstart, and usage examples |
 | docs/requirements.md | User requirements and configuration reference |
 | docs/design.md | Architecture and implementation details |
 | docs/tasks.md | Planned milestones |
