@@ -4,7 +4,7 @@
   <img src="assets/logo.svg" width="200">
 </p>
 
-[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://pypi.org/project/lokki/)
+[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://pypi.org/project/lokkiflow/)
 [![Test Coverage](https://img.shields.io/badge/coverage-80%25-green)](https://github.com/anomalyco/lokki/actions)
 [![Tests](https://img.shields.io/badge/tests-251%20passed-green)](https://github.com/anomalyco/lokki/actions)
 
@@ -23,13 +23,13 @@ A Python library for defining, building, and deploying data pipelines to AWS Ste
 ## Installation
 
 ```bash
-pip install lokki
+pip install lokkiflow
 ```
 
 Or install by uv (recommended):
 
 ```bash
-uv add lokki
+uv add lokkiflow
 ```
 
 ## Quick Start

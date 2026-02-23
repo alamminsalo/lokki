@@ -184,7 +184,7 @@ def _generate_shared_zip_package(
     uv_path = shutil.which("uv")
     if uv_path:
         subprocess.run(
-            [uv_path, "pip", "install", "--target", str(shared_zip_dir), "lokki"],
+            [uv_path, "pip", "install", "--target", str(shared_zip_dir), "lokkiflow"],
             check=False,
             capture_output=True,
         )
