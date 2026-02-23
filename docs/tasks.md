@@ -1086,3 +1086,38 @@ _Purpose_: Add end-to-end integration tests with LocalStack.
 ### T30.4 — Document integration testing
 
 - Add integration test instructions to dev/README.md
+
+---
+
+## Milestone 31 — Migrate to moto for AWS mocking
+
+_Purpose_: Replace MagicMock/patch patterns with moto for more realistic and maintainable AWS testing.
+
+### T31.1 — Migrate test_s3.py to moto
+
+- Replace `@patch("lokki.s3.boto3")` with `@mock_aws`
+- Use real S3 operations via boto3 client
+- Test actual S3 bucket operations
+
+### T31.2 — Migrate test_show.py to moto
+
+- Replace `@patch("lokki.show.boto3.client")` with `@mock_aws`
+- Use real Step Functions client
+- Test actual state machine operations
+
+### T31.3 — Migrate test_logs.py to moto
+
+- Replace `@patch("lokki.logs.boto3.client")` with `@mock_aws`
+- Use real CloudWatch Logs client
+- Test actual log group and stream operations
+
+### T31.4 — Migrate test_destroy.py to moto
+
+- Replace `@patch("lokki.destroy.boto3.client")` with `@mock_aws`
+- Use real CloudFormation client
+- Test actual stack operations
+
+### T31.5 — Run tests to verify migration
+
+- Run all tests to ensure no regressions
+- Verify coverage remains consistent

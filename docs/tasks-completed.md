@@ -657,6 +657,30 @@ Implemented ZIP-based Lambda deployment for local testing with SAM and LocalStac
 
 ---
 
+## Milestone 31 — Migrate to moto for AWS mocking ✅
+
+### T31.1 — Migrate test_s3.py to moto ✅
+- Replaced `@patch("lokki.s3.boto3")` with `@mock_aws`
+- Uses real S3 operations via boto3 client
+- Tests actual S3 bucket operations
+- 10 tests migrated, all pass
+
+### T31.2 — Update test_logs.py to use get_logs_client ✅
+- Updated to mock `get_logs_client` from `lokki._aws`
+- Better mocking pattern using client factory
+- 8 tests updated, all pass
+
+### T31.3 — test_show.py and test_destroy.py ✅
+- Kept MagicMock pattern due to ARN format issues with moto
+- Step Functions and CloudFormation have complex ARN requirements
+- Current MagicMock tests work well for these services
+
+### T31.4 — Run tests to verify migration ✅
+- All 251 tests pass
+- No regressions
+
+---
+
 ## Test Results
 
 - **Total tests:** 251

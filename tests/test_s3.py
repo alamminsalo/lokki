@@ -2,9 +2,10 @@
 
 import gzip
 import pickle
-from unittest.mock import MagicMock, patch
 
+import boto3
 import pytest
+from moto import mock_aws
 
 from lokki.s3 import _parse_url, read, write
 
@@ -49,28 +50,27 @@ class TestParseUrl:
 class TestWrite:
     """Tests for write function."""
 
-    @patch("lokki.s3.boto3")
-    def test_write_returns_s3_url(self, mock_boto3: MagicMock) -> None:
+    @mock_aws
+    def test_write_returns_s3_url(self) -> None:
         """Test that write returns the s3:// URL."""
-        mock_s3 = MagicMock()
-        mock_boto3.client.return_value = mock_s3
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="my-bucket")
 
         result = write("my-bucket", "path/to/obj.pkl.gz", {"key": "value"})
 
         assert result == "s3://my-bucket/path/to/obj.pkl.gz"
-        mock_s3.put_object.assert_called_once()
 
-    @patch("lokki.s3.boto3")
-    def test_write_serializes_with_gzip_pickle(self, mock_boto3: MagicMock) -> None:
+    @mock_aws
+    def test_write_serializes_with_gzip_pickle(self) -> None:
         """Test that write uses gzip and pickle."""
-        mock_s3 = MagicMock()
-        mock_boto3.client.return_value = mock_s3
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="bucket")
 
         test_obj = {"data": [1, 2, 3]}
         write("bucket", "key", test_obj)
 
-        call_args = mock_s3.put_object.call_args
-        body = call_args.kwargs["Body"]
+        response = s3.get_object(Bucket="bucket", Key="key")
+        body = response["Body"].read()
 
         uncompressed = gzip.decompress(body)
         unpickled = pickle.loads(uncompressed)
@@ -80,41 +80,35 @@ class TestWrite:
 class TestRead:
     """Tests for read function."""
 
-    @patch("lokki.s3.boto3")
-    def test_read_deserializes_object(self, mock_boto3: MagicMock) -> None:
+    @mock_aws
+    def test_read_deserializes_object(self) -> None:
         """Test that read deserializes the object from S3."""
-        mock_s3 = MagicMock()
-        mock_boto3.client.return_value = mock_s3
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="my-bucket")
 
         test_obj = {"result": "success"}
         serialized = gzip.compress(
             pickle.dumps(test_obj, protocol=pickle.HIGHEST_PROTOCOL)
         )
-        mock_s3.get_object.return_value = {
-            "Body": MagicMock(read=MagicMock(return_value=serialized))
-        }
+        s3.put_object(Bucket="my-bucket", Key="path/to/obj.pkl.gz", Body=serialized)
 
         result = read("s3://my-bucket/path/to/obj.pkl.gz")
 
         assert result == test_obj
-        mock_s3.get_object.assert_called_once_with(
-            Bucket="my-bucket", Key="path/to/obj.pkl.gz"
-        )
 
-    @patch("lokki.s3.boto3")
-    def test_read_uses_parsed_url(self, mock_boto3: MagicMock) -> None:
+    @mock_aws
+    def test_read_uses_parsed_url(self) -> None:
         """Test that read correctly uses parsed bucket and key."""
-        mock_s3 = MagicMock()
-        mock_boto3.client.return_value = mock_s3
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="bucket")
 
         test_obj = "test data"
         serialized = gzip.compress(
             pickle.dumps(test_obj, protocol=pickle.HIGHEST_PROTOCOL)
         )
-        mock_s3.get_object.return_value = {
-            "Body": MagicMock(read=MagicMock(return_value=serialized))
-        }
+        s3.put_object(Bucket="bucket", Key="key", Body=serialized)
 
         read("s3://bucket/key")
 
-        mock_s3.get_object.assert_called_with(Bucket="bucket", Key="key")
+        response = s3.get_object(Bucket="bucket", Key="key")
+        assert response is not None
