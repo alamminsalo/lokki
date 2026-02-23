@@ -1,5 +1,5 @@
 [project]
-name = "lokki"
+name = "lokkiflow"
 version = "0.3.10"
 description = "Python library for defining, building, and deploying data pipelines to AWS Step Functions"
 readme = "README.md"
