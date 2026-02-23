@@ -44,11 +44,16 @@ def build_sam_template(
         env_vars["Variables"].update(config.lambda_cfg.env)
 
         if package_type == "zip":
+            python_runtime = (
+                config.lambda_cfg.base_image.split(":")[-1]
+                if ":" in config.lambda_cfg.base_image
+                else "python3.13"
+            )
             resources[to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Serverless::Function",
                 "Properties": {
                     "FunctionName": f"{graph.name}-{step_name}",
-                    "Runtime": "python3.13",
+                    "Runtime": python_runtime,
                     "Handler": "handler.lambda_handler",
                     "CodeUri": "lambdas/function.zip",
                     "Timeout": config.lambda_cfg.timeout,

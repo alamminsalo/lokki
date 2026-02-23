@@ -8,7 +8,7 @@ import yaml
 
 from lokki._utils import get_step_names, to_pascal
 from lokki.config import LokkiConfig
-from lokki.graph import FlowGraph
+from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
 def build_template(
@@ -249,6 +249,7 @@ def build_template(
                     "Vcpus": config.batch_cfg.vcpu,
                     "Memory": config.batch_cfg.memory_mb,
                     "JobRoleArn": {"Fn::GetAtt": ["BatchExecutionRole", "Arn"]},
+                    "Environment": _build_batch_environment(config),
                     "LogConfiguration": {
                         "LogDriver": "awslogs",
                         "Options": {
@@ -306,9 +307,7 @@ def build_template(
 
 
 def _has_batch_steps(graph: FlowGraph) -> bool:
-    """Check if the graph has any Batch steps."""
-    from lokki.graph import MapCloseEntry, MapOpenEntry, TaskEntry
-
+    """Check if the graph contains any Batch job steps."""
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             if entry.job_type == "batch":
@@ -321,3 +320,15 @@ def _has_batch_steps(graph: FlowGraph) -> bool:
             if getattr(entry.agg_step, "job_type", "lambda") == "batch":
                 return True
     return False
+
+
+def _build_batch_environment(config: LokkiConfig) -> list[dict[str, str]]:
+    """Build environment variables for Batch jobs from config."""
+    env = [
+        {"Name": "LOKKI_S3_BUCKET", "Value": {"Ref": "S3Bucket"}},
+        {"Name": "LOKKI_FLOW_NAME", "Value": {"Ref": "FlowName"}},
+        {"Name": "LOKKI_AWS_ENDPOINT", "Value": {"Ref": "AWSEndpoint"}},
+    ]
+    for key, value in config.batch_cfg.env.items():
+        env.append({"Name": key, "Value": value})
+    return env

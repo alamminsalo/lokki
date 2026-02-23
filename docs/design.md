@@ -1186,9 +1186,22 @@ def load_config() -> "LokkiConfig":
 @dataclass
 class LambdaConfig:
     package_type: str = "image"  # "image" or "zip"
+    base_image: str = "public.ecr.aws/lambda/python:3.13"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
+    env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class BatchConfig:
+    job_queue: str = ""
+    job_definition_name: str = ""
+    base_image: str = "python:3.11-slim"
+    timeout_seconds: int = 3600
+    vcpu: int = 2
+    memory_mb: int = 4096
+    image: str = ""
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -1200,12 +1213,14 @@ class LokkiConfig:
     # AWS configuration (from [aws] table)
     artifact_bucket: str = ""
     image_repository: str = ""  # "local", "docker.io", or ECR prefix
+    aws_region: str = "us-east-1"
     aws_endpoint: str = ""
     stepfunctions_role: str = ""
     lambda_execution_role: str = ""
 
     # Nested config
     lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
+    batch_cfg: BatchConfig = field(default_factory=BatchConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     @classmethod
@@ -1213,23 +1228,37 @@ class LokkiConfig:
         """Create a LokkiConfig from a dictionary."""
         aws_config = d.get("aws", {})
         lambda_config = d.get("lambda", {})
+        batch_config = d.get("batch", {})
         logging_config = d.get("logging", {})
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
+            base_image=lambda_config.get("base_image", "public.ecr.aws/lambda/python:3.13"),
             timeout=lambda_config.get("timeout", 900),
             memory=lambda_config.get("memory", 512),
             image_tag=lambda_config.get("image_tag", "latest"),
             env=lambda_config.get("env", {}),
         )
+        batch_cfg = BatchConfig(
+            job_queue=batch_config.get("job_queue", ""),
+            job_definition_name=batch_config.get("job_definition_name", ""),
+            base_image=batch_config.get("base_image", "python:3.11-slim"),
+            timeout_seconds=batch_config.get("timeout_seconds", 3600),
+            vcpu=batch_config.get("vcpu", 2),
+            memory_mb=batch_config.get("memory_mb", 4096),
+            image=batch_config.get("image", ""),
+            env=batch_config.get("env", {}),
+        )
         return cls(
             build_dir=d.get("build_dir", "lokki-build"),
             artifact_bucket=aws_config.get("artifact_bucket", ""),
             image_repository=aws_config.get("image_repository", ""),
+            aws_region=aws_config.get("region", "us-east-1"),
             aws_endpoint=aws_config.get("endpoint", ""),
             stepfunctions_role=aws_config.get("stepfunctions_role", ""),
             lambda_execution_role=aws_config.get("lambda_execution_role", ""),
             lambda_cfg=lambda_cfg,
+            batch_cfg=batch_cfg,
             logging=LoggingConfig(
                 level=logging_config.get("level", "INFO"),
                 format=logging_config.get("format", "human"),

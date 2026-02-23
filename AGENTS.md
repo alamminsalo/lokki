@@ -130,6 +130,7 @@ class TestClassName:
 |----------|---------|
 | `LOKKI_ARTIFACT_BUCKET` | S3 bucket for pipeline data |
 | `LOKKI_IMAGE_REPOSITORY` | Docker repository (local, docker.io, or ECR prefix) |
+| `LOKKI_AWS_REGION` | AWS region for deployments |
 | `LOKKI_AWS_ENDPOINT` | AWS endpoint for local development |
 | `LOKKI_BUILD_DIR` | Output directory for build artifacts |
 | `LOKKI_LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) |

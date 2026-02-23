@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-BATCH_DOCKERFILE_TEMPLATE = """FROM python:3.11-slim AS builder
+from lokki.config import LokkiConfig
+
+BATCH_DOCKERFILE_TEMPLATE = """FROM {base_image} AS builder
 
 RUN pip install uv --no-cache-dir
 
@@ -14,7 +16,7 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps
 
-FROM python:3.11-slim
+FROM {base_image}
 
 COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
@@ -56,11 +58,13 @@ batch_handler = make_batch_handler(step_func)
 
 def generate_batch_files(
     build_dir: Path,
+    config: LokkiConfig | None = None,
 ) -> Path:
     """Generate Batch-specific packaging files.
 
     Args:
         build_dir: The build output directory
+        config: Optional LokkiConfig for customizable base image
 
     Returns:
         Path to the generated batch directory
@@ -68,7 +72,14 @@ def generate_batch_files(
     batch_dir = build_dir / "batch"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    dockerfile_content = BATCH_DOCKERFILE_TEMPLATE
+    if config and config.batch_cfg.base_image:
+        base_image = config.batch_cfg.base_image
+    else:
+        from lokki.config import BatchConfig
+
+        base_image = BatchConfig().base_image
+
+    dockerfile_content = BATCH_DOCKERFILE_TEMPLATE.format(base_image=base_image)
     (batch_dir / "Dockerfile").write_text(dockerfile_content)
 
     handler_content = BATCH_HANDLER_TEMPLATE

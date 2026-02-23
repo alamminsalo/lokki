@@ -389,6 +389,10 @@ artifact_bucket = "my-lokki-artifacts"
 # Defaults to ECR for the current AWS profile.
 image_repository = "local"
 
+# AWS region for deployments (default: us-east-1)
+# Can also be set via LOKKI_AWS_REGION environment variable
+region = "us-west-2"
+
 # AWS endpoint URL for local development (e.g., LocalStack)
 # Leave empty to use real AWS endpoints
 # Example: "http://localhost:4566"
@@ -405,6 +409,11 @@ lambda_execution_role = "arn:aws:iam::123456789::role/lokki-lambda-execution-rol
 # - zip: ZIP archive uploaded directly to Lambda
 # Use "zip" for LocalStack testing or simpler deployments
 package_type = "image"
+
+# Docker base image for Lambda functions
+# Default: public.ecr.aws/lambda/python:3.13
+# Custom images must be compatible with Lambda Python runtime
+base_image = "public.ecr.aws/lambda/python:3.13"
 
 # Default Lambda resource configuration
 timeout = 900          # seconds
@@ -600,10 +609,15 @@ Batch support is configured in `lokki.toml`:
 [batch]
 job_queue = "my-batch-job-queue"
 job_definition_name = "my-job-def"
-timeout = 3600        # Job timeout in seconds
-vcpu = 2              # Default vCPUs
-memory_mb = 4096      # Default memory in MB
-image = ""            # Docker image (defaults to Lambda image if empty)
+base_image = "python:3.11-slim"  # Docker base image for Batch jobs
+timeout_seconds = 3600          # Job timeout in seconds
+vcpu = 2                        # Default vCPUs
+memory_mb = 4096                # Default memory in MB
+image = ""                      # Docker image (defaults to Lambda image if empty)
+
+# Environment variables injected into every Batch job
+[batch.env]
+MY_VAR = "value"
 ```
 
 ### Step-Level Overrides

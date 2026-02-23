@@ -12,7 +12,7 @@ from pathlib import Path
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph
 
-SHARED_DOCKERFILE_TEMPLATE = """FROM public.ecr.aws/lambda/python:{image_tag} AS builder
+SHARED_DOCKERFILE_TEMPLATE = """FROM {base_image} AS builder
 
 RUN pip install uv --no-cache-dir
 
@@ -22,7 +22,7 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps
 
-FROM public.ecr.aws/lambda/python:{image_tag}
+FROM {base_image}
 
 COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
@@ -124,8 +124,8 @@ def _generate_docker_packages(
     graph: FlowGraph, config: LokkiConfig, lambdas_dir: Path
 ) -> Path:
     """Generate Docker-based Lambda packages (container images)."""
-    image_tag = config.lambda_cfg.image_tag
-    dockerfile_content = SHARED_DOCKERFILE_TEMPLATE.format(image_tag=image_tag)
+    base_image = config.lambda_cfg.base_image
+    dockerfile_content = SHARED_DOCKERFILE_TEMPLATE.format(base_image=base_image)
     (lambdas_dir / "Dockerfile").write_text(dockerfile_content)
 
     handler_content = SHARED_HANDLER_TEMPLATE

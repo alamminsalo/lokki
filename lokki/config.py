@@ -50,6 +50,7 @@ class LambdaConfig:
 
     Attributes:
         package_type: Package type - "image" (Docker) or "zip".
+        base_image: Docker base image for Lambda.
         timeout: Lambda timeout in seconds.
         memory: Lambda memory in MB.
         image_tag: Docker image tag for Lambda.
@@ -57,6 +58,7 @@ class LambdaConfig:
     """
 
     package_type: str = "image"  # "image" or "zip"
+    base_image: str = "public.ecr.aws/lambda/python:3.13"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
@@ -70,18 +72,22 @@ class BatchConfig:
     Attributes:
         job_queue: AWS Batch job queue name.
         job_definition_name: Base name for job definitions.
+        base_image: Docker base image for Batch jobs.
         timeout_seconds: Default job timeout in seconds.
         vcpu: Default number of vCPUs for jobs.
         memory_mb: Default memory in MB for jobs.
         image: Docker image for jobs (defaults to Lambda image if empty).
+        env: Environment variables passed to Batch jobs.
     """
 
     job_queue: str = ""
     job_definition_name: str = ""
+    base_image: str = "python:3.11-slim"
     timeout_seconds: int = 3600
     vcpu: int = 2
     memory_mb: int = 4096
     image: str = ""
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -92,6 +98,7 @@ class LokkiConfig:
         build_dir: Output directory for build artifacts.
         artifact_bucket: S3 bucket for pipeline data and artifacts.
         image_repository: Docker repository ("local", "docker.io", or ECR prefix).
+        aws_region: AWS region for deployments.
         aws_endpoint: AWS endpoint for local development (e.g., LocalStack).
         stepfunctions_role: ARN of existing Step Functions execution role.
         lambda_execution_role: ARN of existing Lambda execution role.
@@ -107,6 +114,7 @@ class LokkiConfig:
     # AWS configuration (from [aws] table)
     artifact_bucket: str = ""
     image_repository: str = ""  # "local", "docker.io", or ECR prefix
+    aws_region: str = "us-east-1"
     aws_endpoint: str = ""
     stepfunctions_role: str = ""
     lambda_execution_role: str = ""
@@ -127,6 +135,9 @@ class LokkiConfig:
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
+            base_image=lambda_config.get(
+                "base_image", "public.ecr.aws/lambda/python:3.13"
+            ),
             timeout=lambda_config.get("timeout", 900),
             memory=lambda_config.get("memory", 512),
             image_tag=lambda_config.get("image_tag", "latest"),
@@ -135,10 +146,12 @@ class LokkiConfig:
         batch_cfg = BatchConfig(
             job_queue=batch_config.get("job_queue", ""),
             job_definition_name=batch_config.get("job_definition_name", ""),
+            base_image=batch_config.get("base_image", "python:3.11-slim"),
             timeout_seconds=batch_config.get("timeout_seconds", 3600),
             vcpu=batch_config.get("vcpu", 2),
             memory_mb=batch_config.get("memory_mb", 4096),
             image=batch_config.get("image", ""),
+            env=batch_config.get("env", {}),
         )
         logging_cfg = LoggingConfig(
             level=logging_config.get("level", "INFO"),
@@ -150,6 +163,7 @@ class LokkiConfig:
             build_dir=d.get("build_dir", "lokki-build"),
             artifact_bucket=aws_config.get("artifact_bucket", ""),
             image_repository=aws_config.get("image_repository", ""),
+            aws_region=aws_config.get("region", "us-east-1"),
             aws_endpoint=aws_config.get("endpoint", ""),
             stepfunctions_role=aws_config.get("stepfunctions_role", ""),
             lambda_execution_role=aws_config.get("lambda_execution_role", ""),
@@ -175,6 +189,8 @@ def load_config() -> LokkiConfig:
         config.artifact_bucket = env_bucket
     if env_repo := os.environ.get("LOKKI_IMAGE_REPOSITORY"):
         config.image_repository = env_repo
+    if env_region := os.environ.get("LOKKI_AWS_REGION"):
+        config.aws_region = env_region
     if env_endpoint := os.environ.get("LOKKI_AWS_ENDPOINT"):
         config.aws_endpoint = env_endpoint
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
