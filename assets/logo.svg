@@ -34,11 +34,6 @@
   </defs>
 
   <!-- Outer border -->
-  <circle cx="250" cy="250" r="240"
-          fill="none"
-          stroke="black"
-          stroke-width="5"/>
-
   <g clip-path="url(#clipCircle)">
 
     <!-- Sky -->
