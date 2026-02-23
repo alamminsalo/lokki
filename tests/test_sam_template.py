@@ -6,11 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from lokki.builder.sam_template import (
-    _get_step_names,
-    _to_pascal,
-    build_sam_template,
-)
+from lokki._utils import get_step_names, to_pascal
+from lokki.builder.sam_template import build_sam_template
 from lokki.config import LokkiConfig
 from lokki.decorators import step
 from lokki.graph import FlowGraph
@@ -19,16 +16,16 @@ from lokki.graph import FlowGraph
 class TestSamTemplateHelpers:
     """Tests for helper functions."""
 
-    def test_to_pascal(self) -> None:
-        assert _to_pascal("get_items") == "GetItems"
+    def testto_pascal(self) -> None:
+        assert to_pascal("get_items") == "GetItems"
 
-    def test_get_step_names_single(self) -> None:
+    def testget_step_names_single(self) -> None:
         @step
         def step1() -> None:
             pass
 
         graph = FlowGraph(name="test-flow", head=step1)
-        names = _get_step_names(graph)
+        names = get_step_names(graph)
         assert names == {"step1"}
 
 

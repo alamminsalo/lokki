@@ -7,9 +7,9 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from lokki import s3
 from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
+from lokki.store import S3Store
 
 if TYPE_CHECKING:
     from lokki.decorators import RetryConfig
@@ -38,8 +38,7 @@ def make_batch_handler(
         run_id = event.get("run_id", "unknown")
         step_name = fn.__name__
 
-        if endpoint:
-            s3.set_endpoint(endpoint)
+        store = S3Store(bucket, endpoint)
 
         logger.info(
             f"Batch job invoked: flow={flow_name}, step={step_name}, run_id={run_id}",
@@ -60,7 +59,7 @@ def make_batch_handler(
                     f"Reading input from {input_url}",
                     extra={"event": "input_read", "step": step_name},
                 )
-                input_data = s3.read(input_url)
+                input_data = store.read(input_url)
                 result = fn(input_data)
             elif "result_url" in event:
                 result_url = event["result_url"]
@@ -68,7 +67,7 @@ def make_batch_handler(
                     f"Reading input from {result_url}",
                     extra={"event": "input_read", "step": step_name},
                 )
-                input_data = s3.read(result_url)
+                input_data = store.read(result_url)
                 result = fn(input_data)
             elif "result_urls" in event:
                 result_urls = event["result_urls"]
@@ -80,7 +79,7 @@ def make_batch_handler(
                         "count": len(result_urls),
                     },
                 )
-                inputs = [s3.read(url) for url in result_urls]
+                inputs = [store.read(url) for url in result_urls]
                 result = fn(inputs)
             else:
                 import inspect
@@ -93,27 +92,22 @@ def make_batch_handler(
                 )
                 result = fn(**kwargs)
 
-            key = f"lokki/{flow_name}/{run_id}/{step_name}/output.pkl.gz"
-            output_url = s3.write(bucket, key, result)
+            output_url = store.write(flow_name, run_id, step_name, result)
 
             if isinstance(result, list):
                 item_urls = []
                 for i, item in enumerate(result):
-                    item_key = (
-                        f"lokki/{flow_name}/{run_id}/{step_name}/{i}/output.pkl.gz"
-                    )
-                    item_url = s3.write(bucket, item_key, item)
+                    item_url = store.write(flow_name, run_id, f"{step_name}/{i}", item)
                     item_urls.append(item_url)
 
                 manifest = [
                     {"item_url": item_url, "index": i}
                     for i, item_url in enumerate(item_urls)
                 ]
-                map_manifest_key = (
-                    f"lokki/{flow_name}/{run_id}/{step_name}/map_manifest.json"
-                )
 
-                s3.write_manifest(bucket, map_manifest_key, manifest)
+                map_manifest_key = store.write_manifest(
+                    flow_name, run_id, step_name, manifest
+                )
                 duration = (datetime.now() - start_time).total_seconds()
                 logger.info(
                     f"Batch step completed: {step_name} in {duration:.3f}s",

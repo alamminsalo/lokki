@@ -336,16 +336,6 @@ def _create_shared_zip(shared_zip_dir: Path, step_names: set[str]) -> None:
 
 def _get_step_names_from_graph(graph: FlowGraph) -> set[str]:
     """Extract unique step names from graph."""
-    from lokki.graph import MapCloseEntry, MapOpenEntry, TaskEntry
+    from lokki._utils import get_step_names
 
-    names = set()
-    for entry in graph.entries:
-        if isinstance(entry, TaskEntry):
-            names.add(entry.node.name)
-        elif isinstance(entry, MapOpenEntry):
-            names.add(entry.source.name)
-            for step in entry.inner_steps:
-                names.add(step.name)
-        elif isinstance(entry, MapCloseEntry):
-            names.add(entry.agg_step.name)
-    return names
+    return get_step_names(graph)

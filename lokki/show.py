@@ -5,14 +5,10 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-import boto3
 from botocore.exceptions import ClientError
 
 from lokki._aws import get_sfn_client
 from lokki._errors import ShowError
-
-# Backward compatibility
-boto3 = boto3
 
 
 def show_executions(

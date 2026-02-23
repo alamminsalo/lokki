@@ -15,13 +15,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
-from lokki._store import LocalStore
 from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
-
-# Backward compatibility
-LocalStore = LocalStore
+from lokki.store import LocalStore
 
 
 class LocalRunner:

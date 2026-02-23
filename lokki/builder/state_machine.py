@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from lokki._utils import to_pascal
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
@@ -40,7 +41,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
-            state_name = _to_pascal(entry.node.name)
+            state_name = to_pascal(entry.node.name)
             job_type = entry.job_type or "lambda"
             if job_type == "batch":
                 state = _batch_task_state(entry, config, graph.name)
@@ -55,13 +56,13 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             prev_state = state_name
 
         elif isinstance(entry, MapOpenEntry):
-            source_name = _to_pascal(entry.source.name)
+            source_name = to_pascal(entry.source.name)
             inner_states = {}
 
-            step_names = [_to_pascal(step_node.name) for step_node in entry.inner_steps]
+            step_names = [to_pascal(step_node.name) for step_node in entry.inner_steps]
 
             for i, step_node in enumerate(entry.inner_steps):
-                step_name = _to_pascal(step_node.name)
+                step_name = to_pascal(step_node.name)
                 job_type = getattr(step_node, "job_type", "lambda") or "lambda"
                 if job_type == "batch":
                     inner_states[step_name] = _batch_task_state_from_node(
@@ -122,7 +123,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             prev_state = map_state_name
 
         elif isinstance(entry, MapCloseEntry):
-            state_name = _to_pascal(entry.agg_step.name)
+            state_name = to_pascal(entry.agg_step.name)
             job_type = getattr(entry.agg_step, "job_type", "lambda") or "lambda"
             if job_type == "batch":
                 state = _batch_task_state_from_node(entry.agg_step, config, graph.name)
@@ -267,12 +268,3 @@ def _lambda_arn(config: LokkiConfig, step_name: str, flow_name: str) -> str:
         f"arn:aws:lambda:${{AWS::Region}}:${{AWS::AccountId}}:"
         f"function:{flow_name}-{step_name}"
     )
-
-
-def __to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    return "".join(word.capitalize() for word in name.split("_"))
-
-
-# Backward compatibility - keep _to_pascal available as well
-_to_pascal = __to_pascal

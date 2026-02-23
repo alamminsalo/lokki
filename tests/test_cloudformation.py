@@ -2,28 +2,25 @@
 
 import yaml
 
-from lokki.builder.cloudformation import (
-    _get_step_names,
-    _to_pascal,
-    build_template,
-)
+from lokki._utils import get_step_names, to_pascal
+from lokki.builder.cloudformation import build_template
 from lokki.config import LokkiConfig
 from lokki.decorators import step
 from lokki.graph import FlowGraph
 
 
 class TestToPascal:
-    """Tests for _to_pascal helper."""
+    """Tests for to_pascal helper."""
 
     def test_simple_name(self) -> None:
-        assert _to_pascal("get_items") == "GetItems"
+        assert to_pascal("get_items") == "GetItems"
 
     def test_single_word(self) -> None:
-        assert _to_pascal("process") == "Process"
+        assert to_pascal("process") == "Process"
 
 
 class TestGetStepNames:
-    """Tests for _get_step_names helper."""
+    """Tests for get_step_names helper."""
 
     def test_single_step(self) -> None:
         @step
@@ -31,7 +28,7 @@ class TestGetStepNames:
             return ["a"]
 
         graph = FlowGraph(name="test-flow", head=get_items)
-        names = _get_step_names(graph)
+        names = get_step_names(graph)
         assert names == {"get_items"}
 
     def test_two_steps(self) -> None:
@@ -45,7 +42,7 @@ class TestGetStepNames:
 
         step1().next(step2)
         graph = FlowGraph(name="test-flow", head=step2)
-        names = _get_step_names(graph)
+        names = get_step_names(graph)
         assert names == {"step1", "step2"}
 
     def test_map_block(self) -> None:
@@ -63,7 +60,7 @@ class TestGetStepNames:
 
         get_items().map(process).agg(aggregate)
         graph = FlowGraph(name="test-flow", head=aggregate)
-        names = _get_step_names(graph)
+        names = get_step_names(graph)
         assert names == {"get_items", "process", "aggregate"}
 
 

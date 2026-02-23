@@ -10,7 +10,7 @@ from lokki.destroy import DestroyError, destroy_stack
 class TestDestroyStack:
     """Tests for destroy_stack function."""
 
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_destroy_stack_success(self, mock_boto_client) -> None:
         mock_cf = MagicMock()
         mock_boto_client.return_value = mock_cf
@@ -21,7 +21,7 @@ class TestDestroyStack:
         mock_cf.delete_stack.assert_called_once_with(StackName="test-stack")
         mock_cf.get_waiter.assert_called_once_with("stack_delete_complete")
 
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_destroy_stack_not_found(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -35,7 +35,7 @@ class TestDestroyStack:
         with pytest.raises(DestroyError, match="does not exist"):
             destroy_stack(stack_name="nonexistent-stack", confirm=True)
 
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_destroy_stack_delete_failure(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -49,7 +49,7 @@ class TestDestroyStack:
         with pytest.raises(DestroyError, match="Failed to delete"):
             destroy_stack(stack_name="test-stack", confirm=True)
 
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_destroy_stack_waiter_failure(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -68,7 +68,7 @@ class TestDestroyConfirmation:
     """Tests for destroy confirmation prompt."""
 
     @patch("lokki.destroy.input")
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_user_aborts(self, mock_boto_client, mock_input) -> None:
         mock_input.return_value = "n"
 
@@ -79,7 +79,7 @@ class TestDestroyConfirmation:
         mock_input.assert_called_once()
 
     @patch("lokki.destroy.input")
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_user_confirms_yes(self, mock_boto_client, mock_input) -> None:
         mock_input.return_value = "y"
         mock_cf = MagicMock()
@@ -91,7 +91,7 @@ class TestDestroyConfirmation:
         mock_cf.delete_stack.assert_called_once()
 
     @patch("lokki.destroy.input")
-    @patch("lokki.destroy.boto3.client")
+    @patch("lokki.destroy.get_cf_client")
     def test_user_confirms_yes_uppercase(self, mock_boto_client, mock_input) -> None:
         mock_input.return_value = "YES"
         mock_cf = MagicMock()

@@ -6,16 +6,9 @@ from typing import Any
 
 import yaml
 
-from lokki._utils import to_pascal
-from lokki.builder._graph import get_step_names
+from lokki._utils import get_step_names, to_pascal
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph
-
-# Backward compatibility
-get_step_names = get_step_names
-_to_pascal = to_pascal
-_get_step_names = get_step_names
-to_pascal = to_pascal
 
 
 def build_template(

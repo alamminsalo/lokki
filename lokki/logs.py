@@ -7,14 +7,10 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import boto3
 from botocore.exceptions import ClientError
 
 from lokki._aws import get_logs_client
 from lokki._errors import LogsError
-
-# Backward compatibility
-boto3 = boto3
 
 
 def fetch_logs(

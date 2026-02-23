@@ -1,4 +1,4 @@
-"""Local store implementation for lokki."""
+"""Local filesystem store implementation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import tempfile
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+from lokki.store.protocol import DataStore
 
 
 def _to_json_safe(obj: Any) -> Any:
@@ -23,8 +25,8 @@ def _to_json_safe(obj: Any) -> Any:
     return obj
 
 
-class LocalStore:
-    """Local file-based store mirroring S3 interface."""
+class LocalStore(DataStore):
+    """Local file-based store implementing DataStore interface."""
 
     def __init__(self, base_dir: Path | None = None) -> None:
         self.base_dir = base_dir or Path(tempfile.mkdtemp(prefix="lokki-"))
@@ -35,24 +37,56 @@ class LocalStore:
     ) -> Path:
         return self.base_dir / flow_name / run_id / step_name / filename
 
-    def write(self, flow_name: str, run_id: str, step_name: str, obj: Any) -> str:
-        path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
+    def write(
+        self,
+        flow_name: str | None = None,
+        run_id: str | None = None,
+        step_name: str | None = None,
+        obj: Any = None,
+        *,
+        bucket: str | None = None,
+        key: str | None = None,
+    ) -> str:
+        if bucket and key:
+            path = Path(bucket) / key
+        elif flow_name and run_id and step_name:
+            path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
+        else:
+            raise ValueError(
+                "Must provide either (bucket, key) or (flow_name, run_id, step_name)"
+            )
+
         path.parent.mkdir(parents=True, exist_ok=True)
         data = gzip.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
         path.write_bytes(data)
         return str(path)
 
     def write_manifest(
-        self, flow_name: str, run_id: str, step_name: str, items: list[dict[str, Any]]
+        self,
+        flow_name: str | None = None,
+        run_id: str | None = None,
+        step_name: str | None = None,
+        items: list[dict[str, Any]] | None = None,
+        *,
+        bucket: str | None = None,
+        key: str | None = None,
     ) -> str:
-        path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
+        if bucket and key:
+            path = Path(bucket) / key
+        elif flow_name and run_id and step_name:
+            path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
+        else:
+            raise ValueError(
+                "Must provide either (bucket, key) or (flow_name, run_id, step_name)"
+            )
+
         path.parent.mkdir(parents=True, exist_ok=True)
         serialized_items = _to_json_safe(items)
         path.write_text(json.dumps(serialized_items))
         return str(path)
 
-    def read(self, path: str) -> Any:
-        data = Path(path).read_bytes()
+    def read(self, location: str) -> Any:
+        data = Path(location).read_bytes()
         return pickle.loads(gzip.decompress(data))
 
     def cleanup(self) -> None:

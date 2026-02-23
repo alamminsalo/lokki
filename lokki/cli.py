@@ -84,19 +84,9 @@ def _parse_flow_params(
 
 def _get_step_names(graph: FlowGraph) -> list[str]:
     """Get all step names from a flow graph."""
-    from lokki.graph import MapCloseEntry, MapOpenEntry, TaskEntry
+    from lokki._utils import get_step_names
 
-    step_names: list[str] = []
-    for entry in graph.entries:
-        if isinstance(entry, TaskEntry):
-            step_names.append(entry.node.name)
-        elif isinstance(entry, MapOpenEntry):
-            step_names.append(entry.source.name)
-            for inner_step in entry.inner_steps:
-                step_names.append(inner_step.name)
-        elif isinstance(entry, MapCloseEntry):
-            step_names.append(entry.agg_step.name)
-    return step_names
+    return list(get_step_names(graph))
 
 
 def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:

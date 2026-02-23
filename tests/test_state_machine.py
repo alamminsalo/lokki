@@ -2,10 +2,10 @@
 
 from unittest.mock import MagicMock
 
+from lokki._utils import to_pascal
 from lokki.builder.state_machine import (
     _lambda_arn,
     _task_state,
-    _to_pascal,
     build_state_machine,
 )
 from lokki.config import LokkiConfig
@@ -14,23 +14,23 @@ from lokki.graph import FlowGraph
 
 
 class TestToPascal:
-    """Tests for _to_pascal helper function."""
+    """Tests for to_pascal helper function."""
 
     def test_simple_name(self) -> None:
         """Test converting simple snake_case to PascalCase."""
-        assert _to_pascal("get_items") == "GetItems"
+        assert to_pascal("get_items") == "GetItems"
 
     def test_single_word(self) -> None:
         """Test single word conversion."""
-        assert _to_pascal("process") == "Process"
+        assert to_pascal("process") == "Process"
 
     def test_multiple_words(self) -> None:
         """Test multiple words."""
-        assert _to_pascal("get_items_from_s3") == "GetItemsFromS3"
+        assert to_pascal("get_items_from_s3") == "GetItemsFromS3"
 
     def test_already_pascal(self) -> None:
         """Test handling of already PascalCase."""
-        assert _to_pascal("GetItems") == "Getitems"
+        assert to_pascal("GetItems") == "Getitems"
 
 
 class TestLambdaArn:

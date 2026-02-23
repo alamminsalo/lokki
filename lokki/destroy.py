@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import sys
 
-import boto3
 from botocore.exceptions import ClientError
 
 from lokki._aws import get_cf_client
 from lokki._errors import DestroyError
-
-# Backward compatibility
-boto3 = boto3
 
 
 def destroy_stack(

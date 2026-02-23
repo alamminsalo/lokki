@@ -64,7 +64,7 @@ class TestFormatExecution:
 class TestShowExecutions:
     """Tests for show_executions function."""
 
-    @patch("lokki.show.boto3.client")
+    @patch("lokki.show.get_sfn_client")
     def test_list_executions(self, mock_boto_client) -> None:
         mock_sf = MagicMock()
         mock_boto_client.return_value = mock_sf
@@ -94,7 +94,7 @@ class TestShowExecutions:
         assert result[1]["status"] == "FAILED"
         mock_sf.list_executions.assert_called_once()
 
-    @patch("lokki.show.boto3.client")
+    @patch("lokki.show.get_sfn_client")
     def test_describe_execution(self, mock_boto_client) -> None:
         mock_sf = MagicMock()
         mock_boto_client.return_value = mock_sf
@@ -111,7 +111,7 @@ class TestShowExecutions:
         assert result[0]["run_id"] == "specific-run"
         mock_sf.describe_execution.assert_called_once()
 
-    @patch("lokki.show.boto3.client")
+    @patch("lokki.show.get_sfn_client")
     def test_execution_not_found(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -124,7 +124,7 @@ class TestShowExecutions:
         with pytest.raises(ShowError, match="Execution"):
             show_executions(flow_name="test-flow", run_id="nonexistent")
 
-    @patch("lokki.show.boto3.client")
+    @patch("lokki.show.get_sfn_client")
     def test_state_machine_not_found(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
