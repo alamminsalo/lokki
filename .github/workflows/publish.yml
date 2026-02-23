@@ -1,0 +1,84 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    environment: release
+
+    steps:
+      # ---------------------------
+      # Checkout source
+      # ---------------------------
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---------------------------
+      # Setup Python + uv
+      # ---------------------------
+      - name: Setup uv + Python
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # ---------------------------
+      # Verify tag vs version
+      # (CRITICAL FOR INFRA LIBS)
+      # ---------------------------
+      - name: Validate version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PACKAGE_VERSION=$(python - <<EOF
+          import tomllib
+          with open("pyproject.toml","rb") as f:
+              print(tomllib.load(f)["project"]["version"])
+          EOF
+          )
+
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Version mismatch!"
+            exit 1
+          fi
+
+      # ---------------------------
+      # Install dependencies
+      # ---------------------------
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+
+      # ---------------------------
+      # Run tests
+      # ---------------------------
+      - name: Test
+        run: uv run pytest
+
+      # ---------------------------
+      # Lint
+      # ---------------------------
+      - name: Lint
+        run: uv run ruff check lokki
+
+      # ---------------------------
+      # Build wheel + sdist
+      # ---------------------------
+      - name: Build package
+        run: uv build
+
+      # ---------------------------
+      # Publish to PyPI (Trusted OIDC)
+      # ---------------------------
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

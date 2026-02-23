@@ -17,4 +17,4 @@ twine upload --repository-url "http://$PYPI_HOST" dist/*
 
 echo "=== Done! ==="
 echo "To install from local PyPI, add to your Dockerfile:"
-echo "  RUN pip install --index-url http://$PYPI_HOST/simple lokki"
+echo "  RUN pip install --index-url http://$PYPI_HOST/simple lokkiflow"
