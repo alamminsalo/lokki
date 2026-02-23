@@ -237,21 +237,16 @@ class Deployer:
                 "--region",
                 self.region,
             ]
+            params = f"FlowName={flow_name} S3Bucket={artifact_bucket}"
             if aws_endpoint:
-                cmd.extend(
-                    [
-                        "--parameter-overrides",
-                        f"FlowName={flow_name} S3Bucket={artifact_bucket} "
-                        f"AWSEndpoint={aws_endpoint}",
-                    ]
-                )
-            else:
-                cmd.extend(
-                    [
-                        "--parameter-overrides",
-                        f"FlowName={flow_name} S3Bucket={artifact_bucket}",
-                    ]
-                )
+                params += f" AWSEndpoint={aws_endpoint}"
+
+            cmd.extend(
+                [
+                    "--parameter-overrides",
+                    params,
+                ]
+            )
 
             try:
                 result = subprocess.run(
@@ -273,6 +268,8 @@ class Deployer:
         if aws_endpoint:
             endpoint_args = ["--endpoint-url", aws_endpoint]
 
+        params = f"FlowName={flow_name} S3Bucket={artifact_bucket}"
+
         cmd = (
             aws_cmd
             + endpoint_args
@@ -284,7 +281,7 @@ class Deployer:
                 "--capabilities",
                 "CAPABILITY_IAM",
                 "--parameter-overrides",
-                f"FlowName={flow_name} S3Bucket={artifact_bucket}",
+                params,
                 "--region",
                 self.region,
             ]

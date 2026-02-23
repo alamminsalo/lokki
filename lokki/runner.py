@@ -69,16 +69,25 @@ class LocalRunner:
         node = entry.node
         step_name = node.name
         retry_config = node.retry
+        job_type = entry.job_type or "lambda"
 
         step_logger = StepLogger(step_name, self.logger)
         step_logger.start()
+
+        if job_type == "batch":
+            self.logger.info(
+                "Running Batch step '%s' locally (use AWS Batch for production)",
+                step_name,
+            )
 
         start_time = datetime.now()
         last_exception: Exception | None = None
 
         for attempt in range(retry_config.retries + 1):
             try:
-                result = self._execute_step(node, store, flow_name, run_id, params)
+                result = self._execute_step(
+                    node, store, flow_name, run_id, params, job_type
+                )
 
                 duration = (datetime.now() - start_time).total_seconds()
                 store.write(flow_name, run_id, step_name, result)
@@ -123,6 +132,7 @@ class LocalRunner:
         flow_name: str,
         run_id: str,
         params: dict[str, Any],
+        job_type: str = "lambda",
     ) -> Any:
         """Execute a single step function without retry logic."""
         result = None

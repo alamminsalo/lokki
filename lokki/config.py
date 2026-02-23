@@ -46,6 +46,18 @@ class LambdaConfig:
 
 
 @dataclass
+class BatchConfig:
+    """AWS Batch configuration."""
+
+    job_queue: str = ""
+    job_definition_name: str = ""
+    timeout_seconds: int = 3600
+    vcpu: int = 2
+    memory_mb: int = 4096
+    image: str = ""
+
+
+@dataclass
 class LokkiConfig:
     """Main lokki configuration."""
 
@@ -61,6 +73,7 @@ class LokkiConfig:
 
     # Nested config
     lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
+    batch_cfg: BatchConfig = field(default_factory=BatchConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -69,6 +82,7 @@ class LokkiConfig:
         """Create a LokkiConfig from a dictionary."""
         aws_config = d.get("aws", {})
         lambda_config = d.get("lambda", {})
+        batch_config = d.get("batch", {})
         logging_config = d.get("logging", {})
 
         lambda_cfg = LambdaConfig(
@@ -77,6 +91,14 @@ class LokkiConfig:
             memory=lambda_config.get("memory", 512),
             image_tag=lambda_config.get("image_tag", "latest"),
             env=lambda_config.get("env", {}),
+        )
+        batch_cfg = BatchConfig(
+            job_queue=batch_config.get("job_queue", ""),
+            job_definition_name=batch_config.get("job_definition_name", ""),
+            timeout_seconds=batch_config.get("timeout_seconds", 3600),
+            vcpu=batch_config.get("vcpu", 2),
+            memory_mb=batch_config.get("memory_mb", 4096),
+            image=batch_config.get("image", ""),
         )
         logging_cfg = LoggingConfig(
             level=logging_config.get("level", "INFO"),
@@ -92,6 +114,7 @@ class LokkiConfig:
             stepfunctions_role=aws_config.get("stepfunctions_role", ""),
             lambda_execution_role=aws_config.get("lambda_execution_role", ""),
             lambda_cfg=lambda_cfg,
+            batch_cfg=batch_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )
@@ -118,5 +141,9 @@ def load_config() -> LokkiConfig:
         config.build_dir = env_build
     if env_log_level := os.environ.get("LOKKI_LOG_LEVEL"):
         config.logging.level = env_log_level
+    if env_batch_queue := os.environ.get("LOKKI_BATCH_JOB_QUEUE"):
+        config.batch_cfg.job_queue = env_batch_queue
+    if env_batch_def := os.environ.get("LOKKI_BATCH_JOB_DEFINITION"):
+        config.batch_cfg.job_definition_name = env_batch_def
 
     return config

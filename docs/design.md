@@ -9,15 +9,16 @@
 5. [CLI Entry Point](#5-cli-entry-point)
 6. [Local Runner](#6-local-runner)
 7. [Build Pipeline](#7-build-pipeline)
-8. [S3 & Serialisation Layer](#8-s3--serialisation-layer)
+8. [S3 \& Serialisation Layer](#8-s3--serialisation-layer)
 9. [State Machine Generation](#9-state-machine-generation)
 10. [CloudFormation Template Generation](#10-cloudformation-template-generation)
 11. [Lambda Packaging](#11-lambda-packaging)
 12. [Runtime Wrapper (Lambda Handler)](#12-runtime-wrapper-lambda-handler)
 13. [Configuration](#13-configuration)
 14. [Data Flow Walkthrough](#14-data-flow-walkthrough)
-15. [Logging & Observability](#15-logging--observability)
+15. [Logging \& Observability](#15-logging--observability)
 16. [Deploy Command](#16-deploy-command)
+17. [AWS Batch Support](#17-aws-batch-support)
 
 ---
 
@@ -1793,3 +1794,377 @@ aws --endpoint-url=http://localhost:4566 s3 ls lokki/
 | Deploy to LocalStack | `python flow_script.py deploy` |
 | Test function | `sam local invoke GetBirdsFunction` |
 | List S3 contents | `aws --endpoint-url=http://localhost:4566 s3 ls lokki/` |
+
+---
+
+## 17. AWS Batch Support
+
+### Overview
+
+AWS Batch support allows running compute-intensive steps as Batch jobs instead of Lambda functions. This is useful for:
+- Workloads that exceed Lambda's 15-minute timeout
+- Tasks requiring more than 10GB of storage
+- Jobs needing more than 10GB memory
+- GPU-enabled processing
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│              Step Functions                   │
+│   (orchestrates Lambda and Batch jobs)       │
+└───────────────┬─────────────────────────────┘
+                │
+        ┌───────┴───────┐
+        ▼               ▼
+┌───────────────┐ ┌───────────────┐
+│  Lambda       │ │  AWS Batch    │
+│  Invoke       │ │  SubmitJob    │
+│  (lightweight │ │  (heavy      │
+│   tasks)      │ │   compute)   │
+└───────────────┘ └───────────────┘
+```
+
+### Configuration
+
+#### Global Batch Configuration
+
+Batch settings are configured in `lokki.toml`:
+
+```toml
+[batch]
+job_queue = "my-job-queue"
+job_definition_name = "my-job-def"
+timeout = 3600        # Default job timeout (seconds)
+vcpu = 2              # Default vCPUs
+memory_mb = 4096      # Default memory (MB)
+image = ""            # Docker image (defaults to Lambda image if empty)
+```
+
+#### Step-Level Overrides
+
+Each `@step` can override Batch configuration:
+
+```python
+@step(job_type="batch", vcpu=8, memory_mb=16384, timeout_seconds=7200)
+def heavy_processing(data):
+    return expensive_computation(data)
+```
+
+### Decorator Design
+
+#### JobTypeConfig
+
+```python
+@dataclass
+class JobTypeConfig:
+    job_type: str = "lambda"  # "lambda" or "batch"
+    vcpu: int | None = None   # None = use global config
+    memory_mb: int | None = None
+    timeout_seconds: int | None = None
+```
+
+#### StepNode Updates
+
+The `StepNode` class is extended to store job type information:
+
+```python
+class StepNode:
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        retry: RetryConfig | None = None,
+        job_type: str = "lambda",
+        vcpu: int | None = None,
+        memory_mb: int | None = None,
+        timeout_seconds: int | None = None,
+    ) -> None:
+        self.fn = fn
+        self.name = fn.__name__
+        self.retry = retry or RetryConfig()
+        self.job_type = job_type  # "lambda" or "batch"
+        self.vcpu = vcpu
+        self.memory_mb = memory_mb
+        self.timeout_seconds = timeout_seconds
+        # ... existing fields
+```
+
+#### @step Decorator
+
+The decorator accepts job type parameters:
+
+```python
+def step(
+    fn: Callable[..., Any] | None = None,
+    *,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    job_type: str = "lambda",
+    vcpu: int | None = None,
+    memory_mb: int | None = None,
+    timeout_seconds: int | None = None,
+) -> StepNode | Callable[[Callable[..., Any]], StepNode]:
+    # ... implementation
+```
+
+### Execution Graph
+
+The `FlowGraph` resolves job type information into the execution graph:
+
+```python
+@dataclass
+class TaskEntry:
+    node: StepNode
+    job_type: str = "lambda"
+    vcpu: int | None = None
+    memory_mb: int | None = None
+    timeout_seconds: int | None = None
+```
+
+During resolution, step-level values override global values:
+- If `step.vcpu` is set, use it
+- Else use `config.batch.vcpu`
+
+### Runtime Handler
+
+#### Lambda Handler (existing)
+
+The Lambda handler (`lokki/runtime/handler.py`) remains unchanged for Lambda steps.
+
+#### Batch Handler (new)
+
+A new Batch handler (`lokki/runtime/batch.py`) handles Batch job execution:
+
+```python
+def make_batch_handler(
+    fn: Callable[..., Any],
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Create a handler for AWS Batch jobs."""
+    
+    def batch_handler(event: dict[str, Any]) -> dict[str, Any]:
+        from lokki import s3
+        from lokki._aws import get_batch_client
+        
+        cfg = load_config()
+        batch_client = get_batch_client(cfg.aws_endpoint)
+        
+        # Read input from S3
+        input_url = event.get("input_url")
+        if input_url:
+            input_data = s3.read(input_url)
+        else:
+            input_data = None
+        
+        # Execute the step function
+        if input_data is not None:
+            result = fn(input_data)
+        else:
+            result = fn()
+        
+        # Write output to S3
+        output_url = s3.write(cfg.artifact_bucket, output_key, result)
+        
+        return {
+            "result_url": output_url,
+            "run_id": event.get("run_id", "unknown"),
+        }
+    
+    return batch_handler
+```
+
+### State Machine Generation
+
+The state machine generation is updated to support mixed Lambda/Batch steps:
+
+#### Task State for Lambda (existing)
+
+```json
+{
+  "Type": "Task",
+  "Resource": "arn:aws:lambda:us-east-1:123456789:function:myflow-my_step",
+  "Resource": "arn:aws:states:::lambda:invoke",
+  "Parameters": {
+    "FunctionName": "myflow-my_step",
+    "Payload": {
+      "input_url.$": "$.result.result_url",
+      "run_id.$": "$$.Execution.Name"
+    }
+  },
+  "ResultPath": "$.result"
+}
+```
+
+#### Task State for Batch (new)
+
+```json
+{
+  "Type": "Task",
+  "Resource": "arn:aws:states:::batch:submitJob.sync",
+  "Parameters": {
+    "JobDefinition": {"Ref": "BatchJobDefinition"},
+    "JobName.$": "States.Format('{}-{}', $.flow_name, $.step_name)",
+    "JobQueue": {"Ref": "BatchJobQueue"},
+    "ContainerOverrides": {
+      "Vcpus.$": "$.vcpu",
+      "Memory.$": "$.memory",
+      "Command": ["python", "-m", "lokki.runtime.batch_main"]
+    },
+    "Environment": [
+      {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+      {"Name": "LOKKI_FLOW_NAME", "Value.$": "$.flow_name"},
+      {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
+      {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
+      {"Name": "LOKKI_INPUT_URL", "Value.$": "$.result.result_url"}
+    ]
+  },
+  "ResultPath": "$.result"
+}
+```
+
+### CloudFormation Template
+
+#### Parameters
+
+```yaml
+Parameters:
+  BatchJobQueue:
+    Type: String
+    Default: ""
+  BatchJobDefinitionName:
+    Type: String
+    Default: ""
+```
+
+#### Batch Job Definition
+
+```yaml
+BatchJobDefinition:
+  Type: AWS::Batch::JobDefinition
+  Properties:
+    JobDefinitionName: !Sub "${FlowName}-job"
+    Type: container
+    ContainerProperties:
+      Image: !Sub "${ECRRepoPrefix}/lokki:${ImageTag}"
+      Vcpus: 2
+      Memory: 4096
+      JobRoleArn: !GetAtt BatchExecutionRole.Arn
+      LogConfiguration:
+        LogDriver: awslogs
+        Options:
+          "awslogs-group": !Ref AWS::NoValue
+          "awslogs-region": !Ref AWS::Region
+    RetryStrategy:
+      Attempts: 1
+```
+
+#### Batch Execution Role
+
+```yaml
+BatchExecutionRole:
+  Type: AWS::IAM::Role
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal: { Service: "ecs-tasks.amazonaws.com" }
+          Action: "sts:AssumeRole"
+    Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource:
+                - !Sub "arn:aws:s3:::${S3Bucket}/lokki/*"
+      - PolicyName: LogsAccess
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "*"
+```
+
+#### Step Functions Role Updates
+
+```yaml
+- PolicyName: BatchAccess
+  PolicyDocument:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Action:
+          - batch:SubmitJob
+          - batch:DescribeJobs
+          - batch:TerminateJob
+        Resource: "*"
+```
+
+### Local Runner
+
+For local testing, Batch steps execute inline using moto for realistic mocking:
+
+```python
+class LocalRunner:
+    def _run_task(self, entry: TaskEntry, store: LocalStore) -> Any:
+        job_type = entry.job_type
+        
+        if job_type == "batch":
+            return self._run_batch_task_inline(entry, store)
+        else:
+            return self._run_lambda_task(entry, store)
+    
+    def _run_batch_task_inline(self, entry: TaskEntry, store: LocalStore) -> Any:
+        """Run Batch step inline with mocked Batch submission."""
+        # Use moto to mock Batch API
+        # Submit job (mocked), wait for completion, get result
+        # For simplicity, execute function directly in tests
+        pass
+```
+
+### Data Flow Walkthrough (Batch)
+
+```
+StepFunctions execution starts
+│
+├─► GetBirds Lambda (job_type=lambda)
+│     handler reads: no upstream input
+│     writes: s3://bucket/lokki/flow/run_id/get_birds/output.pkl.gz
+│     returns: { "result_url": "s3://...", "run_id": "..." }
+│
+├─► Distributed Map (reads from S3)
+│   │
+│   ├─► ProcessItem Batch Job (job_type=batch)
+│   │     batch_handler reads: s3://bucket/lokki/flow/run_id/.../0/input.pkl.gz
+│   │     executes: fn(item)
+│   │     writes: s3://bucket/lokki/flow/run_id/process_item/0/output.pkl.gz
+│   │     returns: { "result_url": "s3://..." }
+│   │
+│   └─► ResultWriter writes all results to S3
+│
+├─► SaveResults Lambda (job_type=lambda)
+│     reads: list of result URLs
+│     writes: final output to S3
+│
+StepFunctions execution completes
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LOKKI_BATCH_JOB_QUEUE` | Override batch job queue |
+| `LOKKI_BATCH_JOB_DEFINITION` | Override batch job definition |
+
+### Packaging
+
+Both Lambda and Batch handlers need to be included in deployment packages. The Lambda package includes:
+- `lokki/runtime/handler.py` - Lambda handler
+- `lokki/runtime/batch.py` - Batch handler  
+- `lokki/runtime/batch_main.py` - Batch entry point

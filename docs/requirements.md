@@ -437,7 +437,7 @@ The **flow name** is not a configurable field — it is always derived from the 
 | Dependency | Role |
 |---|---|
 | `uv` | Dependency management and virtual environment tooling |
-| `boto3` | AWS SDK for S3, Lambda, Step Functions, and other AWS services |
+| `boto3` | AWS SDK for S3, Lambda, Step Functions, Batch, and other AWS services |
 | Python stdlib `tomllib` | Parsing `lokki.toml` configuration files |
 
 ---
@@ -564,9 +564,104 @@ def fragile_step(data):
 
 ---
 
+## AWS Batch Support
+
+lokki supports running steps as AWS Batch jobs in addition to Lambda functions. This is useful for compute-intensive workloads that exceed Lambda's constraints (15-minute timeout, 10GB storage, memory limits).
+
+### Basic Usage
+
+```python
+from lokki import flow, step
+
+@step
+def get_data():
+    return [1, 2, 3]
+
+@step(job_type="batch", vcpu=8, memory_mb=16384)
+def heavy_compute(item):
+    return expensive_operation(item)
+
+@step
+def save_result(result):
+    return save(result)
+
+@flow
+def my_flow():
+    return get_data().map(heavy_compute).agg(save_result)
+```
+
+### Configuration
+
+Batch support is configured in `lokki.toml`:
+
+```toml
+# lokki.toml
+
+[batch]
+job_queue = "my-batch-job-queue"
+job_definition_name = "my-job-def"
+timeout = 3600        # Job timeout in seconds
+vcpu = 2              # Default vCPUs
+memory_mb = 4096      # Default memory in MB
+image = ""            # Docker image (defaults to Lambda image if empty)
+```
+
+### Step-Level Overrides
+
+Each `@step` can override Batch configuration:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `job_type` | `str` | `"lambda"` | Execution backend: `"lambda"` or `"batch"` |
+| `vcpu` | `int \| None` | `None` | vCPUs (uses global config if `None`) |
+| `memory_mb` | `int \| None` | `None` | Memory in MB (uses global config if `None`) |
+| `timeout_seconds` | `int \| None` | `None` | Timeout in seconds (uses global config if `None`) |
+
+### Mixed Lambda/Batch Steps
+
+A single flow can combine Lambda and Batch steps:
+
+```python
+@step
+def fetch_data():        # Runs as Lambda
+    return load_data()
+
+@step(job_type="batch", vcpu=16, memory_mb=32768)
+def process_heavy(data): # Runs as Batch
+    return heavy_processing(data)
+
+@step
+def save_results(result): # Runs as Lambda
+    return save(result)
+
+@flow
+def mixed_flow():
+    return fetch_data().map(process_heavy).agg(save_results)
+```
+
+### CloudFormation Resources
+
+When deploying a flow with Batch steps, lokki generates:
+
+1. **AWS::Batch::JobDefinition** - Container job definition
+2. **IAM Role** for Batch execution with S3 access
+3. **Step Functions** updated IAM role with Batch permissions (`batch:SubmitJob`, `batch:DescribeJobs`, `batch:TerminateJob`)
+
+### Local Testing
+
+Batch steps can be tested locally using moto for AWS mocking:
+
+```python
+# Batch steps execute inline during local run
+# Input/output handled in-memory rather than S3
+python flow_script.py run
+```
+
+---
+
 ## Non-Functional Requirements
 
-- **Single deployment target**: AWS Step Functions (no other cloud providers in scope).
+- **Multiple execution backends**: AWS Lambda and AWS Batch (extensible for more).
 - **Parallelism**: Map states must support very large fan-out (thousands of items) via the Distributed Map pattern reading from S3.
 - **Minimal boilerplate**: Users write plain Python functions; all AWS plumbing is invisible.
 - **Reproducibility**: Build artifacts are deterministic given the same source and dependency lock file.

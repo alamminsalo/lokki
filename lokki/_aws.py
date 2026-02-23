@@ -51,3 +51,11 @@ def get_sts_client(endpoint: str = "") -> Any:
     if endpoint:
         kwargs["endpoint_url"] = endpoint
     return boto3.client("sts", **kwargs)
+
+
+def get_batch_client(endpoint: str = "", region: str = "us-east-1") -> Any:
+    """Get AWS Batch client with optional endpoint URL."""
+    kwargs: dict[str, str] = {"region_name": region}
+    if endpoint:
+        kwargs["endpoint_url"] = endpoint
+    return boto3.client("batch", **kwargs)

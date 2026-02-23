@@ -31,6 +31,26 @@ class RetryConfig:
             raise ValueError("max_delay must be positive")
 
 
+@dataclass
+class JobTypeConfig:
+    """Configuration for step execution backend (Lambda or Batch)."""
+
+    job_type: str = "lambda"  # "lambda" or "batch"
+    vcpu: int | None = None  # None = use global config
+    memory_mb: int | None = None
+    timeout_seconds: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.job_type not in ("lambda", "batch"):
+            raise ValueError("job_type must be 'lambda' or 'batch'")
+        if self.vcpu is not None and self.vcpu <= 0:
+            raise ValueError("vcpu must be positive")
+        if self.memory_mb is not None and self.memory_mb <= 0:
+            raise ValueError("memory_mb must be positive")
+        if self.timeout_seconds is not None and self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+
+
 class StepNode:
     """Represents a single step in the pipeline."""
 
@@ -38,10 +58,18 @@ class StepNode:
         self,
         fn: Callable[..., Any],
         retry: RetryConfig | None = None,
+        job_type: str = "lambda",
+        vcpu: int | None = None,
+        memory_mb: int | None = None,
+        timeout_seconds: int | None = None,
     ) -> None:
         self.fn = fn
         self.name = fn.__name__
         self.retry = retry or RetryConfig()
+        self.job_type = job_type
+        self.vcpu = vcpu
+        self.memory_mb = memory_mb
+        self.timeout_seconds = timeout_seconds
         self._default_args: tuple[Any, ...] = ()
         self._default_kwargs: dict[str, Any] = {}
         self._flow_kwargs: dict[str, Any] = {}
@@ -128,6 +156,10 @@ def step(
     fn: Callable[..., Any] | None = None,
     *,
     retry: RetryConfig | dict[str, Any] | None = None,
+    job_type: str = "lambda",
+    vcpu: int | None = None,
+    memory_mb: int | None = None,
+    timeout_seconds: int | None = None,
 ) -> StepNode | Callable[[Callable[..., Any]], StepNode]:
     """Decorate a function as a pipeline step.
 
@@ -135,6 +167,10 @@ def step(
         fn: The function to decorate as a step.
         retry: Optional retry configuration. Can be a RetryConfig instance or a dict
                with keys: retries, delay, backoff, max_delay, exceptions.
+        job_type: Execution backend - "lambda" (default) or "batch".
+        vcpu: Number of vCPUs for Batch jobs (overrides global config).
+        memory_mb: Memory in MB for Batch jobs (overrides global config).
+        timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
 
     Example:
         @step
@@ -144,20 +180,31 @@ def step(
         @step(retry={"retries": 3, "delay": 2})
         def unreliable_step(data):
             return risky_call(data)
+
+        @step(job_type="batch", vcpu=8, memory_mb=16384)
+        def heavy_compute(data):
+            return expensive_operation(data)
     """
 
     def decorator(fn: Callable[..., Any]) -> StepNode:
         if retry is None:
-            config = RetryConfig()
+            retry_config = RetryConfig()
         elif isinstance(retry, RetryConfig):
-            config = retry
+            retry_config = retry
         elif isinstance(retry, dict):
-            config = RetryConfig(**retry)
+            retry_config = RetryConfig(**retry)
         else:
             raise TypeError(
                 f"retry must be RetryConfig, dict, or None, got {type(retry).__name__}"
             )
-        return StepNode(fn, retry=config)
+        return StepNode(
+            fn,
+            retry=retry_config,
+            job_type=job_type,
+            vcpu=vcpu,
+            memory_mb=memory_mb,
+            timeout_seconds=timeout_seconds,
+        )
 
     if fn is None:
         return decorator

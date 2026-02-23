@@ -1121,3 +1121,126 @@ _Purpose_: Replace MagicMock/patch patterns with moto for more realistic and mai
 
 - Run all tests to ensure no regressions
 - Verify coverage remains consistent
+
+---
+
+## Milestone 32 — AWS Batch Support
+
+_Purpose_: Add support for running steps as AWS Batch jobs in addition to Lambda functions. This enables compute-intensive workloads that exceed Lambda's constraints.
+
+### T32.1 — Add BatchConfig dataclass
+
+- Add `BatchConfig` dataclass in `config.py`:
+  - `job_queue: str = ""` - AWS Batch job queue name
+  - `job_definition_name: str = ""` - Base name for generated job definition
+  - `timeout_seconds: int = 3600` - Default job timeout
+  - `vcpu: int = 2` - Default vCPUs
+  - `memory_mb: int = 4096` - Default memory in MB
+  - `image: str = ""` - Docker image (defaults to Lambda image)
+- Add `batch_cfg: BatchConfig` to `LokkiConfig`
+
+### T32.2 — Add environment variable overrides
+
+- Add `LOKKI_BATCH_JOB_QUEUE` override
+- Add `LOKKI_BATCH_JOB_DEFINITION` override
+
+### T32.3 — Add JobTypeConfig dataclass
+
+- Add `JobTypeConfig` dataclass in `decorators.py`:
+  - `job_type: str = "lambda"` - "lambda" or "batch"
+  - `vcpu: int | None = None` - None = use global config
+  - `memory_mb: int | None = None`
+  - `timeout_seconds: int | None = None`
+
+### T32.4 — Update StepNode for job_type
+
+- Modify `StepNode.__init__` to accept job_type and step-level parameters
+- Add `job_type`, `vcpu`, `memory_mb`, `timeout_seconds` attributes
+
+### T32.5 — Update @step decorator
+
+- Modify `step()` function to accept `job_type`, `vcpu`, `memory_mb`, `timeout_seconds` parameters
+- Pass these to StepNode constructor
+
+### T32.6 — Update FlowGraph TaskEntry
+
+- Add job_type, vcpu, memory_mb, timeout_seconds fields to `TaskEntry` dataclass
+- Update resolution logic to populate these fields from step or global config
+
+### T32.7 — Add Batch client helper
+
+- Add `get_batch_client(endpoint: str = "", region: str = "us-east-1")` to `lokki/_aws.py`
+
+### T32.8 — Create Batch runtime handler
+
+- Create `lokki/runtime/batch.py` with `make_batch_handler(fn)` function
+- Read input from S3, execute step function, write output to S3
+- Handle error cases
+
+### T32.9 — Create Batch entry point
+
+- Create `lokki/runtime/batch_main.py` as entry point for Batch jobs
+- Reads environment variables, invokes step function
+
+### T32.10 — Update Lambda packaging for Batch
+
+- Update `lambda_pkg.py` to include Batch handler and entry point in packages
+- Ensure both Lambda and Batch steps can execute
+
+### T32.11 — Update state machine generation
+
+- Modify `state_machine.py` to check step's `job_type`
+- Generate Lambda Invoke task for `job_type="lambda"`
+- Generate Batch SubmitJob task for `job_type="batch"`
+- Pass step-specific vcpu, memory via task parameters
+
+### T32.12 — Update CloudFormation template
+
+- Add `BatchJobQueue` and `BatchJobDefinitionName` parameters
+- Add `AWS::Batch::JobDefinition` resource
+- Add `BatchExecutionRole` IAM role
+- Update StepFunctions IAM role with Batch permissions
+
+### T32.13 — Update SAM template for Batch
+
+- Add Batch Job Definition to SAM template if needed
+- Handle mixed Lambda/Batch deployment
+
+### T32.14 — Update LocalRunner for Batch
+
+- Modify `runner.py` to detect Batch steps
+- Implement realistic mocking with moto for Batch API:
+  - Mock Batch client
+  - Simulate job submission, status polling
+  - Execute function inline and return result
+
+### T32.15 — Unit tests for Batch config
+
+- Add tests for BatchConfig parsing in `test_config.py`
+- Test environment variable overrides
+
+### T32.16 — Unit tests for job_type decorator
+
+- Add tests in `test_decorators.py` for job_type parameter
+- Test step-level vcpu/memory overrides
+
+### T32.17 — Unit tests for Batch state machine
+
+- Add tests in `test_state_machine.py` for mixed Lambda/Batch flows
+- Test Batch task has correct SubmitJob.sync resource
+
+### T32.18 — Unit tests for Batch handler
+
+- Create `tests/test_batch.py`
+- Test batch handler reads input, executes function, writes output
+
+### T32.19 — Integration test for Batch
+
+- Add integration test in `test_integration.py` for Batch step execution
+- Test local run with moto mocking
+
+### T32.20 — Update documentation
+
+- Ensure `docs/requirements.md` reflects Batch support
+- Ensure `docs/design.md` reflects Batch architecture
+- Add example to README showing Batch usage

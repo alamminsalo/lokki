@@ -143,15 +143,15 @@ wheels = [
 
 [[package]]
 name = "lokki"
-version = "0.3.3"
+version = "0.3.11"
 source = { registry = "http://localhost:8080/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "pyyaml" },
 ]
-sdist = { url = "http://localhost:8080/packages/lokki-0.3.3.tar.gz", hash = "sha256:d4e5fc135bdf37f689cd554d77a4380bcbf9802be3b87424f467ca1248d98f0c" }
+sdist = { url = "http://localhost:8080/packages/lokki-0.3.11.tar.gz", hash = "sha256:69cfa7119e84adb752361a04ed85bd6f78bdccc5af5fa84aa11f9bf6d2915d70" }
 wheels = [
-    { url = "http://localhost:8080/packages/lokki-0.3.3-py3-none-any.whl", hash = "sha256:85e961257e4dbad73a90a2ca94e70b56d265ea7fef3f0135cf4bab32ec64ab9c" },
+    { url = "http://localhost:8080/packages/lokki-0.3.11-py3-none-any.whl", hash = "sha256:b38c35350dbb2f606b46b3cdc36135c3f3621bbd3a5374274e09869be41faab2" },
 ]
 
 [[package]]
@@ -249,7 +249,7 @@ wheels = [
 
 [[package]]
 name = "weather-example"
-version = "0.1.0"
+version = "0.1.1"
 source = { virtual = "." }
 dependencies = [
     { name = "duckdb" },
@@ -262,6 +262,6 @@ dependencies = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "geopy", specifier = ">=2.4.0" },
-    { name = "lokki", specifier = ">=0.3.3" },
+    { name = "lokki", specifier = ">=0.3.11" },
     { name = "requests", specifier = ">=2.31.0" },
 ]
