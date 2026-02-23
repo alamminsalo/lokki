@@ -803,6 +803,35 @@ The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3:
 
 The preceding `Task` state (the `source` step) is responsible for writing its output list to S3 as the map manifest JSON, and placing the manifest key into the state output.
 
+### Map Concurrency Limit
+
+To limit the number of parallel iterations in a Map state, use `concurrency_limit`:
+
+```python
+@step
+def fetch_flights(route):
+    ...
+
+@step
+def collect_dataframes(dfs):
+    ...
+
+# Usage with concurrency limit of 10
+generate_route_date_pairs(...).map(fetch_flights, concurrency_limit=10).agg(collect_dataframes)
+```
+
+This adds `MaxConcurrency: 10` to the Map state in the generated Step Functions:
+
+```json
+{
+  "Type": "Map",
+  "MaxConcurrency": 10,
+  ...
+}
+```
+
+When `concurrency_limit` is not specified, the Map state runs with unlimited parallelism (up to AWS limits).
+
 ### Inter-state data passing
 
 Each Task state's output is a small JSON object containing only the S3 URL of the result — never the payload itself. This keeps all Step Functions I/O well within the 256 KB state payload limit.

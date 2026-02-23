@@ -22,6 +22,7 @@ class MapOpenEntry:
 
     source: StepNode
     inner_steps: list[StepNode] = field(default_factory=list)
+    concurrency_limit: int | None = None
 
 
 @dataclass
@@ -122,7 +123,13 @@ class FlowGraph:
                 break
             step = step._next
 
-        self.entries.append(MapOpenEntry(source=block.source, inner_steps=inner_steps))
+        self.entries.append(
+            MapOpenEntry(
+                source=block.source,
+                inner_steps=inner_steps,
+                concurrency_limit=block.concurrency_limit,
+            )
+        )
 
         if block._next is not None and block._next._closes_map_block:
             self.entries.append(MapCloseEntry(agg_step=block._next))

@@ -84,9 +84,13 @@ class StepNode:
         self._default_kwargs = kwargs
         return self
 
-    def map(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
-        """Start a Map block with flow-level kwargs."""
-        block = MapBlock(source=self, inner_head=step_node)
+    def map(
+        self, step_node: StepNode, concurrency_limit: int | None = None, **kwargs: Any
+    ) -> MapBlock:
+        """Start a Map block with optional concurrency limit and flow-level kwargs."""
+        block = MapBlock(
+            source=self, inner_head=step_node, concurrency_limit=concurrency_limit
+        )
         step_node._flow_kwargs = kwargs
         self._map_block = block
         return block
@@ -108,12 +112,18 @@ class StepNode:
 class MapBlock:
     """Represents a Map block opened by .map()."""
 
-    def __init__(self, source: StepNode, inner_head: StepNode) -> None:
+    def __init__(
+        self,
+        source: StepNode,
+        inner_head: StepNode,
+        concurrency_limit: int | None = None,
+    ) -> None:
         self.source = source
         self.inner_head = inner_head
         self.inner_tail = inner_head
         self._next: StepNode | None = None
         self._flow_kwargs: dict[str, Any] = {}
+        self.concurrency_limit = concurrency_limit
 
     @property
     def inner_steps(self) -> list[StepNode]:
