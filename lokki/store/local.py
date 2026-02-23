@@ -12,10 +12,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from lokki.store.protocol import DataStore
+
 if TYPE_CHECKING:
     pass
-
-from lokki.store.protocol import DataStore
 
 
 def _to_json_safe(obj: Any) -> Any:

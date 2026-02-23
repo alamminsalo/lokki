@@ -1,6 +1,5 @@
 """Integration tests for local flow execution."""
 
-import pytest
 
 from lokki import flow, step
 from lokki.runner import LocalRunner

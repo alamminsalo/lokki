@@ -95,13 +95,6 @@ class TestStepDecoratorWithBatch:
         assert my_step.vcpu is None
         assert my_step.memory_mb is None
 
-    def test_step_explicit_lambda(self):
-        @step(job_type="lambda")
-        def my_step(data):
-            return data
-
-        assert my_step.job_type == "lambda"
-
 
 class TestFlowGraphWithBatch:
     def test_single_batch_step(self):

@@ -1,9 +1,11 @@
 """Tests for step retry functionality."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from lokki.decorators import RetryConfig, step as step_decorator, StepNode
+import pytest
+
+from lokki.decorators import RetryConfig, StepNode
+from lokki.decorators import step as step_decorator
 
 
 class TestRetryConfig:
@@ -98,8 +100,8 @@ class TestRetryInRunner:
 
     def test_retry_success_first_try(self) -> None:
         """Test step succeeds on first try, no retries."""
+        from lokki.graph import FlowGraph
         from lokki.runner import LocalRunner
-        from lokki.graph import FlowGraph, TaskEntry
 
         call_count = 0
 
@@ -109,7 +111,7 @@ class TestRetryInRunner:
             call_count += 1
             return data * 2
 
-        graph = FlowGraph(name="test", head=my_step)
+        FlowGraph(name="test", head=my_step)
         runner = LocalRunner()
 
         with patch.object(runner, "_execute_step", return_value=10):

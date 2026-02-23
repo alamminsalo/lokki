@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from lokki import flow, main, step
-from lokki import cli
 
 
 class TestGetFlowParams:

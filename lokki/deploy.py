@@ -211,18 +211,6 @@ class Deployer:
         if not template_path.exists():
             raise DeployError(f"Template file not found: {template_path}")
 
-        use_sam = bool(aws_endpoint)
-
-        if use_sam:
-            sam_template_path = build_dir / "sam.yaml"
-            if sam_template_path.exists():
-                template_path = sam_template_path
-                print("Using SAM template for LocalStack deployment...")
-                self._deploy_with_sam_cli(
-                    template_path, flow_name, artifact_bucket, aws_endpoint
-                )
-                return
-
         try:
             template_body = template_path.read_text()
         except Exception as e:
@@ -231,102 +219,6 @@ class Deployer:
         self._deploy_with_boto3(
             template_body, flow_name, artifact_bucket, image_repository, aws_endpoint
         )
-
-    def _deploy_with_sam_cli(
-        self,
-        template_path: Path,
-        flow_name: str,
-        artifact_bucket: str,
-        aws_endpoint: str,
-    ) -> None:
-        aws_cmd_path = shutil.which("aws") or "aws"
-        use_samlocal = shutil.which("samlocal")
-
-        if use_samlocal:
-            samlocal_cmd = shutil.which("samlocal") or "samlocal"
-            cmd = [
-                samlocal_cmd,
-                "deploy",
-                "--template-file",
-                str(template_path),
-                "--stack-name",
-                self.stack_name,
-                "--capabilities",
-                "CAPABILITY_IAM",
-                "--resolve-s3",
-                "--region",
-                self.region,
-            ]
-            params = f"FlowName={flow_name} S3Bucket={artifact_bucket}"
-            if aws_endpoint:
-                params += f" AWSEndpoint={aws_endpoint}"
-
-            cmd.extend(
-                [
-                    "--parameter-overrides",
-                    params,
-                ]
-            )
-
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                )
-                if result.returncode != 0:
-                    raise DeployError(f"SAM local deploy failed: {result.stderr}")
-                print(f"✓ Deployed stack '{self.stack_name}' via samlocal")
-                return
-            except FileNotFoundError:
-                pass
-
-        aws_cmd_path = shutil.which("aws") or "aws"
-        aws_cmd = [aws_cmd_path, "cloudformation", "deploy"]
-        endpoint_args = []
-        if aws_endpoint:
-            endpoint_args = ["--endpoint-url", aws_endpoint]
-
-        params = f"FlowName={flow_name} S3Bucket={artifact_bucket}"
-
-        cmd = (
-            aws_cmd
-            + endpoint_args
-            + [
-                "--template-file",
-                str(template_path),
-                "--stack-name",
-                self.stack_name,
-                "--capabilities",
-                "CAPABILITY_IAM",
-                "--parameter-overrides",
-                params,
-                "--region",
-                self.region,
-            ]
-        )
-
-        env = None
-        if aws_endpoint:
-            env = {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
-
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                env=env,
-            )
-            if result.returncode != 0:
-                error_msg = result.stderr
-                raise DeployError(f"CloudFormation deploy failed: {error_msg}")
-            print(f"✓ Deployed stack '{self.stack_name}'")
-        except subprocess.TimeoutExpired:
-            raise DeployError("CloudFormation deploy timed out") from None
-        except FileNotFoundError:
-            raise DeployError("AWS CLI not found. Please install AWS CLI.") from None
 
     def _deploy_with_boto3(
         self,
@@ -366,7 +258,7 @@ class Deployer:
                             "ParameterValue": artifact_bucket,
                         },
                         {
-                            "ParameterKey": "ImageRepository",
+                            "ParameterKey": "ECRRepoPrefix",
                             "ParameterValue": image_repository,
                         },
                         {
@@ -395,7 +287,7 @@ class Deployer:
                             "ParameterValue": artifact_bucket,
                         },
                         {
-                            "ParameterKey": "ImageRepository",
+                            "ParameterKey": "ECRRepoPrefix",
                             "ParameterValue": image_repository,
                         },
                         {

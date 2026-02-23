@@ -1,6 +1,5 @@
 """Unit tests for _utils module."""
 
-import pytest
 
 from lokki._utils import get_step_names, to_kebab, to_pascal
 from lokki.decorators import step

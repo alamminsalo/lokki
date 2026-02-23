@@ -94,10 +94,10 @@ def collect_dataframes(dfs: list) -> pd.DataFrame:
 
 @flow
 def flight_data_pipeline(
-    origin: str,
-    destination: str,
-    begin_date: str,
-    days: int,
+    origin: str = "HEL",
+    destination: str = "ARN",
+    begin_date: str = "2025-02-01",
+    days: int = 2,
 ):
     """Flight data pipeline using DuckDB for analysis."""
     end_date = (

@@ -48,16 +48,16 @@ wheels = [
 ]
 
 [[package]]
-name = "lokki"
-version = "0.3.8"
+name = "lokkiflow"
+version = "0.3.20"
 source = { registry = "http://localhost:8080/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "pyyaml" },
 ]
-sdist = { url = "http://localhost:8080/packages/lokki-0.3.8.tar.gz", hash = "sha256:92669c485a6bd066efc9e5b77a64f1b39a43b87d4fcd3bc80c468daf287e842c" }
+sdist = { url = "http://localhost:8080/packages/lokkiflow-0.3.20.tar.gz", hash = "sha256:b753e8f1a3a0bdd703798df79e136cb033f22e73cbfd8e63536f769867d51e6f" }
 wheels = [
-    { url = "http://localhost:8080/packages/lokki-0.3.8-py3-none-any.whl", hash = "sha256:4d075a8d763dd5c6ee558d7306ee4dd3c91e5d6305ba13607feee87b0c01f4ed" },
+    { url = "http://localhost:8080/packages/lokkiflow-0.3.20-py3-none-any.whl", hash = "sha256:dab5984afbcb0e5bf406c4cea09c6ee437e2994ec65016ca19423ba82fcbd368" },
 ]
 
 [[package]]
@@ -115,14 +115,14 @@ name = "nyc-taxi"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "lokki" },
+    { name = "lokkiflow" },
     { name = "pandas" },
     { name = "pyarrow" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "lokki", specifier = ">=0.3.8" },
+    { name = "lokkiflow", specifier = ">=0.3.20" },
     { name = "pandas", specifier = ">=3.0.1" },
     { name = "pyarrow", specifier = ">=23.0.1" },
 ]

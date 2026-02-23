@@ -7,6 +7,7 @@ from lokki.builder.cloudformation import build_template
 from lokki.config import LokkiConfig
 from lokki.decorators import step
 from lokki.graph import FlowGraph
+from tests.conftest import create_build_dir
 
 
 class TestToPascal:
@@ -76,7 +77,7 @@ class TestBuildTemplateSimple:
 
         graph = FlowGraph(name="test-flow", head=get_items)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        template_str = build_template(graph, config, "test_module", create_build_dir())
 
         template = yaml.safe_load(template_str)
         assert "AWSTemplateFormatVersion" in template
@@ -92,7 +93,8 @@ class TestBuildTemplateSimple:
 
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         params = template["Parameters"]
@@ -111,7 +113,8 @@ class TestBuildTemplateSimple:
 
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -128,7 +131,8 @@ class TestBuildTemplateSimple:
 
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -149,7 +153,8 @@ class TestBuildTemplateZipPackage:
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
         config.lambda_cfg.package_type = "zip"
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -169,7 +174,8 @@ class TestBuildTemplateZipPackage:
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
         config.lambda_cfg.package_type = "zip"
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -193,7 +199,8 @@ class TestBuildTemplateImagePackage:
         graph = FlowGraph(name="test-flow", head=step1)
         config = LokkiConfig()
         config.lambda_cfg.package_type = "image"
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -224,7 +231,8 @@ class TestBuildTemplateMultipleSteps:
         step1().next(step2).next(step3)
         graph = FlowGraph(name="test-flow", head=step3)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]
@@ -255,7 +263,8 @@ class TestBuildTemplateMapBlock:
         get_items().map(process).agg(aggregate)
         graph = FlowGraph(name="test-flow", head=aggregate)
         config = LokkiConfig()
-        template_str = build_template(graph, config, "test_module")
+        build_dir = create_build_dir()
+        template_str = build_template(graph, config, "test_module", build_dir)
 
         template = yaml.safe_load(template_str)
         resources = template["Resources"]

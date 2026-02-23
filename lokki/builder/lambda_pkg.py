@@ -117,11 +117,14 @@ def generate_shared_lambda_files(
     if config.lambda_cfg.package_type == "zip":
         return _generate_shared_zip_package(graph, config, lambdas_dir, flow_fn)
     else:
-        return _generate_docker_packages(graph, config, lambdas_dir)
+        return _generate_docker_packages(graph, config, lambdas_dir, flow_fn)
 
 
 def _generate_docker_packages(
-    graph: FlowGraph, config: LokkiConfig, lambdas_dir: Path
+    graph: FlowGraph,
+    config: LokkiConfig,
+    lambdas_dir: Path,
+    flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate Docker-based Lambda packages (container images)."""
     base_image = config.lambda_cfg.base_image
@@ -140,18 +143,46 @@ def _generate_docker_packages(
         batch_main_content = batch_main_src.read_text()
         (lambdas_dir / "batch_main.py").write_text(batch_main_content)
 
-    pyproject_src = Path(__file__).parent.parent.parent / "pyproject.toml"
-    pyproject_target = lambdas_dir / "pyproject.toml"
-    if not pyproject_target.exists():
-        shutil.copy(pyproject_src, pyproject_target)
+    _copy_project_files(lambdas_dir, flow_fn)
 
-    uv_lock_src = Path(__file__).parent.parent.parent / "uv.lock"
+    return lambdas_dir
+
+
+def _copy_project_files(
+    lambdas_dir: Path, flow_fn: Callable[[], FlowGraph] | None
+) -> None:
+    """Copy pyproject.toml and uv.lock from project or flow module."""
+    lokki_dir = Path(__file__).parent.parent.parent
+
+    pyproject_src = lokki_dir / "pyproject.toml"
+    pyproject_target = lambdas_dir / "pyproject.toml"
+
+    if pyproject_target.exists():
+        return
+
+    if pyproject_src.exists():
+        shutil.copy(pyproject_src, pyproject_target)
+        return
+
+    flow_module_path = _get_flow_module_path(flow_fn)
+    if flow_module_path:
+        flow_pyproject = flow_module_path.parent / "pyproject.toml"
+        if flow_pyproject.exists():
+            shutil.copy(flow_pyproject, pyproject_target)
+
+    uv_lock_src = lokki_dir / "uv.lock"
     if uv_lock_src.exists():
         uv_lock_target = lambdas_dir / "uv.lock"
         if not uv_lock_target.exists():
             shutil.copy(uv_lock_src, uv_lock_target)
+        return
 
-    return lambdas_dir
+    if flow_module_path:
+        flow_uv_lock = flow_module_path.parent / "uv.lock"
+        if flow_uv_lock.exists():
+            uv_lock_target = lambdas_dir / "uv.lock"
+            if not uv_lock_target.exists():
+                shutil.copy(flow_uv_lock, uv_lock_target)
 
 
 def _get_flow_module_path(

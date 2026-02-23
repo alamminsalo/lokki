@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -15,6 +17,7 @@ def build_template(
     graph: FlowGraph,
     config: LokkiConfig,
     module_name: str,
+    build_dir: Path,
 ) -> str:
     """Build a CloudFormation template for the flow."""
     resources: dict[str, dict[str, Any]] = {}
@@ -284,13 +287,13 @@ def build_template(
             }
         )
 
+    state_machine_path = build_dir / "statemachine.json"
+    state_machine_json = json.loads(state_machine_path.read_text())
+
     resources["StateMachine"] = {
         "Type": "AWS::StepFunctions::StateMachine",
         "Properties": {
-            "DefinitionS3Location": {
-                "Bucket": {"Ref": "S3Bucket"},
-                "Key": {"Fn::Sub": "lokki/${FlowName}/statemachine.json"},
-            },
+            "DefinitionString": json.dumps(state_machine_json),
             "RoleArn": {"Fn::GetAtt": ["StepFunctionsExecutionRole", "Arn"]},
             "StateMachineName": {"Fn::Sub": "${FlowName}"},
         },

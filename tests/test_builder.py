@@ -106,27 +106,6 @@ class TestBuilderBuild:
             content = template_path.read_text()
             assert "AWSTemplateFormatVersion" in content
 
-    def test_build_creates_sam_template(self) -> None:
-        """Test that build creates sam.yaml."""
-
-        @step
-        def step1() -> None:
-            pass
-
-        graph = FlowGraph(name="test-flow", head=step1)
-        config = LokkiConfig()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config.build_dir = str(Path(tmpdir) / "lokki-build")
-
-            Builder.build(graph, config, flow_fn=None)
-
-            sam_path = Path(config.build_dir) / "sam.yaml"
-            assert sam_path.exists()
-
-            content = sam_path.read_text()
-            assert "AWSTemplateFormatVersion" in content
-
     def test_build_with_multiple_steps(self) -> None:
         """Test build with multiple steps."""
 

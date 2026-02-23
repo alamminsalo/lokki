@@ -142,16 +142,16 @@ wheels = [
 ]
 
 [[package]]
-name = "lokki"
-version = "0.3.11"
+name = "lokkiflow"
+version = "0.3.20"
 source = { registry = "http://localhost:8080/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "pyyaml" },
 ]
-sdist = { url = "http://localhost:8080/packages/lokki-0.3.11.tar.gz", hash = "sha256:69cfa7119e84adb752361a04ed85bd6f78bdccc5af5fa84aa11f9bf6d2915d70" }
+sdist = { url = "http://localhost:8080/packages/lokkiflow-0.3.20.tar.gz", hash = "sha256:b753e8f1a3a0bdd703798df79e136cb033f22e73cbfd8e63536f769867d51e6f" }
 wheels = [
-    { url = "http://localhost:8080/packages/lokki-0.3.11-py3-none-any.whl", hash = "sha256:b38c35350dbb2f606b46b3cdc36135c3f3621bbd3a5374274e09869be41faab2" },
+    { url = "http://localhost:8080/packages/lokkiflow-0.3.20-py3-none-any.whl", hash = "sha256:dab5984afbcb0e5bf406c4cea09c6ee437e2994ec65016ca19423ba82fcbd368" },
 ]
 
 [[package]]
@@ -254,7 +254,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "geopy" },
-    { name = "lokki" },
+    { name = "lokkiflow" },
     { name = "requests" },
 ]
 
@@ -262,6 +262,6 @@ dependencies = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "geopy", specifier = ">=2.4.0" },
-    { name = "lokki", specifier = ">=0.3.11" },
+    { name = "lokkiflow", specifier = ">=0.3.20" },
     { name = "requests", specifier = ">=2.31.0" },
 ]

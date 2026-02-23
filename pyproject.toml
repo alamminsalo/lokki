@@ -1,6 +1,6 @@
 [project]
 name = "lokkiflow"
-version = "0.3.14"
+version = "0.3.21"
 description = "Python library for defining, building, and deploying data pipelines to AWS Step Functions"
 readme = "README.md"
 requires-python = ">=3.13"
