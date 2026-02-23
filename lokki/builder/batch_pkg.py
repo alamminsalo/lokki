@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 BATCH_DOCKERFILE_TEMPLATE = """FROM python:3.11-slim AS builder
 
 RUN pip install uv --no-cache-dir
