@@ -1,0 +1,21 @@
+# lokki.toml
+
+[aws]
+
+# S3 bucket for pipeline data and artifacts
+artifact_bucket = "lokki"
+
+# Docker repository: "local", "docker.io", or ECR prefix
+image_repository = "local"
+
+# AWS endpoint for local development (e.g., LocalStack)
+endpoint = "http://localhost:4566"
+
+[lambda]
+package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+timeout = 900
+memory = 512
+image_tag = "latest"
+
+[lambda.env]
+LOG_LEVEL = "INFO"

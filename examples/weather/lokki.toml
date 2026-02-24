@@ -1,0 +1,30 @@
+# lokki.toml - Weather example configuration
+
+[aws]
+
+# S3 bucket for pipeline data and artifacts
+artifact_bucket = "lokki"
+
+# Docker repository: "local", "docker.io", or ECR prefix
+image_repository = "local"
+
+# AWS endpoint for local development (e.g., LocalStack)
+endpoint = "http://localhost:4566"
+
+[lambda]
+package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+timeout = 300
+memory = 1024
+image_tag = "latest"
+
+[lambda.env]
+LOG_LEVEL = "INFO"
+
+[batch]
+# Batch configuration for compute-intensive steps
+# Note: For LocalStack, Batch is not fully supported, but we configure for real AWS
+job_queue = "lokki-batch-queue"
+job_definition_name = "lokki-batch-job"
+timeout_seconds = 3600
+vcpu = 4
+memory_mb = 8192
