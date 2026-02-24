@@ -4,7 +4,6 @@
 lokki-build/
 *.pyc
 __pycache__/
-lokki.toml
 
 .coverage
 .coverage.*
