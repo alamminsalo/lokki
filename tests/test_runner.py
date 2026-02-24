@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from lokki.decorators import flow, step
 from lokki.runner import LocalRunner
 
@@ -165,3 +167,55 @@ class TestLocalStore:
         manifest_path = tmp_path / "flow" / "run1" / "step1" / "map_manifest.json"
         assert manifest_path.exists()
         assert json.loads(manifest_path.read_text()) == items
+
+
+class TestRetryLogic:
+    def test_retry_on_failure(self) -> None:
+        from lokki.decorators import RetryConfig
+
+        call_count = 0
+
+        @step(retry=RetryConfig(retries=2, delay=0.001))
+        def unreliable() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("Temporary failure")
+            return "success"
+
+        @flow
+        def test_flow() -> Any:
+            return unreliable()
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result == "success"
+        assert call_count == 3
+
+    def test_retry_exhausted_raises(self) -> None:
+        from lokki.decorators import RetryConfig
+
+        @step(retry=RetryConfig(retries=0))
+        def always_fails() -> str:
+            raise ValueError("Permanent failure")
+
+        @flow
+        def test_flow() -> Any:
+            return always_fails()
+
+        runner = LocalRunner()
+        with pytest.raises(ValueError, match="Permanent failure"):
+            runner.run(test_flow())
+
+    def test_batch_job_type_logged(self) -> None:
+        @step(job_type="batch")
+        def batch_step(x: int) -> int:
+            return x * 2
+
+        @flow
+        def test_flow() -> Any:
+            return batch_step(5)
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result == 10

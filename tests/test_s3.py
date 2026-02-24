@@ -134,3 +134,74 @@ class TestS3StoreRead:
 
         response = s3.get_object(Bucket="bucket", Key="key")
         assert response is not None
+
+
+class TestS3StoreWriteManifest:
+    """Tests for S3Store.write_manifest method."""
+
+    @mock_aws
+    def test_write_manifest_with_bucket_key(self) -> None:
+        """Test write_manifest with bucket and key parameters."""
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="bucket")
+
+        store = S3Store("bucket")
+        items = [{"key": "value1"}, {"key": "value2"}]
+        result = store.write_manifest(bucket="bucket", key="manifest.json", items=items)
+
+        assert result == "s3://bucket/manifest.json"
+
+    @mock_aws
+    def test_write_manifest_with_flow_params(self) -> None:
+        """Test write_manifest with flow_name, run_id, step_name parameters."""
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="bucket")
+
+        store = S3Store("bucket")
+        items = [{"index": 0}, {"index": 1}]
+        result = store.write_manifest(
+            flow_name="my-flow",
+            run_id="run-123",
+            step_name="map-step",
+            items=items,
+        )
+
+        assert result == "s3://bucket/lokki/my-flow/run-123/map-step/map_manifest.json"
+
+    @mock_aws
+    def test_write_manifest_content_type_json(self) -> None:
+        """Test that write_manifest sets correct content type."""
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="bucket")
+
+        store = S3Store("bucket")
+        items = [{"key": "value"}]
+        store.write_manifest(bucket="bucket", key="manifest.json", items=items)
+
+        response = s3.get_object(Bucket="bucket", Key="manifest.json")
+        assert response["ContentType"] == "application/json"
+
+
+class TestS3StoreErrors:
+    """Tests for S3Store error handling."""
+
+    def test_write_missing_params(self) -> None:
+        """Test that write raises error without required params."""
+        store = S3Store("bucket")
+
+        with pytest.raises(ValueError, match="Must provide either"):
+            store.write()
+
+    def test_write_partial_params(self) -> None:
+        """Test that write raises error with partial params."""
+        store = S3Store("bucket")
+
+        with pytest.raises(ValueError, match="Must provide either"):
+            store.write(flow_name="my-flow")
+
+    def test_write_manifest_missing_params(self) -> None:
+        """Test that write_manifest raises error without required params."""
+        store = S3Store("bucket")
+
+        with pytest.raises(ValueError, match="Must provide either"):
+            store.write_manifest()
