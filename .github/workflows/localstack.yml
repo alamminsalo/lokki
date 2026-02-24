@@ -17,13 +17,24 @@ jobs:
             -e SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam \
             -e DEFAULT_REGION=us-east-1 \
             localstack/localstack:latest
-          sleep 20
+          # Wait for LocalStack to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "LocalStack is ready"
+              break
+            fi
+            sleep 2
+          done
 
       - name: Configure AWS
         run: |
           aws configure set aws_access_key_id test
           aws configure set aws_secret_access_key test
           aws configure set region us-east-1
+
+      - name: Create S3 bucket
+        run: |
+          aws s3 mb s3://lokki --endpoint-url http://localhost:4566
 
       - uses: astral-sh/setup-uv@v4
 
@@ -39,6 +50,7 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
+          LOKKI_ARTIFACT_BUCKET: lokki
 
       - name: Deploy
         working-directory: examples/test_pipeline
@@ -47,6 +59,8 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
+          LOKKI_ARTIFACT_BUCKET: lokki
+          LOKKI_AWS_ENDPOINT: http://localhost:4566
 
       - name: Verify
         run: |
