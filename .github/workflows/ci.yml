@@ -25,14 +25,12 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run tests
-        run: uv run pytest --cov=lokki --cov-report=xml
+        run: uv run pytest --cov --cov-branch --cov-report=xml
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   lint:
     runs-on: ubuntu-latest
