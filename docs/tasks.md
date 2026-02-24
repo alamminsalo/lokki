@@ -673,6 +673,5 @@ _Purpose_: Add scheduling support to trigger flows on a schedule using EventBrid
 - [x] **T35.2** Validate cron and rate expressions
 - [x] **T35.3** Add schedule field to FlowGraph
 - [x] **T35.4** Generate EventBridge resources in CloudFormation template
-- [ ] **T35.5** Add schedule to config schema (lokki.toml)
-- [x] **T35.6** Handle run_id for scheduled invocations
-- [x] **T35.7** Unit tests for scheduling
+- [x] **T35.5** Handle run_id for scheduled invocations
+- [x] **T35.6** Unit tests for scheduling
