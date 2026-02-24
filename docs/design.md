@@ -43,8 +43,8 @@ lokki/
 │   │   ├── batch.py             # AWS Batch handler wrapper
 │   │   └── batch_main.py       # AWS Batch entry point
 │   ├── store/
-│   │   ├── __init__.py         # Exports: DataStore, LocalStore, S3Store
-│   │   ├── protocol.py         # DataStore Protocol definition
+│   │   ├── __init__.py         # Exports: TransientStore, LocalStore, S3Store
+│   │   ├── protocol.py         # TransientStore Protocol definition
 │   │   ├── local.py            # LocalStore implementation
 │   │   └── s3.py               # S3Store implementation
 │   └── config.py                # Configuration loading

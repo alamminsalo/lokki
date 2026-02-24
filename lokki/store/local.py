@@ -1,4 +1,4 @@
-"""Local filesystem store implementation."""
+"""Local filesystem store implementation for transient data."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from lokki.store.protocol import DataStore
+from lokki.store.protocol import TransientStore
 
 if TYPE_CHECKING:
     pass
@@ -29,11 +29,16 @@ def _to_json_safe(obj: Any) -> Any:
     return obj
 
 
-class LocalStore(DataStore):
-    """Local file-based store implementing DataStore interface."""
+class LocalStore(TransientStore):
+    """Local file-based store implementing TransientStore interface."""
 
-    def __init__(self, base_dir: Path | None = None) -> None:
-        self.base_dir = base_dir or Path(tempfile.mkdtemp(prefix="lokki-"))
+    def __init__(self, base_dir: Path | str | None = None) -> None:
+        if base_dir is None:
+            self.base_dir = Path(tempfile.mkdtemp(prefix="lokki-"))
+        elif isinstance(base_dir, str):
+            self.base_dir = Path(base_dir)
+        else:
+            self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_path(
@@ -43,23 +48,12 @@ class LocalStore(DataStore):
 
     def write(
         self,
-        flow_name: str | None = None,
-        run_id: str | None = None,
-        step_name: str | None = None,
-        obj: Any = None,
-        *,
-        bucket: str | None = None,
-        key: str | None = None,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+        obj: Any,
     ) -> str:
-        if bucket and key:
-            path = Path(bucket) / key
-        elif flow_name and run_id and step_name:
-            path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
-        else:
-            raise ValueError(
-                "Must provide either (bucket, key) or (flow_name, run_id, step_name)"
-            )
-
+        path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
         path.parent.mkdir(parents=True, exist_ok=True)
         data = gzip.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
         path.write_bytes(data)
@@ -67,23 +61,12 @@ class LocalStore(DataStore):
 
     def write_manifest(
         self,
-        flow_name: str | None = None,
-        run_id: str | None = None,
-        step_name: str | None = None,
-        items: Sequence[dict[str, Any]] | None = None,
-        *,
-        bucket: str | None = None,
-        key: str | None = None,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+        items: Sequence[dict[str, Any]],
     ) -> str:
-        if bucket and key:
-            path = Path(bucket) / key
-        elif flow_name and run_id and step_name:
-            path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
-        else:
-            raise ValueError(
-                "Must provide either (bucket, key) or (flow_name, run_id, step_name)"
-            )
-
+        path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
         path.parent.mkdir(parents=True, exist_ok=True)
         serialized_items = _to_json_safe(items)
         path.write_text(json.dumps(serialized_items))

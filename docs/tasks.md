@@ -661,17 +661,33 @@ _Purpose_: Create comprehensive API documentation and add docstrings to source c
 | M33 - Map Concurrency Limit | Complete |
 | M34 - API Documentation | Complete |
 | M35 - Scheduling | Complete |
-| M35 - Scheduling | Not Started |
+| M36 - Unify Store Interfaces | Complete |
 
 ---
 
-## Milestone 35 — Scheduling
+## Milestone 36 — Unify Store Interfaces
 
-_Purpose_: Add scheduling support to trigger flows on a schedule using EventBridge.
+_Purpose_: Unify LocalStore and S3Store interfaces. Both should have consistent constructors, and S3Store should read bucket from environment variables internally (not passed by callers).
 
-- [x] **T35.1** Update @flow decorator to accept schedule parameter
-- [x] **T35.2** Validate cron and rate expressions
-- [x] **T35.3** Add schedule field to FlowGraph
-- [x] **T35.4** Generate EventBridge resources in CloudFormation template
-- [x] **T35.5** Handle run_id for scheduled invocations
-- [x] **T35.6** Unit tests for scheduling
+- [x] **T36.1** Update S3Store constructor
+  - Remove `bucket` parameter
+  - Read `LOKKI_ARTIFACT_BUCKET` from environment internally
+  - Accept only `endpoint` parameter
+
+- [x] **T36.2** Update LocalStore interface
+  - Remove `bucket` and `key` parameters from `write()` and `write_manifest()`
+  - Keep only `flow_name`, `run_id`, `step_name` parameters
+
+- [x] **T36.3** Rename DataStore protocol to TransientStore
+  - Update protocol to reflect unified interface
+  - Make flow_name, run_id, step_name required (not Optional)
+
+- [x] **T36.4** Update runtime callers
+  - `handler.py`: Change `S3Store(bucket, endpoint)` → `S3Store(endpoint)`
+  - `batch.py`: Same change
+
+- [x] **T36.5** Update tests
+  - Fix S3Store constructor calls (remove bucket arg)
+  - Remove bucket/key tests from LocalStore
+
+- [x] **T36.6** Run tests and verify coverage
