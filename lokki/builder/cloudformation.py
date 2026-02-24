@@ -86,7 +86,50 @@ def build_template(
     step_names = get_step_names(graph)
     package_type = config.lambda_cfg.package_type
 
+    step_config: dict[str, dict[str, Any]] = {}
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            step_config[entry.node.name] = {
+                "timeout": (
+                    entry.timeout_seconds
+                    if entry.timeout_seconds is not None
+                    else config.lambda_cfg.timeout
+                ),
+                "memory": (
+                    entry.memory_mb
+                    if entry.memory_mb is not None
+                    else config.lambda_cfg.memory
+                ),
+            }
+        elif isinstance(entry, MapOpenEntry):
+            step_config[entry.source.name] = {
+                "timeout": config.lambda_cfg.timeout,
+                "memory": config.lambda_cfg.memory,
+            }
+            for step in entry.inner_steps:
+                step_config[step.name] = {
+                    "timeout": getattr(step, "timeout_seconds", None)
+                    or config.lambda_cfg.timeout,
+                    "memory": getattr(step, "memory_mb", None)
+                    or config.lambda_cfg.memory,
+                }
+        elif isinstance(entry, MapCloseEntry):
+            step_config[entry.agg_step.name] = {
+                "timeout": (
+                    getattr(entry.agg_step, "timeout_seconds", None)
+                    or config.lambda_cfg.timeout
+                ),
+                "memory": (
+                    getattr(entry.agg_step, "memory_mb", None)
+                    or config.lambda_cfg.memory
+                ),
+            }
+
     for step_name in step_names:
+        cfg = step_config.get(step_name, {})
+        timeout = cfg.get("timeout", config.lambda_cfg.timeout)
+        memory = cfg.get("memory", config.lambda_cfg.memory)
+
         env_vars = {
             "LOKKI_S3_BUCKET": {"Ref": "S3Bucket"},
             "LOKKI_FLOW_NAME": {"Ref": "FlowName"},
@@ -107,8 +150,8 @@ def build_template(
                         "S3Key": {"Fn::Sub": "lokki/${FlowName}/lambdas/function.zip"},
                     },
                     "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
-                    "Timeout": config.lambda_cfg.timeout,
-                    "MemorySize": config.lambda_cfg.memory,
+                    "Timeout": timeout,
+                    "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
                     "Handler": "handler.lambda_handler",
                 },
@@ -123,8 +166,8 @@ def build_template(
                         "ImageUri": {"Fn::Sub": "${ECRRepoPrefix}/lokki:${ImageTag}"}
                     },
                     "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
-                    "Timeout": config.lambda_cfg.timeout,
-                    "MemorySize": config.lambda_cfg.memory,
+                    "Timeout": timeout,
+                    "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
                 },
             }
