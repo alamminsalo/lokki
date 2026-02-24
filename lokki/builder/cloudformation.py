@@ -332,11 +332,12 @@ def build_template(
 
     state_machine_path = build_dir / "statemachine.json"
     state_machine_json = json.loads(state_machine_path.read_text())
+    definition_string = json.dumps(state_machine_json)
 
     resources["StateMachine"] = {
         "Type": "AWS::StepFunctions::StateMachine",
         "Properties": {
-            "DefinitionString": json.dumps(state_machine_json),
+            "DefinitionString": {"Fn::Sub": definition_string},
             "RoleArn": {"Fn::GetAtt": ["StepFunctionsExecutionRole", "Arn"]},
             "StateMachineName": {"Fn::Sub": "${FlowName}"},
         },
