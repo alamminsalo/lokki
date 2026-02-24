@@ -359,3 +359,12 @@ class TestMainCLI:
                     mock_logs.return_value = None
                     main(simple_flow)
                     mock_logs.assert_called_once()
+
+    def test_run_command_runner_error(self, simple_flow):
+        """Test error handling when runner fails."""
+        with patch.object(sys, "argv", ["test.py", "run"]):
+            with patch("lokki.runner.LocalRunner.run") as mock_run:
+                mock_run.side_effect = RuntimeError("Runner failed")
+                with pytest.raises(SystemExit) as exc_info:
+                    main(simple_flow)
+                assert exc_info.value.code == 1

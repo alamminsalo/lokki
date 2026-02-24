@@ -94,3 +94,38 @@ def test_get_flow_module_path_with_module():
     with patch("sys.modules", {"test_module": mock_module}):
         result = _get_flow_module_path(dummy_flow)
         assert result == Path("/fake/path/flow.py")
+
+
+def test_get_flow_module_path_main_no_file():
+    """Test __main__ module with no __file__ attribute."""
+
+    def dummy_flow():
+        pass
+
+    mock_module = MagicMock(spec=[])  # No __file__ attribute
+    mock_module.__module__ = "__main__"
+
+    with patch("sys.modules", {"__main__": mock_module}):
+        with patch("sys.argv", []):
+            result = _get_flow_module_path(dummy_flow)
+            assert result is None
+
+
+def test_get_flow_module_path_with__fn_attribute():
+    """Test flow function with _fn attribute."""
+
+    def actual_flow():
+        pass
+
+    def wrapper_flow():
+        return actual_flow()
+
+    wrapper_flow._fn = actual_flow
+    actual_flow.__module__ = "test_module"
+
+    mock_module = MagicMock()
+    mock_module.__file__ = "/test/path.py"
+
+    with patch("sys.modules", {"test_module": mock_module}):
+        result = _get_flow_module_path(wrapper_flow)
+        assert result == Path("/test/path.py")
