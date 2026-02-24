@@ -1,0 +1,68 @@
+name: LocalStack Integration
+
+on:
+  pull_request:
+
+jobs:
+  localstack-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start LocalStack
+        run: |
+          docker run -d --name localstack -p 4566:4566 \
+            -e SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam \
+            -e DEFAULT_REGION=us-east-1 \
+            localstack/localstack:latest
+          sleep 20
+
+      - name: Configure AWS
+        run: |
+          aws configure set aws_access_key_id test
+          aws configure set aws_secret_access_key test
+          aws configure set region us-east-1
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Build
+        working-directory: examples/test_pipeline
+        run: |
+          uv sync
+          uv run python test_pipeline.py build
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Deploy
+        working-directory: examples/test_pipeline
+        run: uv run python test_pipeline.py deploy --confirm
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Verify
+        run: |
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name test-pipeline-stack \
+            --endpoint-url http://localhost:4566 \
+            --query 'Stacks[0].StackStatus' \
+            --output text)
+          echo "Stack status: $STATUS"
+          if [ "$STATUS" != "CREATE_COMPLETE" ] && [ "$STATUS" != "UPDATE_COMPLETE" ]; then
+            echo "Expected CREATE_COMPLETE or UPDATE_COMPLETE, got $STATUS"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          aws cloudformation delete-stack --stack-name test-pipeline-stack --endpoint-url http://localhost:4566 || true
+          docker stop localstack || true

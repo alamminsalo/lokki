@@ -1,0 +1,8 @@
+[project]
+name = "test-pipeline"
+version = "0.1.0"
+description = "Test pipeline for LocalStack deployment verification"
+requires-python = ">=3.13"
+dependencies = [
+    "lokkiflow @ file:///${PROJECT_ROOT}/../../",
+]
