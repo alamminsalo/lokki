@@ -92,7 +92,7 @@ def collect_dataframes(dfs: list) -> pd.DataFrame:
     """).df()
 
 
-@flow
+@flow(schedule="cron(0 9 * * ? *)")
 def flight_data_pipeline(
     origin: str = "HEL",
     destination: str = "ARN",

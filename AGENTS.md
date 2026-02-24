@@ -55,6 +55,9 @@ When testing with example projects:
    uv build
    # Upload to local pypiserver (no auth required)
    uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
+   # Update the example project packages to get the newest version
+   # cd example/<example>
+   uv sync --upgrade
    ```
 
 2. **Update example project to use new version:**
