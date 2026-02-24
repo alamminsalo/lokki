@@ -5,8 +5,7 @@
 </p>
 
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://pypi.org/project/lokkiflow/)
-[![Test Coverage](https://img.shields.io/badge/coverage-80%25-green)](https://github.com/alamminsalo/lokki/actions)
-[![Tests](https://img.shields.io/badge/tests-274%20passed-green)](https://github.com/alamminsalo/lokki/actions)
+[![Test Coverage](https://codecov.io/gh/alamminsalo/lokki/branch/main/graph/badge.svg)](https://codecov.io/gh/alamminsalo/lokki)
 
 A Python library for defining, building, and deploying data pipelines to AWS Step Functions.
 
