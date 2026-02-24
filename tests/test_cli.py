@@ -326,3 +326,36 @@ class TestMainCLI:
             with pytest.raises(SystemExit) as exc_info:
                 main(simple_flow)
         assert exc_info.value.code == 2
+
+    def test_show_command(self, simple_flow):
+        with patch.object(sys, "argv", ["test.py", "show"]):
+            with patch("lokki.config.load_config") as mock_config:
+                from lokki.config import LambdaConfig, LokkiConfig
+
+                mock_config.return_value = LokkiConfig(
+                    artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
+                )
+                with patch("lokki.show.show_executions") as mock_show:
+                    mock_show.return_value = [
+                        {
+                            "run_id": "test-run",
+                            "status": "SUCCEEDED",
+                            "start_time": "2024-01-15T10:00:00+00:00",
+                            "duration": "1m 30s",
+                        }
+                    ]
+                    main(simple_flow)
+                    mock_show.assert_called_once()
+
+    def test_logs_command(self, simple_flow):
+        with patch.object(sys, "argv", ["test.py", "logs"]):
+            with patch("lokki.config.load_config") as mock_config:
+                from lokki.config import LambdaConfig, LokkiConfig
+
+                mock_config.return_value = LokkiConfig(
+                    artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
+                )
+                with patch("lokki.logs.logs") as mock_logs:
+                    mock_logs.return_value = None
+                    main(simple_flow)
+                    mock_logs.assert_called_once()

@@ -8,7 +8,9 @@ import pytest
 from lokki.show import (
     ShowError,
     _format_execution,
+    _get_status_color,
     print_executions,
+    show,
     show_executions,
 )
 
@@ -159,3 +161,120 @@ class TestPrintExecutions:
         captured = capsys.readouterr()
         assert "test-run" in captured.out
         assert "SUCCEEDED" in captured.out
+
+
+class TestGetStatusColor:
+    def test_succeeded_color(self):
+        assert _get_status_color("SUCCEEDED") == "\033[92m"
+
+    def test_failed_color(self):
+        assert _get_status_color("FAILED") == "\033[91m"
+
+    def test_running_color(self):
+        assert _get_status_color("RUNNING") == "\033[93m"
+
+    def test_aborted_color(self):
+        assert _get_status_color("ABORTED") == "\033[90m"
+
+    def test_unknown_status_no_color(self):
+        assert _get_status_color("UNKNOWN") == ""
+
+
+class TestShowFunction:
+    @patch("lokki.show.show_executions")
+    def test_show_success(self, mock_show_exec):
+        mock_show_exec.return_value = [
+            {
+                "run_id": "test-run",
+                "status": "SUCCEEDED",
+                "start_time": "2024-01-15T10:00:00+00:00",
+                "duration": "1m 30s",
+            }
+        ]
+
+        show(flow_name="test-flow")
+
+        mock_show_exec.assert_called_once()
+
+    @patch("lokki.show.show_executions")
+    def test_show_error(self, mock_show_exec):
+        mock_show_exec.side_effect = ShowError("Test error")
+
+        with pytest.raises(SystemExit) as exc_info:
+            show(flow_name="test-flow")
+
+        assert exc_info.value.code == 1
+
+
+class TestShowExecutionsErrors:
+    @patch("lokki.show.get_sfn_client")
+    def test_invalid_arn_with_endpoint(self, mock_boto_client):
+        from botocore.exceptions import ClientError
+
+        mock_sf = MagicMock()
+        mock_boto_client.return_value = mock_sf
+        mock_sf.describe_execution.side_effect = ClientError(
+            {"Error": {"Code": "InvalidArn"}}, "DescribeExecution"
+        )
+
+        with pytest.raises(ShowError, match="Step Functions is not available"):
+            show_executions(
+                flow_name="test-flow",
+                run_id="test-run",
+                endpoint="http://localhost:4566",
+            )
+
+    @patch("lokki.show.get_sfn_client")
+    def test_invalid_arn_without_endpoint(self, mock_boto_client):
+        from botocore.exceptions import ClientError
+
+        mock_sf = MagicMock()
+        mock_boto_client.return_value = mock_sf
+        mock_sf.describe_execution.side_effect = ClientError(
+            {"Error": {"Code": "InvalidArn"}}, "DescribeExecution"
+        )
+
+        with pytest.raises(ShowError, match="Invalid state machine ARN"):
+            show_executions(flow_name="test-flow", run_id="test-run")
+
+    @patch("lokki.show.get_sfn_client")
+    def test_service_not_enabled_with_endpoint(self, mock_boto_client):
+        from botocore.exceptions import ClientError
+
+        mock_sf = MagicMock()
+        mock_boto_client.return_value = mock_sf
+        mock_sf.list_executions.side_effect = ClientError(
+            {"Error": {"Code": "Unknown"}}, "Service is not enabled"
+        )
+
+        with pytest.raises(ShowError, match="Step Functions is not enabled"):
+            show_executions(
+                flow_name="test-flow",
+                endpoint="http://localhost:4566",
+            )
+
+    @patch("lokki.show.get_sfn_client")
+    def test_service_not_enabled_without_endpoint(self, mock_boto_client):
+        from botocore.exceptions import ClientError
+
+        mock_sf = MagicMock()
+        mock_boto_client.return_value = mock_sf
+        mock_sf.list_executions.side_effect = ClientError(
+            {"Error": {"Code": "Unknown"}}, "Service is not enabled"
+        )
+
+        with pytest.raises(ShowError, match="AWS error"):
+            show_executions(flow_name="test-flow")
+
+    @patch("lokki.show.get_sfn_client")
+    def test_generic_aws_error(self, mock_boto_client):
+        from botocore.exceptions import ClientError
+
+        mock_sf = MagicMock()
+        mock_boto_client.return_value = mock_sf
+        mock_sf.list_executions.side_effect = ClientError(
+            {"Error": {"Code": "Throttling"}}, "Rate exceeded"
+        )
+
+        with pytest.raises(ShowError, match="AWS error"):
+            show_executions(flow_name="test-flow")

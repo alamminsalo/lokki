@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from lokki.builder.lambda_pkg import generate_shared_lambda_files
+from lokki.builder.lambda_pkg import (
+    _get_flow_module_path,
+    generate_shared_lambda_files,
+)
 
 
 def test_zip_installs_to_lambdas_not_deps():
@@ -62,3 +65,32 @@ def test_no_deps_in_parent_directory():
         assert not (parent_dir / "deps").exists(), (
             "No deps directory should be created in parent directory"
         )
+
+
+def test_get_flow_module_path_none():
+    result = _get_flow_module_path(None)
+    assert result is None
+
+
+def test_get_flow_module_path_with_fn():
+    def dummy_flow():
+        pass
+
+    with patch("sys.modules", {"__main__": MagicMock(__file__="/fake/path/main.py")}):
+        with patch("sys.argv", ["/fake/path/main.py"]):
+            result = _get_flow_module_path(dummy_flow)
+            assert result is None
+
+
+def test_get_flow_module_path_with_module():
+    mock_module = MagicMock()
+    mock_module.__file__ = "/fake/path/flow.py"
+
+    def dummy_flow():
+        pass
+
+    dummy_flow.__module__ = "test_module"
+
+    with patch("sys.modules", {"test_module": mock_module}):
+        result = _get_flow_module_path(dummy_flow)
+        assert result == Path("/fake/path/flow.py")
