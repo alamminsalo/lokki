@@ -36,12 +36,25 @@ type GraphEntry = TaskEntry | MapOpenEntry | MapCloseEntry
 
 
 class FlowGraph:
-    """Resolved execution graph for a pipeline flow."""
+    """Resolved execution graph for a pipeline flow.
 
-    def __init__(self, name: str, head: StepNode | MapBlock) -> None:
+    Attributes:
+        name: The flow name (kebab-case)
+        head: The head of the step chain
+        entries: List of resolved graph entries in execution order
+        schedule: Optional schedule expression (cron or rate)
+    """
+
+    def __init__(
+        self,
+        name: str,
+        head: StepNode | MapBlock,
+        schedule: str | None = None,
+    ) -> None:
         self.name = name
         self.head = head
         self.entries: list[GraphEntry] = []
+        self.schedule = schedule
         chain_start = self._find_chain_start(head)
         self._resolve_from_head(chain_start)
 

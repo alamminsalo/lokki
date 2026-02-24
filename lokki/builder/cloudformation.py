@@ -299,6 +299,54 @@ def build_template(
         },
     }
 
+    if graph.schedule:
+        resources["EventsRole"] = {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "events.amazonaws.com"},
+                            "Action": "sts:AssumeRole",
+                        }
+                    ],
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "StartExecution",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": ["states:StartExecution"],
+                                    "Resource": {"Fn::GetAtt": ["StateMachine", "Arn"]},
+                                }
+                            ],
+                        },
+                    }
+                ],
+            },
+        }
+
+        resources["ScheduleRule"] = {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "Description": f"Schedule for flow: {graph.name}",
+                "ScheduleExpression": graph.schedule,
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Id": "StateMachineTarget",
+                        "Arn": {"Fn::GetAtt": ["StateMachine", "Arn"]},
+                        "RoleArn": {"Fn::GetAtt": ["EventsRole", "Arn"]},
+                    }
+                ],
+            },
+        }
+
     template = {
         "AWSTemplateFormatVersion": "2010-09-09",
         "Description": f"Lokki flow: {graph.name}",

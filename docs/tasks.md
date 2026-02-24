@@ -660,3 +660,18 @@ _Purpose_: Create comprehensive API documentation and add docstrings to source c
 | M32 - AWS Batch Support | Complete |
 | M33 - Map Concurrency Limit | Complete |
 | M34 - API Documentation | Complete |
+| M35 - Scheduling | Complete |
+| M35 - Scheduling | Not Started |
+
+---
+
+## Milestone 35 — Scheduling
+
+_Purpose_: Add scheduling support to trigger flows on a schedule using EventBridge.
+
+- [x] **T35.1** Update @flow decorator to accept schedule parameter
+- [x] **T35.2** Validate cron and rate expressions
+- [x] **T35.3** Add schedule field to FlowGraph
+- [x] **T35.4** Generate EventBridge resources in CloudFormation template
+- [x] **T35.5** Handle run_id for scheduled invocations
+- [x] **T35.6** Unit tests for scheduling

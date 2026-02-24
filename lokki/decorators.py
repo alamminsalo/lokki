@@ -235,7 +235,92 @@ def step(
     return decorator(fn)
 
 
-def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
+def _validate_schedule(schedule: str) -> None:
+    """Validate a schedule expression (cron or rate).
+
+    Args:
+        schedule: A cron or rate expression, e.g., "cron(0 9 * * ? *)" or "rate(1 hour)"
+
+    Raises:
+        ValueError: If the schedule expression is invalid
+    """
+    schedule = schedule.strip()
+
+    if schedule.startswith("cron(") and schedule.endswith(")"):
+        cron_expr = schedule[5:-1].strip()
+        _validate_cron_expression(cron_expr)
+    elif schedule.startswith("rate(") and schedule.endswith(")"):
+        rate_expr = schedule[5:-1].strip()
+        _validate_rate_expression(rate_expr)
+    else:
+        raise ValueError(
+            f"Invalid schedule expression: '{schedule}'. "
+            "Use 'cron(minute hour day month day-of-week ?)' or 'rate(value unit)'"
+        )
+
+
+def _validate_cron_expression(cron_expr: str) -> None:
+    """Validate a cron expression.
+
+    Args:
+        cron_expr: The cron expression (without cron() wrapper)
+
+    Raises:
+        ValueError: If the cron expression is invalid
+    """
+    parts = cron_expr.split()
+    if len(parts) < 5 or len(parts) > 6:
+        raise ValueError(
+            f"Invalid cron expression: '{cron_expr}'. "
+            "Expected 5 or 6 fields (minute hour day month day-of-week ?)"
+        )
+
+
+def _validate_rate_expression(rate_expr: str) -> None:
+    """Validate a rate expression.
+
+    Args:
+        rate_expr: The rate expression (without rate() wrapper)
+
+    Raises:
+        ValueError: If the rate expression is invalid
+    """
+    rate_expr = rate_expr.strip()
+    if not rate_expr:
+        raise ValueError("Rate expression cannot be empty")
+
+    valid_units = {"minute", "minutes", "hour", "hours", "day", "days"}
+
+    parts = rate_expr.split()
+    if len(parts) != 2:
+        raise ValueError(
+            f"Invalid rate expression: '{rate_expr}'. Expected 'rate(value unit)'"
+        )
+
+    try:
+        value = int(parts[0])
+        if value < 1:
+            raise ValueError()
+    except ValueError as e:
+        raise ValueError(
+            f"Invalid rate expression: '{rate_expr}'. Value must be a positive integer"
+        ) from e
+
+    unit = parts[1].lower()
+    if unit not in valid_units:
+        raise ValueError(
+            f"Invalid rate expression: '{rate_expr}'. "
+            f"Unit must be one of: {', '.join(sorted(valid_units))}"
+        )
+
+
+def flow(
+    fn: Callable[..., Any] | None = None,
+    *,
+    schedule: str | None = None,
+) -> (
+    Callable[..., FlowGraph] | Callable[[Callable[..., Any]], Callable[..., FlowGraph]]
+):
     """Decorate a function as a pipeline flow.
 
     The decorated function must return a chain of steps (StepNode or MapBlock).
@@ -243,31 +328,57 @@ def flow(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
 
     Args:
         fn: A function that returns a step chain, e.g., step1().map(step2)
+        schedule: Optional schedule expression (cron or rate), e.g., "cron(0 9 * * ? *)"
+            or "rate(1 hour)"
 
     Returns:
         A wrapper that constructs a FlowGraph when called.
+
+    Example:
+        @flow
+        def my_flow():
+            return step1().next(step2())
+
+        @flow(schedule="cron(0 9 * * ? *)")
+        def daily_flow():
+            return fetch_data().process().save()
+
+        @flow(schedule="rate(1 hour)")
+        def hourly_flow():
+            return hourly_task()
     """
+    if schedule is not None:
+        _validate_schedule(schedule)
 
-    def wrapper(*args: Any, **kwargs: Any) -> FlowGraph:
-        from lokki.graph import FlowGraph
+    def decorator(fn: Callable[..., Any]) -> Callable[..., FlowGraph]:
+        def wrapper(*args: Any, **kwargs: Any) -> FlowGraph:
+            from lokki.graph import FlowGraph
 
-        head = fn(*args, **kwargs)
+            head = fn(*args, **kwargs)
 
-        if head is None:
-            raise ValueError(
-                f"@flow function '{fn.__name__}' returned None. "
-                "Did you forget to return the chain? "
-                "Example: return step1().map(step2)"
+            if head is None:
+                raise ValueError(
+                    f"@flow function '{fn.__name__}' returned None. "
+                    "Did you forget to return the chain? "
+                    "Example: return step1().map(step2)"
+                )
+
+            if not isinstance(head, StepNode | MapBlock):
+                raise ValueError(
+                    f"@flow function '{fn.__name__}' must return a step chain "
+                    "(e.g., step1().map(step2)), but returned {type(head).__name__}"
+                )
+
+            return FlowGraph(
+                name=fn.__name__.replace("_", "-").lower(),
+                head=head,
+                schedule=schedule,
             )
 
-        if not isinstance(head, StepNode | MapBlock):
-            raise ValueError(
-                f"@flow function '{fn.__name__}' must return a step chain "
-                "(e.g., step1().map(step2)), but returned {type(head).__name__}"
-            )
+        wrapper._is_flow = True  # type: ignore[attr-defined]
+        wrapper._fn = fn  # type: ignore[attr-defined]
+        return wrapper
 
-        return FlowGraph(name=fn.__name__.replace("_", "-").lower(), head=head)
-
-    wrapper._is_flow = True  # type: ignore[attr-defined]
-    wrapper._fn = fn  # type: ignore[attr-defined]
-    return wrapper
+    if fn is None:
+        return decorator
+    return decorator(fn)
