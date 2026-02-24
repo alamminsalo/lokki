@@ -5,8 +5,8 @@
 </p>
 
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://pypi.org/project/lokkiflow/)
-[![Test Coverage](https://img.shields.io/badge/coverage-80%25-green)](https://github.com/anomalyco/lokki/actions)
-[![Tests](https://img.shields.io/badge/tests-251%20passed-green)](https://github.com/anomalyco/lokki/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-80%25-green)](https://github.com/alamminsalo/lokki/actions)
+[![Tests](https://img.shields.io/badge/tests-274%20passed-green)](https://github.com/alamminsalo/lokki/actions)
 
 A Python library for defining, building, and deploying data pipelines to AWS Step Functions.
 
@@ -19,6 +19,8 @@ A Python library for defining, building, and deploying data pipelines to AWS Ste
 - **CloudFormation** - Generates complete CloudFormation templates for deployment
 - **Retry configuration** - Configure automatic retries for failed steps
 - **Flow parameters** - Pass parameters to flows at runtime
+- **Scheduling** - Schedule flows to run automatically using EventBridge
+- **AWS Batch** - Run compute-intensive steps as AWS Batch jobs
 
 ## Installation
 
@@ -210,6 +212,66 @@ Retry options:
 - `retries` - Number of retry attempts (default: 0)
 - `delay` - Initial delay between retries in seconds (default: 1.0)
 - `backoff` - Backoff multiplier for delay (default: 2.0)
+
+### Scheduling
+
+Schedule flows to run automatically using EventBridge:
+
+```python
+from lokki import flow, step
+
+@step
+def fetch_data():
+    return [1, 2, 3]
+
+@step
+def process(item):
+    return item * 2
+
+@step
+def aggregate(items):
+    return sum(items)
+
+# Run daily at 9 AM UTC
+@flow(schedule="cron(0 9 * * ? *)")
+def daily_pipeline():
+    return fetch_data().map(process).agg(aggregate)
+
+# Or run every hour
+@flow(schedule="rate(1 hour)")
+def hourly_pipeline():
+    return fetch_data().process()
+```
+
+Schedule expressions:
+- **cron** - `cron(minute hour day month day-of-week ?)`
+- **rate** - `rate(value unit)` (e.g., `rate(1 hour)`, `rate(30 minutes)`, `rate(1 day)`)
+
+The schedule is deployed as an EventBridge Rule that triggers the Step Functions state machine.
+
+### AWS Batch Support
+
+Run compute-intensive steps as AWS Batch jobs:
+
+```python
+from lokki import flow, step
+
+@step(job_type="batch", vcpu=8, memory_mb=16384, timeout_seconds=3600)
+def heavy_computation(data):
+    # Run as AWS Batch job instead of Lambda
+    return process_heavy_data(data)
+```
+
+Batch configuration in `lokki.toml`:
+
+```toml
+[batch]
+job_queue = "my-batch-queue"
+job_definition_name = "lokki-batch"
+vcpu = 4
+memory_mb = 8192
+timeout_seconds = 3600
+```
 
 ## CLI Commands
 
