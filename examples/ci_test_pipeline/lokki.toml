@@ -1,4 +1,8 @@
-# lokki.toml - Flights example configuration
+# lokki.toml - Test pipeline configuration
+
+[build]
+# Use /tmp for build directory to avoid polluting the repo
+build_dir = "/tmp/lokki-test-pipeline"
 
 [aws]
 
@@ -12,7 +16,7 @@ image_repository = "local"
 endpoint = "http://localhost:4566"
 
 [lambda]
-package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+package_type = "zip" # Use "zip" for LocalStack testing; "image" for production
 timeout = 300
 memory = 1024
 image_tag = "latest"
