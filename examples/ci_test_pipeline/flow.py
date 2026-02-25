@@ -38,13 +38,13 @@ def print_result(result: dict):
 
 
 @flow
-def test_pipeline(
+def ci_test_pipeline(
     param1: str = "test",
     multiplier: int = 2,
     threshold: int = 0,
 ):
     """
-    Test pipeline with 5 steps demonstrating:
+    CI test pipeline with 5 steps demonstrating:
     - Flow parameters (param1, multiplier, threshold)
     - .map() with inner step
     - .agg() for aggregation
@@ -61,4 +61,4 @@ def test_pipeline(
 if __name__ == "__main__":
     from lokki import main
 
-    main(test_pipeline)
+    main(ci_test_pipeline)

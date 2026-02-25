@@ -40,6 +40,12 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 disable_error_code = ["call-overload"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
 [tool.uv.workspace]
 exclude = ["dev", "examples"]
 
