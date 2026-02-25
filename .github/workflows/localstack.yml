@@ -14,7 +14,7 @@ jobs:
       - name: Start LocalStack
         run: |
           docker run -d --name localstack -p 4566:4566 \
-            -e SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam \
+            -e SERVICES=s3,lambda,stepfunctions,cloudformation,iam \
             -e DEFAULT_REGION=us-east-1 \
             localstack/localstack:latest
           # Wait for LocalStack to be ready
@@ -42,7 +42,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Build
-        working-directory: examples/test_pipeline
+        working-directory: tests/flows/test_pipeline
         run: |
           uv sync
           uv run python test_pipeline.py build
@@ -53,14 +53,12 @@ jobs:
           LOKKI_ARTIFACT_BUCKET: lokki
 
       - name: Deploy
-        working-directory: examples/test_pipeline
+        working-directory: tests/flows/test_pipeline
         run: uv run python test_pipeline.py deploy --confirm
         env:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_DEFAULT_REGION: us-east-1
-          LOKKI_ARTIFACT_BUCKET: lokki
-          LOKKI_AWS_ENDPOINT: http://localhost:4566
 
       - name: Verify
         run: |
