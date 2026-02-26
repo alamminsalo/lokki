@@ -160,7 +160,7 @@ class TestBuildTemplateZipPackage:
         resources = template["Resources"]
 
         func = resources["Step1Function"]
-        assert func["Properties"]["PackageType"] == "ZipFile"
+        assert func["Properties"]["PackageType"] == "Zip"
         assert "S3Bucket" in func["Properties"]["Code"]
         assert "S3Key" in func["Properties"]["Code"]
 
