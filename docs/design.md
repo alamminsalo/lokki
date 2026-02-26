@@ -952,16 +952,16 @@ These log groups are created automatically by AWS Lambda when the function is fi
 
 The CloudFormation template includes an implicit log group resource (AWS Lambda creates it automatically), so no explicit `AWS::Logs::LogGroup` resource is required in the template.
 
-For ZIP archive deployments (`PackageType: ZipFile`):
+For ZIP archive deployments (`PackageType: Zip`):
 
 ```yaml
 GetBirdsFunction:
   Type: AWS::Lambda::Function
   Properties:
     FunctionName: !Sub "${FlowName}-get-birds"
-    PackageType: ZipFile
+    PackageType: Zip
     Code:
-      ZipFile: |
+      Zip: |
         # Inlined handler code
     Role: !GetAtt LambdaExecutionRole.Arn
     Timeout: 900
@@ -1054,16 +1054,16 @@ from lokki.runtime.handler import make_handler
 lambda_handler = make_handler(get_birds.fn)
 ```
 
-**CloudFormation template** — Lambda functions use `PackageType: ZipFile`:
+**CloudFormation template** — Lambda functions use `PackageType: Zip`:
 
 ```yaml
 GetBirdsFunction:
   Type: AWS::Lambda::Function
   Properties:
     FunctionName: !Sub "${FlowName}-get-birds"
-    PackageType: ZipFile
+    PackageType: Zip
     Code:
-      ZipFile: |
+      Zip: |
         # Inline the handler.py content
     Role: !GetAtt LambdaExecutionRole.Arn
     Timeout: 900
