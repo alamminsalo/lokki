@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 import sys
 import zipfile
 from collections.abc import Callable
@@ -95,6 +94,7 @@ def generate_shared_lambda_files(
     graph: FlowGraph,
     config: LokkiConfig,
     build_dir: Path,
+    pkg_dir: Path,
     flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate Lambda package files.
@@ -115,7 +115,9 @@ def generate_shared_lambda_files(
     lambdas_dir.mkdir(parents=True, exist_ok=True)
 
     if config.lambda_cfg.package_type == "zip":
-        return _generate_shared_zip_package(graph, config, lambdas_dir, flow_fn)
+        return _generate_shared_zip_package(
+            graph, config, lambdas_dir, pkg_dir, flow_fn
+        )
     else:
         return _generate_docker_packages(graph, config, lambdas_dir, flow_fn)
 
@@ -225,6 +227,7 @@ def _generate_shared_zip_package(
     graph: FlowGraph,
     config: LokkiConfig,
     lambdas_dir: Path,
+    pkg_dir: Path,
     flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate a single shared ZIP package with all dependencies and handlers.
@@ -246,80 +249,43 @@ def _generate_shared_zip_package(
     print("Generating shared ZIP package")
     print(f"  graph.name: {graph.name}")
 
-    step_names = _get_step_names_from_graph(graph)
+    zip_path = lambdas_dir / "function.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Write flow files
+        if flow_module_path := _get_flow_module_path(flow_fn):
+            flow_module_dir = flow_module_path.parent.resolve()
 
-    build_dir = lambdas_dir.parent
-    shared_zip_dir = lambdas_dir
-    shared_zip_dir.mkdir(parents=True, exist_ok=True)
+            if flow_module_dir.exists() and flow_module_dir.is_dir():
+                for item in flow_module_dir.iterdir():
+                    # Only copy in all .py files
+                    # TODO: config include globs
+                    if item.suffix not in {".py"}:
+                        continue
 
-    uv_path = shutil.which("uv")
-    if uv_path:
-        subprocess.run(
-            [uv_path, "pip", "install", "--target", str(shared_zip_dir), "lokkiflow"],
-            check=False,
-            capture_output=True,
-        )
+                    print(f"  Add file {item.name}")
+                    zf.write(item, item.name)
+        else:
+            raise RuntimeError("Flow module path could not be resolved.")
 
-    flow_module_path = _get_flow_module_path(flow_fn)
-    if flow_module_path:
-        flow_module_dir = flow_module_path.parent.resolve()
-        flow_module_name = flow_module_path.stem
+        # Write handler to pkg dir
+        (pkg_dir / "handler.py").write_text(_get_dispatcher_handler_content())
 
-        if flow_module_dir.exists() and flow_module_dir.is_dir():
-            build_dir_resolved = (build_dir).resolve()
+        # Write all from pkg dir
+        for file_path in pkg_dir.iterdir():
+            if file_path.stem not in {".lock"}:
+                zf.write(file_path, arcname=file_path.name)
 
-            for item in flow_module_dir.iterdir():
-                item_resolved = item.resolve() if item.exists() else None
-
-                if item.name in {
-                    ".git",
-                    "__pycache__",
-                    ".venv",
-                    "venv",
-                    ".pytest_cache",
-                    ".mypy_cache",
-                    ".ruff_cache",
-                    "lokki-build",
-                    "lokki-builddeps",
-                }:
-                    continue
-
-                if item_resolved and item_resolved == build_dir_resolved:
-                    continue
-
-                target = shared_zip_dir / item.name
-                if not target.exists():
-                    if item.is_dir():
-                        try:
-                            shutil.copytree(item, target, dirs_exist_ok=True)
-                        except Exception:
-                            pass
-                    else:
-                        try:
-                            shutil.copy(item, target)
-                        except Exception:
-                            pass
-
-            print(f"  Added flow directory: {flow_module_dir.name}/")
-    else:
-        flow_module_name = graph.name.replace("-", "_")
-
-    module_name = flow_module_name
-
-    handler_content = _get_dispatcher_handler_content(module_name)
-    (shared_zip_dir / "handler.py").write_text(handler_content)
-
-    _create_shared_zip(shared_zip_dir, step_names)
-
-    print(f"Created shared ZIP package with dispatcher handler for: {step_names}")
+        print("  Added packages to zip")
 
     return lambdas_dir
 
 
-def _get_dispatcher_handler_content(module_name: str) -> str:
+def _get_dispatcher_handler_content() -> str:
     """Generate dispatcher handler code that routes based on LOKKI_STEP_NAME."""
     return """import os
 import sys
+import importlib
+from lokki.runtime.handler import make_handler
 
 # Add current directory to path for module imports
 sys.path.insert(0, os.path.dirname(__file__))
@@ -332,8 +298,6 @@ module_name = os.environ.get("LOKKI_MODULE_NAME", "")
 if not module_name:
     raise ValueError("LOKKI_MODULE_NAME environment variable not set")
 
-import importlib
-
 mod = importlib.import_module(module_name)
 
 step_node = getattr(mod, step_name, None)
@@ -344,29 +308,12 @@ if step_node is None:
 
 step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
-from lokki.runtime.handler import make_handler
-
 lambda_handler = make_handler(step_func)
 """
 
 
-def _create_shared_zip(shared_zip_dir: Path, step_names: set[str]) -> None:
-    """Create a single ZIP archive with all dependencies and handlers."""
-    zip_path = shared_zip_dir / "function.zip"
-
-    excluded_names = {".lock", "function.zip"}
-
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file_path in shared_zip_dir.rglob("*"):
-            if file_path.is_file() and file_path.name not in excluded_names:
-                arcname = file_path.relative_to(shared_zip_dir)
-                zf.write(file_path, arcname)
+def _create_zip(pkg_dir: Path, zip_path: Path) -> Path:
+    """Creates zipfile from given directory path"""
 
     print(f"Created shared ZIP package: {zip_path}")
-
-
-def _get_step_names_from_graph(graph: FlowGraph) -> set[str]:
-    """Extract unique step names from graph."""
-    from lokki._utils import get_step_names
-
-    return get_step_names(graph)
+    return zip_path
