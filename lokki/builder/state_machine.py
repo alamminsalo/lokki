@@ -187,7 +187,7 @@ def _batch_task_state(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
                 {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
@@ -228,7 +228,7 @@ def _batch_task_state_from_node(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
                 {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},

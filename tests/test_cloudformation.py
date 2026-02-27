@@ -181,7 +181,7 @@ class TestBuildTemplateZipPackage:
         resources = template["Resources"]
 
         env_vars = resources["Step1Function"]["Properties"]["Environment"]["Variables"]
-        assert "LOKKI_S3_BUCKET" in env_vars
+        assert "LOKKI_ARTIFACT_BUCKET" in env_vars
         assert "LOKKI_FLOW_NAME" in env_vars
         assert "LOKKI_STEP_NAME" in env_vars
 

@@ -928,7 +928,7 @@ GetBirdsFunction:
     MemorySize: 512
     Environment:
       Variables:
-        LOKKI_S3_BUCKET: !Ref S3Bucket
+        LOKKI_ARTIFACT_BUCKET: !Ref S3Bucket
         LOKKI_FLOW_NAME: !Ref FlowName
 ```
 
@@ -968,7 +968,7 @@ GetBirdsFunction:
     MemorySize: 512
     Environment:
       Variables:
-        LOKKI_S3_BUCKET: !Ref S3Bucket
+        LOKKI_ARTIFACT_BUCKET: !Ref S3Bucket
         LOKKI_FLOW_NAME: !Ref FlowName
 ```
 
@@ -1099,7 +1099,7 @@ def make_handler(fn: Callable, retry_config: RetryConfig | None = None) -> Calla
         from lokki.store import S3Store
         from lokki.config import get_config
 
-        cfg = get_config()  # reads env vars: LOKKI_S3_BUCKET, LOKKI_FLOW_NAME
+        cfg = get_config()  # reads env vars: LOKKI_ARTIFACT_BUCKET, LOKKI_FLOW_NAME
         run_id = event["run_id"]          # injected by Step Functions context
         step_name = fn.__name__
 
@@ -2040,7 +2040,7 @@ The state machine generation is updated to support mixed Lambda/Batch steps:
       "Command": ["python", "-m", "lokki.runtime.batch_main"]
     },
     "Environment": [
-      {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+      {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
       {"Name": "LOKKI_FLOW_NAME", "Value.$": "$.flow_name"},
       {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
       {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},

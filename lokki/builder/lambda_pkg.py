@@ -247,35 +247,43 @@ def _generate_shared_zip_package(
     """
 
     print("Generating shared ZIP package")
-    print(f"  graph.name: {graph.name}")
+
+    EXCLUDE_DIRS = {".venv", "__pycache__", "build_dir", ".git", "lokki-build"}
+    EXCLUDE_NAMES = {".lock", "pyproject.toml", "uv.lock"}
+
+    def should_exclude(path: Path) -> bool:
+        """Check if path should be excluded from the zip."""
+        for part in path.parts:
+            if part in EXCLUDE_DIRS:
+                return True
+        if path.name in EXCLUDE_NAMES:
+            return True
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            return True
+        return False
 
     zip_path = lambdas_dir / "function.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Write flow files
         if flow_module_path := _get_flow_module_path(flow_fn):
             flow_module_dir = flow_module_path.parent.resolve()
 
             if flow_module_dir.exists() and flow_module_dir.is_dir():
-                for item in flow_module_dir.iterdir():
-                    # Only copy in all .py files
-                    # TODO: config include globs
-                    if item.suffix not in {".py"}:
+                for item in flow_module_dir.rglob("*.py"):
+                    if should_exclude(item):
                         continue
-
-                    print(f"  Add file {item.name}")
-                    zf.write(item, item.name)
+                    arcname = item.relative_to(flow_module_dir)
+                    print(f"  +prj {arcname}")
+                    zf.write(item, arcname=arcname)
         else:
             raise RuntimeError("Flow module path could not be resolved.")
 
-        # Write handler to pkg dir
         (pkg_dir / "handler.py").write_text(_get_dispatcher_handler_content())
 
-        # Write all from pkg dir
-        for file_path in pkg_dir.iterdir():
-            if file_path.stem not in {".lock"}:
-                zf.write(file_path, arcname=file_path.name)
-
-        print("  Added packages to zip")
+        for item in pkg_dir.rglob("*"):
+            if item.parent == pkg_dir:
+                print(f"  +dep {item}")
+            arcname = item.relative_to(pkg_dir)
+            zf.write(item, arcname=arcname)
 
     return lambdas_dir
 
