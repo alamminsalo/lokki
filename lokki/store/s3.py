@@ -21,20 +21,19 @@ class S3Store(TransientStore):
     Bucket is read from LOKKI_ARTIFACT_BUCKET environment variable.
     """
 
-    def __init__(self, endpoint: str = "") -> None:
+    def __init__(self) -> None:
         self.bucket = os.environ.get("LOKKI_ARTIFACT_BUCKET", "")
         if not self.bucket:
             raise ValueError(
                 "LOKKI_ARTIFACT_BUCKET environment variable not set. "
                 "This should be set in the Lambda/Batch container environment."
             )
-        self.endpoint = endpoint
-        self._client = get_s3_client(endpoint) if endpoint else get_s3_client()
+        self._client = get_s3_client()
 
     def _make_key(
         self, flow_name: str, run_id: str, step_name: str, filename: str
     ) -> str:
-        return f"lokki/{flow_name}/{run_id}/{step_name}/{filename}"
+        return f"lokki/{flow_name}/runs/{run_id}/{step_name}/{filename}"
 
     def write(
         self,
@@ -67,7 +66,7 @@ class S3Store(TransientStore):
             Body=json.dumps(items),
             ContentType="application/json",
         )
-        return f"s3://{self.bucket}/{key}"
+        return key
 
     def cleanup(self) -> None:
         pass

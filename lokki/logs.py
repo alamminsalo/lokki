@@ -40,11 +40,7 @@ def fetch_logs(
     if end_time is None:
         end_time = datetime.now(UTC)
 
-    client_kwargs: dict[str, str] = {"region_name": region}
-    if endpoint:
-        client_kwargs["endpoint_url"] = endpoint
-
-    logs_client = get_logs_client(endpoint or "", region)
+    logs_client = get_logs_client(region)
 
     try:
         _fetch_and_print_logs(

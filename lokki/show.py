@@ -39,11 +39,7 @@ def show_executions(
     if state_machine_name is None:
         state_machine_name = f"{flow_name}-state-machine"
 
-    client_kwargs: dict[str, str] = {"region_name": region}
-    if endpoint:
-        client_kwargs["endpoint_url"] = endpoint
-
-    sf_client = get_sfn_client(endpoint or "", region)
+    sf_client = get_sfn_client(region)
 
     try:
         if run_id:

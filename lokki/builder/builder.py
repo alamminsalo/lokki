@@ -100,7 +100,8 @@ class Builder:
         """Build deployment artifacts for a flow."""
         build_dir = Path(config.build_dir)
 
-        shutil.rmtree(build_dir)
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
         build_dir.mkdir(parents=True, exist_ok=True)
 
         lambdas_dir = build_dir / "lambdas"

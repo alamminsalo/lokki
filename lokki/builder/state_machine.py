@@ -86,8 +86,8 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     "Resource": "arn:aws:states:::s3:getObject",
                     "ReaderConfig": {"InputType": "JSON", "MaxItems": 100000},
                     "Parameters": {
-                        "Bucket.$": "$.bucket",
-                        "Key.$": "$.map_manifest_key",
+                        "Bucket": config.artifact_bucket,
+                        "Key.$": "$.result.map_manifest_key",
                     },
                 },
                 "ItemProcessor": {
@@ -98,13 +98,17 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     "StartAt": list(inner_states.keys())[0],
                     "States": inner_states,
                 },
+                "ResultSelector": {
+                    "run_id.$": "$$.result.run_id",
+                    "map_results.$": "$",
+                },
                 "ResultWriter": {
                     "Resource": "arn:aws:states:::s3:putObject",
                     "Parameters": {
-                        "Bucket.$": "$.bucket",
+                        "Bucket": config.artifact_bucket,
                         "Prefix.$": "States.Format('lokki/"
                         + graph.name
-                        + "/{}/', $.run_id)",
+                        + "/runs/{}/', $.run_id)",
                     },
                 },
                 "Next": None,
@@ -187,10 +191,10 @@ def _batch_task_state(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": config.artifact_bucket},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
-                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
+                {"Name": "LOKKI_RUN_ID", "Value.$": "$.result.run_id"},
                 {"Name": "LOKKI_INPUT_URL", "Value.$": "$.result.result_url"},
             ],
         },
@@ -228,10 +232,10 @@ def _batch_task_state_from_node(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": config.artifact_bucket},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
-                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
+                {"Name": "LOKKI_RUN_ID", "Value.$": "$.result.run_id"},
                 {"Name": "LOKKI_INPUT_URL", "Value.$": "$.item.result_url"},
             ],
         },

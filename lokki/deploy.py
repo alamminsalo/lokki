@@ -46,9 +46,9 @@ class Deployer:
         self.endpoint = endpoint
         self.package_type = package_type
 
-        self.cf_client = get_cf_client(endpoint, region)
-        self.ecr_client = get_ecr_client(endpoint, region)
-        self.sts_client = get_sts_client(endpoint)
+        self.cf_client = get_cf_client(region)
+        self.ecr_client = get_ecr_client(region)
+        self.sts_client = get_sts_client()
         self._account_id: str | None = None
 
     @property

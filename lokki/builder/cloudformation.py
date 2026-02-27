@@ -148,7 +148,9 @@ def build_template(
                     "PackageType": "Zip",
                     "Code": {
                         "S3Bucket": {"Ref": "S3Bucket"},
-                        "S3Key": {"Fn::Sub": "lokki/${FlowName}/lambdas/function.zip"},
+                        "S3Key": {
+                            "Fn::Sub": "lokki/${FlowName}/artifacts/lambdas/function.zip"
+                        },
                     },
                     "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
                     "Timeout": timeout,

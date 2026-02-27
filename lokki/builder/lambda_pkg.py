@@ -274,8 +274,6 @@ def _generate_shared_zip_package(
                     arcname = item.relative_to(flow_module_dir)
                     print(f"  +prj {arcname}")
                     zf.write(item, arcname=arcname)
-        else:
-            raise RuntimeError("Flow module path could not be resolved.")
 
         (pkg_dir / "handler.py").write_text(_get_dispatcher_handler_content())
 

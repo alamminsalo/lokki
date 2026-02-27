@@ -691,3 +691,69 @@ _Purpose_: Unify LocalStore and S3Store interfaces. Both should have consistent 
   - Remove bucket/key tests from LocalStore
 
 - [x] **T36.6** Run tests and verify coverage
+
+---
+
+## Milestone 37 — S3 Directory Structure Refactoring
+
+This milestone refactors the S3 directory structure to separate flow runs from permanent artifacts.
+
+### Background
+
+Currently, all S3 data is stored under a single bucket structure. This makes it difficult to distinguish between:
+- **Ephemeral data**: Flow run outputs, intermediate results, logs (can be cleaned up after runs complete)
+- **Permanent artifacts**: Lambda deployment packages, shared data (should persist across runs)
+
+### New S3 Directory Structure
+
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz
+    │           └── map_manifest.json
+    └── artifacts/
+        └── lambdas/
+            └── function.zip
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz
+    │           └── map_manifest.json
+    └── artifacts/
+        └── lambdas/
+            └── function.zip
+```
+
+### Tasks
+
+- [ ] **T37.1** Update S3Store to use new directory structure
+  - Modify `_make_key()` to use `<flow_name>/runs/<run_id>/<step_name>/` prefix
+  - Add new method for writing Lambda packages to `<flow_name>/artifacts/` prefix
+  - Update `write_manifest()` to use runs path
+
+- [ ] **T37.2** Update state machine to use new Lambda package location
+  - Modify CloudFormation template to reference `s3://<bucket>/<flow-name>/artifacts/lambdas/function.zip`
+  - Update state machine generation to use new path
+
+- [ ] **T37.3** Update builder to upload Lambda packages to new location
+  - Modify upload command in deploy to use `artifacts/` prefix
+  - Update S3 upload path in Taskfile.yaml
+
+- [ ] **T37.4** Add S3Store method for Lambda package operations
+  - `write_lambda_package(flow_name, zip_data) -> str` - returns S3 URI
+  - `read_lambda_package(flow_name) -> bytes`
+
+- [ ] **T37.5** Update tests for new directory structure
+  - Add tests for new key prefixes
+  - Add tests for Lambda package operations
+  - Verify backward compatibility or migration path
+
+- [ ] **T37.6** Update documentation
+  - Document new S3 directory structure in docs/config.md
+  - Update examples to reflect new paths

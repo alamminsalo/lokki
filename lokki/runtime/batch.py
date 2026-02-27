@@ -33,11 +33,10 @@ def make_batch_handler(
     def batch_handler(event: dict[str, Any]) -> dict[str, Any]:
         cfg = load_config()
         flow_name = cfg.flow_name or os.environ.get("LOKKI_FLOW_NAME", "unknown")
-        endpoint = os.environ.get("LOKKI_AWS_ENDPOINT", "")
         run_id = event.get("run_id", "unknown")
         step_name = fn.__name__
 
-        store = S3Store(endpoint)
+        store = S3Store()
 
         logger.info(
             f"Batch job invoked: flow={flow_name}, step={step_name}, run_id={run_id}",

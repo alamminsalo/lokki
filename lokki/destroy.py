@@ -27,7 +27,7 @@ def destroy_stack(
     Raises:
         DestroyError: If operations fail
     """
-    cf_client = get_cf_client(endpoint or "", region)
+    cf_client = get_cf_client(region)
 
     if not confirm:
         response = input(

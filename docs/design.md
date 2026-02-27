@@ -2199,3 +2199,70 @@ Both Lambda and Batch handlers need to be included in deployment packages. The L
 - `lokki/runtime/handler.py` - Lambda handler
 - `lokki/runtime/batch.py` - Batch handler  
 - `lokki/runtime/batch_main.py` - Batch entry point
+
+---
+
+## 18. S3 Directory Structure
+
+### Overview
+
+The S3 directory structure separates ephemeral flow run data from permanent artifacts.
+
+### Current Structure
+
+All data is stored under a single path:
+```
+s3://<artifact-bucket>/lokki/<flow-name>/<run-id>/<step-name>/output.pkl.gz
+```
+
+### New Directory Structure
+
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz      # Step output data
+    │           └── map_manifest.json  # Map block manifest
+    └── artifacts/
+        └── lambdas/
+            └── function.zip           # Lambda deployment package
+```
+
+### Rationale
+
+- **runs/**: Ephemeral data that can be cleaned up after flow executions complete
+- **artifacts/**: Permanent data (Lambda packages) that persist across runs
+
+### Implementation
+
+#### S3Store Updates
+
+The `S3Store` class updates key generation:
+
+```python
+def _make_key(self, flow_name: str, run_id: str, step_name: str, filename: str) -> str:
+    return f"{flow_name}/runs/{run_id}/{step_name}/{filename}"
+```
+
+#### Lambda Package Upload
+
+Upload to artifacts path:
+
+```python
+def upload_lambda_package(flow_name: str, zip_data: bytes) -> str:
+    key = f"{flow_name}/artifacts/lambdas/function.zip"
+    self._client.put_object(Bucket=self.bucket, Key=key, Body=zip_data)
+    return f"s3://{self.bucket}/{key}"
+```
+
+#### State Machine Updates
+
+Update CloudFormation to reference new Lambda package location:
+
+```yaml
+Code:
+  S3Bucket: !Ref S3Bucket
+  S3Key: !Sub "${FlowName}/artifacts/lambdas/function.zip"
+```
