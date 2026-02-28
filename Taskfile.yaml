@@ -114,9 +114,9 @@ tasks:
 
   ci-flow:
     desc: Run full CI flow
-    deps:
-      - task: upload-lambdas
     cmds:
       - task: version:bump
+      - task: build
+      - task: upload-lambdas
       - task: deploy
       - task: invoke
