@@ -125,11 +125,17 @@ class StepNode:
 
 class MapBlock:
     """Represents an open fan-out block started by .map()."""
-    def __init__(self, source: StepNode, inner_head: StepNode):
+    def __init__(
+        self,
+        source: StepNode,
+        inner_head: StepNode,
+        concurrency_limit: int | None = None,
+    ):
         self.source = source          # step before the Map
         self.inner_head = inner_head  # first step inside Map iterator
         self.inner_tail = inner_head  # last step inside Map iterator (grows with chaining)
         self._next: StepNode | None = None
+        self.concurrency_limit = concurrency_limit
 
     def map(self, step_node: StepNode) -> "MapBlock":
         # Further chaining inside the Map block
@@ -249,7 +255,8 @@ def get_data():
     return [1, 2, 3]
 
 @step
-def process_multiplied(items, multiplier):
+def process_multiplied(items, **kwargs):
+    multiplier = kwargs.get("multiplier", 1)
     return [item * multiplier for item in items]
 
 @step
@@ -258,30 +265,29 @@ def save(result):
 
 @flow
 def flow_with_params(multiplier=2):
-    # Flow input 'multiplier' is passed directly to process_multiplied
-    return get_data().next(process_multiplied, multiplier=multiplier).next(save)
+    # Flow parameters passed via **kwargs
+    return get_data().next(process_multiplied).next(save)
 ```
 
 **Behavior:**
-- `.next(step, **flow_kwargs)` accepts keyword arguments that are injected into the step
-- The step function receives:
-  - **First positional argument**: previous step's output (passed automatically)
-  - **Keyword arguments**: flow-level parameters from `.next()` call
+- Flow parameters are passed to all steps via `**kwargs`
+- Steps access flow params via `kwargs.get("param_name")` or `kwargs["param_name"]`
 
 **Parameter resolution:**
 ```python
 @step
-def fetch_weather(previous_output, start_date, end_date):
-    # previous_output: result from previous step (e.g., tuple(lat, lon))
-    # start_date, end_date: flow kwargs passed via .next()
+def fetch_weather(previous_output, **kwargs):
+    # previous_output: result from previous step
+    # kwargs: flow-level parameters
+    start_date = kwargs.get("start_date", "2024-01-01")
     lat, lon = previous_output
-    return fetch(lat, lon, start_date, end_date)
+    return fetch(lat, lon, start_date)
 
 @flow
 def weather_flow(location="New York", start_date="2024-01-01"):
     return (
-        geocode_location(location)  # Returns (lat, lon)
-        .next(fetch_weather, start_date=start_date, end_date="2024-01-31")
+        geocode_location(location)
+        .next(fetch_weather)  # Flow params passed via **kwargs
     )
 ```
 
@@ -348,14 +354,11 @@ def agg_flow(seed=100):
 
 **Comparison:**
 
-| Method | Input | Flow kwargs | Output | Use Case |
-|--------|-------|-------------|--------|------------|
-| `.map(step)` | list | no | list (per-item) | Parallel processing |
-| `.map(step, kwarg=val)` | list + kwargs | yes | list (per-item) | Parallel with config |
-| `.agg(step)` | list | no | single value | Aggregation |
-| `.agg(step, kwarg=val)` | list + kwargs | yes | single value | Aggregation with config |
-| `.next(step)` | previous output | no | any | Sequential chain |
-| `.next(step, kwarg=val)` | prev output + kwargs | yes | any | Sequential with config |
+| Method | Input | Flow params via | Output | Use Case |
+|--------|-------|----------------|--------|------------|
+| `.map(step)` | list | **kwargs | list (per-item) | Parallel processing |
+| `.agg(step)` | list | **kwargs | single value | Aggregation |
+| `.next(step)` | previous output | **kwargs | any | Sequential chain |
 
 **Error conditions:**
 - Flow ending with an open Map block (without `.agg()`) must raise an exception
@@ -774,11 +777,25 @@ The aggregation step receives a list of these URLs, downloads each, and merges t
 |---|---|
 | `TaskEntry` | `Task` — invokes the Lambda ARN |
 | `MapOpenEntry` | `Map` (Distributed Map mode) with `ItemReader` pointing to an S3 JSON manifest |
-| `MapCloseEntry` | `Task` for the aggregation Lambda, preceded by a state that writes collected results to S3 |
+| `MapCloseEntry` | `Task` for the aggregation Lambda |
+
+### Execution Context Object
+
+AWS Step Functions provides a Context Object that contains execution metadata. lokki uses this to pass flow parameters to Lambda functions via the InitFlow Pass state:
+
+| Context Field | Description | Usage |
+|--------------|-------------|-------|
+| `$$.Execution.Id` | Full execution ARN | Extract run_id |
+| `$$.Execution.Input` | Original execution input | Flow parameters |
+| `$$.Execution.Name` | Execution name | Alternative run_id |
+| `$$.Map.Item.Index` | Current item index (in Map) | Map iteration |
+| `$$.Map.Item.Value` | Current item value (in Map) | Map iteration input |
+
+The Lambda handler reads flow from the event (passed via InitFlow and embedded in manifest items).
 
 ### Distributed Map pattern
 
-The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3:
+The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3 via `ItemReader`. The `ItemSelector` extracts flow from each manifest item:
 
 ```json
 {
@@ -788,25 +805,46 @@ The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3:
     "ReaderConfig": { "InputType": "JSON", "MaxItems": 100000 },
     "Parameters": {
       "Bucket": "<bucket>",
-      "Key.$": "$.map_manifest_key"
+      "Key.$": "$.input"
     }
+  },
+  "ItemSelector": {
+    "input.$": "$.Map.Item.Value.input",
+    "flow.$": "$.Map.Item.Value.flow"
   },
   "ItemProcessor": {
     "ProcessorConfig": { "Mode": "DISTRIBUTED", "ExecutionType": "STANDARD" },
     "StartAt": "<inner_first_state>",
     "States": { ... }
   },
-  "ResultWriter": {
-    "Resource": "arn:aws:states:::s3:putObject",
-    "Parameters": {
-      "Bucket": "<bucket>",
-      "Prefix.$": "States.Format('lokki/{}/{}/map_results/', <flow>, $.run_id)"
-    }
+  "ResultPath": "$",
+  "ResultSelector": {
+    "flow.$": "$[0].flow",
+    "input.$": "$"
   }
 }
 ```
 
-The preceding `Task` state (the `source` step) is responsible for writing its output list to S3 as the map manifest JSON, and placing the manifest key into the state output.
+**Key points:**
+- Manifest format: `[{"input": "url", "flow": {...}}, ...]`
+- `ItemSelector` extracts `input` and `flow` from each manifest item using JsonPath
+- `ResultSelector` preserves flow context for aggregation step using inline output
+
+### Event Format
+
+All Lambda functions receive events in the following format:
+
+```json
+{
+  "input": "<data or S3 URL>",
+  "flow": {
+    "run_id": "arn:aws:states:region:account:execution:name",
+    "params": { "param1": "value1", ... }
+  }
+}
+```
+
+For Map iterations, the `input` field contains the individual item. For aggregation steps, the `input` field contains the S3 URL of the aggregated results.
 
 ### Map Concurrency Limit
 
@@ -837,12 +875,35 @@ This adds `MaxConcurrency: 10` to the Map state in the generated Step Functions:
 
 When `concurrency_limit` is not specified, the Map state runs with unlimited parallelism (up to AWS limits).
 
-### Inter-state data passing
+### Distributed Map with ItemSelector and ResultWriter
 
-Each Task state's output is a small JSON object containing only the S3 URL of the result — never the payload itself. This keeps all Step Functions I/O well within the 256 KB state payload limit.
+The distributed Map state uses:
+- **ItemReader**: Reads items from S3 (the manifest JSON file)
+- **ItemSelector**: Injects `$$.Execution.Id` and `$$.Execution.Input` into each iteration
+- **ResultWriter**: Writes aggregation results to S3
 
 ```json
-{ "result_url": "s3://bucket/lokki/flow/run123/get_birds/output.pkl.gz" }
+{
+  "Type": "Map",
+  "ItemReader": { ... },
+  "ItemProcessor": { ... },
+  "ItemSelector": {
+    "input.$": "$",
+    "flow": {
+      "run_id.$": "$$.Execution.Id",
+      "params.$": "$$.Execution.Input"
+    }
+  },
+  "ResultWriter": { ... }
+}
+```
+
+### Inter-state data passing
+
+Each Task state's output is a small JSON object containing the S3 URL of the result and flow context — never the payload itself. This keeps all Step Functions I/O well within the 256 KB state payload limit.
+
+```json
+{ "input": "s3://bucket/lokki/flow/run123/get_birds/output.pkl.gz", "flow": { "run_id": "...", "params": {} } }
 ```
 
 ### State naming
@@ -928,7 +989,7 @@ GetBirdsFunction:
     MemorySize: 512
     Environment:
       Variables:
-        LOKKI_S3_BUCKET: !Ref S3Bucket
+        LOKKI_ARTIFACT_BUCKET: !Ref S3Bucket
         LOKKI_FLOW_NAME: !Ref FlowName
 ```
 
@@ -952,23 +1013,23 @@ These log groups are created automatically by AWS Lambda when the function is fi
 
 The CloudFormation template includes an implicit log group resource (AWS Lambda creates it automatically), so no explicit `AWS::Logs::LogGroup` resource is required in the template.
 
-For ZIP archive deployments (`PackageType: ZipFile`):
+For ZIP archive deployments (`PackageType: Zip`):
 
 ```yaml
 GetBirdsFunction:
   Type: AWS::Lambda::Function
   Properties:
     FunctionName: !Sub "${FlowName}-get-birds"
-    PackageType: ZipFile
+    PackageType: Zip
     Code:
-      ZipFile: |
+      Zip: |
         # Inlined handler code
     Role: !GetAtt LambdaExecutionRole.Arn
     Timeout: 900
     MemorySize: 512
     Environment:
       Variables:
-        LOKKI_S3_BUCKET: !Ref S3Bucket
+        LOKKI_ARTIFACT_BUCKET: !Ref S3Bucket
         LOKKI_FLOW_NAME: !Ref FlowName
 ```
 
@@ -1049,21 +1110,21 @@ get_birds/
 ```python
 # lokki-build/lambdas/get_birds/handler.py (auto-generated)
 from birds_flow_example import get_birds
-from lokki.runtime.handler import make_handler
+from lokki.runtime import Lambda
 
-lambda_handler = make_handler(get_birds.fn)
+lambda_handler = Lambda(get_birds.fn)
 ```
 
-**CloudFormation template** — Lambda functions use `PackageType: ZipFile`:
+**CloudFormation template** — Lambda functions use `PackageType: Zip`:
 
 ```yaml
 GetBirdsFunction:
   Type: AWS::Lambda::Function
   Properties:
     FunctionName: !Sub "${FlowName}-get-birds"
-    PackageType: ZipFile
+    PackageType: Zip
     Code:
-      ZipFile: |
+      Zip: |
         # Inline the handler.py content
     Role: !GetAtt LambdaExecutionRole.Arn
     Timeout: 900
@@ -1079,9 +1140,9 @@ A thin, auto-generated file that binds the specific step function to the generic
 ```python
 # lokki-build/lambdas/get_birds/handler.py  (auto-generated)
 from birds_flow_example import get_birds          # imports user's function
-from lokki.runtime.handler import make_handler
+from lokki.runtime import Lambda
 
-lambda_handler = make_handler(get_birds.fn)
+lambda_handler = Lambda(get_birds.fn)
 ```
 
 The build process writes one of these per step, importing the correct function from the user's flow script.
@@ -1099,7 +1160,7 @@ def make_handler(fn: Callable, retry_config: RetryConfig | None = None) -> Calla
         from lokki.store import S3Store
         from lokki.config import get_config
 
-        cfg = get_config()  # reads env vars: LOKKI_S3_BUCKET, LOKKI_FLOW_NAME
+        cfg = get_config()  # reads env vars: LOKKI_ARTIFACT_BUCKET, LOKKI_FLOW_NAME
         run_id = event["run_id"]          # injected by Step Functions context
         step_name = fn.__name__
 
@@ -1636,7 +1697,7 @@ The @flow function in `__init__.py` is extended to handle the `deploy` command:
 
 ```python
 elif command == "deploy":
-    from lokki.deploy import Deployer
+    from lokki.cli import Deployer
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -1753,8 +1814,8 @@ mod = importlib.import_module(module_name)
 step_node = getattr(mod, step_name)
 step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
-from lokki.runtime.handler import make_handler
-lambda_handler = make_handler(step_func)
+from lokki.runtime import Lambda
+lambda_handler = Lambda(step_func)
 ```
 
 ### S3 Endpoint Configuration
@@ -2040,7 +2101,7 @@ The state machine generation is updated to support mixed Lambda/Batch steps:
       "Command": ["python", "-m", "lokki.runtime.batch_main"]
     },
     "Environment": [
-      {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+      {"Name": "LOKKI_ARTIFACT_BUCKET", "Value.$": "$.s3_bucket"},
       {"Name": "LOKKI_FLOW_NAME", "Value.$": "$.flow_name"},
       {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
       {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
@@ -2199,3 +2260,70 @@ Both Lambda and Batch handlers need to be included in deployment packages. The L
 - `lokki/runtime/handler.py` - Lambda handler
 - `lokki/runtime/batch.py` - Batch handler  
 - `lokki/runtime/batch_main.py` - Batch entry point
+
+---
+
+## 18. S3 Directory Structure
+
+### Overview
+
+The S3 directory structure separates ephemeral flow run data from permanent artifacts.
+
+### Current Structure
+
+All data is stored under a single path:
+```
+s3://<artifact-bucket>/lokki/<flow-name>/<run-id>/<step-name>/output.pkl.gz
+```
+
+### New Directory Structure
+
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz      # Step output data
+    │           └── map_manifest.json  # Map block manifest
+    └── artifacts/
+        └── lambdas/
+            └── function.zip           # Lambda deployment package
+```
+
+### Rationale
+
+- **runs/**: Ephemeral data that can be cleaned up after flow executions complete
+- **artifacts/**: Permanent data (Lambda packages) that persist across runs
+
+### Implementation
+
+#### S3Store Updates
+
+The `S3Store` class updates key generation:
+
+```python
+def _make_key(self, flow_name: str, run_id: str, step_name: str, filename: str) -> str:
+    return f"{flow_name}/runs/{run_id}/{step_name}/{filename}"
+```
+
+#### Lambda Package Upload
+
+Upload to artifacts path:
+
+```python
+def upload_lambda_package(flow_name: str, zip_data: bytes) -> str:
+    key = f"{flow_name}/artifacts/lambdas/function.zip"
+    self._client.put_object(Bucket=self.bucket, Key=key, Body=zip_data)
+    return f"s3://{self.bucket}/{key}"
+```
+
+#### State Machine Updates
+
+Update CloudFormation to reference new Lambda package location:
+
+```yaml
+Code:
+  S3Bucket: !Ref S3Bucket
+  S3Key: !Sub "${FlowName}/artifacts/lambdas/function.zip"
+```

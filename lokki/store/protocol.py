@@ -42,7 +42,7 @@ class TransientStore(Protocol):
         flow_name: str,
         run_id: str,
         step_name: str,
-        items: "Sequence[dict[str, Any]]",
+        items: "Sequence[Any]",
     ) -> str:
         """Write a map manifest listing items for parallel processing."""
         ...

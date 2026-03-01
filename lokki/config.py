@@ -191,7 +191,9 @@ def load_config() -> LokkiConfig:
         config.image_repository = env_repo
     if env_region := os.environ.get("LOKKI_AWS_REGION"):
         config.aws_region = env_region
-    if env_endpoint := os.environ.get("LOKKI_AWS_ENDPOINT"):
+    if env_endpoint := os.environ.get("LOKKI_AWS_ENDPOINT") or os.environ.get(
+        "AWS_ENDPOINT_URL"
+    ):
         config.aws_endpoint = env_endpoint
     if env_build := os.environ.get("LOKKI_BUILD_DIR"):
         config.build_dir = env_build

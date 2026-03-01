@@ -10,6 +10,8 @@ to generate deployment artifacts:
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -34,6 +36,52 @@ def _get_flow_module_name(
     return graph.name.replace("-", "_")
 
 
+def _package_deps(config: LokkiConfig) -> Path:
+    """
+    Collects dependencies into build_dir.
+    Returns package dir path.
+    """
+
+    build_dir = Path(config.build_dir)
+    requirements = build_dir / "requirements.txt"
+
+    uv = shutil.which("uv")
+    if not uv:
+        raise RuntimeError("Could not collect package dependencies: uv is not found.")
+
+    # Create requirements.txt
+    subprocess.run(
+        [uv, "export", "--frozen", "--no-dev", "--no-editable", "-o", requirements],
+        capture_output=True,
+    ).check_returncode()
+
+    # Make pkg dir
+    pkg_dir = build_dir / "packages"
+    pkg_dir.mkdir(parents=True)
+
+    # Collect packages dir
+    subprocess.run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--no-installer-metadata",
+            "--no-compile-bytecode",
+            "--python-platform",
+            "x86_64-manylinux2014",
+            "--python",
+            "3.13",
+            "--target",
+            pkg_dir,
+            "-r",
+            requirements,
+        ],
+        capture_output=True,
+    ).check_returncode()
+
+    return pkg_dir
+
+
 class Builder:
     """Orchestrates building deployment artifacts for lokki flows.
 
@@ -48,9 +96,25 @@ class Builder:
         graph: FlowGraph,
         config: LokkiConfig,
         flow_fn: Callable[[], FlowGraph] | None = None,
+        force: bool = False,
     ) -> None:
-        """Build deployment artifacts for a flow."""
+        """Build deployment artifacts for a flow.
+
+        Args:
+            graph: The flow graph to build
+            config: Lokki configuration
+            flow_fn: The flow function (used for module name derivation)
+            force: If True, always rebuild even if build dir exists
+        """
         build_dir = Path(config.build_dir)
+
+        if build_dir.exists() and not force:
+            print(f"Build directory already exists at {build_dir}, skipping build.")
+            print("Use --force to rebuild.")
+            return
+
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
         build_dir.mkdir(parents=True, exist_ok=True)
 
         lambdas_dir = build_dir / "lambdas"
@@ -58,7 +122,10 @@ class Builder:
 
         flow_module_name = _get_flow_module_name(flow_fn, graph)
 
-        generate_shared_lambda_files(graph, config, build_dir, flow_fn)
+        # Collect package deps
+        pkg_dir = _package_deps(config)
+
+        generate_shared_lambda_files(graph, config, build_dir, pkg_dir, flow_fn)
 
         state_machine = build_state_machine(graph, config)
         state_machine_path = build_dir / "statemachine.json"

@@ -160,7 +160,7 @@ class TestBuildTemplateZipPackage:
         resources = template["Resources"]
 
         func = resources["Step1Function"]
-        assert func["Properties"]["PackageType"] == "ZipFile"
+        assert func["Properties"]["PackageType"] == "Zip"
         assert "S3Bucket" in func["Properties"]["Code"]
         assert "S3Key" in func["Properties"]["Code"]
 
@@ -181,7 +181,7 @@ class TestBuildTemplateZipPackage:
         resources = template["Resources"]
 
         env_vars = resources["Step1Function"]["Properties"]["Environment"]["Variables"]
-        assert "LOKKI_S3_BUCKET" in env_vars
+        assert "LOKKI_ARTIFACT_BUCKET" in env_vars
         assert "LOKKI_FLOW_NAME" in env_vars
         assert "LOKKI_STEP_NAME" in env_vars
 

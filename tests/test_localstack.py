@@ -58,6 +58,7 @@ def localstack_services():
     os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
     os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
     os.environ["AWS_DEFAULT_REGION"] = AWS_REGION
+    os.environ["AWS_ENDPOINT_URL"] = endpoint
 
     # Create S3 bucket
     s3_client = boto3.client(
@@ -146,6 +147,7 @@ def built_pipeline(sync_pipeline_deps):
             "AWS_ACCESS_KEY_ID": AWS_ACCESS_KEY_ID,
             "AWS_SECRET_ACCESS_KEY": AWS_SECRET_ACCESS_KEY,
             "AWS_DEFAULT_REGION": AWS_REGION,
+            "AWS_ENDPOINT_URL": LOCALSTACK_ENDPOINT,
             "LOKKI_ARTIFACT_BUCKET": "lokki",
         }
     )
@@ -239,13 +241,9 @@ class TestLambdaInvocation:
         function_names = [f["FunctionName"] for f in response.get("Functions", [])]
 
         # Check that ci-test-pipeline Lambda functions exist
-        # (LocalStack uses dashes from flow name)
-        # Note: print_result is a .next() step with no return, may not create Lambda
         expected_functions = [
             "ci-test-pipeline-get_values",
-            "ci-test-pipeline-process_item",
-            "ci-test-pipeline-transform_item",
-            "ci-test-pipeline-combine_results",
+            "ci-test-pipeline-transform",
         ]
 
         for func in expected_functions:
@@ -284,10 +282,10 @@ class TestFlowParameters:
 
 
 class TestMapStates:
-    """Tests for Map states in Step Functions."""
+    """Tests for step chain in Step Functions."""
 
-    def test_map_state_in_state_machine(self, deployed_stack, sfn_client):
-        """Test that Map state is correctly generated in state machine."""
+    def test_step_chain_in_state_machine(self, deployed_stack, sfn_client):
+        """Test that step chain is correctly generated in state machine."""
         # Find state machine ARN
         response = sfn_client.list_state_machines()
         state_machines = response.get("stateMachines", [])
@@ -307,11 +305,16 @@ class TestMapStates:
 
         definition = json.loads(response["definition"])
 
-        # Check for Map state
+        # Check for step chain states
         states = definition.get("States", {})
-        has_map = any(state.get("Type") == "Map" for state in states.values())
 
-        assert has_map, "Map state not found in state machine"
+        # Verify expected steps exist (GetValues -> Transform)
+        assert "GetValues" in states, "GetValues state not found"
+        assert "Transform" in states, "Transform state not found"
+
+        # Verify chaining
+        assert states["GetValues"].get("Next") == "Transform"
+        assert states["Transform"].get("End") is True
 
 
 class TestCloudFormationTemplate:
@@ -398,6 +401,8 @@ class TestCLILocalStack:
                 "AWS_ACCESS_KEY_ID": AWS_ACCESS_KEY_ID,
                 "AWS_SECRET_ACCESS_KEY": AWS_SECRET_ACCESS_KEY,
                 "AWS_DEFAULT_REGION": AWS_REGION,
+                "AWS_ENDPOINT_URL": LOCALSTACK_ENDPOINT,
+                "LOKKI_ARTIFACT_BUCKET": "lokki",
             }
         )
 
@@ -424,6 +429,8 @@ class TestCLILocalStack:
                 "AWS_ACCESS_KEY_ID": AWS_ACCESS_KEY_ID,
                 "AWS_SECRET_ACCESS_KEY": AWS_SECRET_ACCESS_KEY,
                 "AWS_DEFAULT_REGION": AWS_REGION,
+                "AWS_ENDPOINT_URL": LOCALSTACK_ENDPOINT,
+                "LOKKI_ARTIFACT_BUCKET": "lokki",
             }
         )
 

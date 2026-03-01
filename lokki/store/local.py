@@ -64,7 +64,7 @@ class LocalStore(TransientStore):
         flow_name: str,
         run_id: str,
         step_name: str,
-        items: Sequence[dict[str, Any]],
+        items: Sequence[Any],
     ) -> str:
         path = self._get_path(flow_name, run_id, step_name, "map_manifest.json")
         path.parent.mkdir(parents=True, exist_ok=True)

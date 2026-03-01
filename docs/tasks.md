@@ -691,3 +691,332 @@ _Purpose_: Unify LocalStore and S3Store interfaces. Both should have consistent 
   - Remove bucket/key tests from LocalStore
 
 - [x] **T36.6** Run tests and verify coverage
+
+---
+
+## Milestone 37 — S3 Directory Structure Refactoring
+
+This milestone refactors the S3 directory structure to separate flow runs from permanent artifacts.
+
+### Background
+
+Currently, all S3 data is stored under a single bucket structure. This makes it difficult to distinguish between:
+- **Ephemeral data**: Flow run outputs, intermediate results, logs (can be cleaned up after runs complete)
+- **Permanent artifacts**: Lambda deployment packages, shared data (should persist across runs)
+
+### New S3 Directory Structure
+
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz
+    │           └── map_manifest.json
+    └── artifacts/
+        └── lambdas/
+            └── function.zip
+```
+s3://<artifact-bucket>/
+└── <flow-name>/
+    ├── runs/
+    │   └── <run-id>/
+    │       └── <step-name>/
+    │           ├── output.pkl.gz
+    │           └── map_manifest.json
+    └── artifacts/
+        └── lambdas/
+            └── function.zip
+```
+
+### Tasks
+
+- [ ] **T37.1** Update S3Store to use new directory structure
+  - Modify `_make_key()` to use `<flow_name>/runs/<run_id>/<step_name>/` prefix
+  - Add new method for writing Lambda packages to `<flow_name>/artifacts/` prefix
+  - Update `write_manifest()` to use runs path
+
+- [ ] **T37.2** Update state machine to use new Lambda package location
+  - Modify CloudFormation template to reference `s3://<bucket>/<flow-name>/artifacts/lambdas/function.zip`
+  - Update state machine generation to use new path
+
+- [ ] **T37.3** Update builder to upload Lambda packages to new location
+  - Modify upload command in deploy to use `artifacts/` prefix
+  - Update S3 upload path in Taskfile.yaml
+
+- [x] **T37.4** Add S3Store method for Lambda package upload
+  - `upload_lambda_zip(flow_name, zip_data) -> str` - returns S3 URI
+
+- [ ] **T37.5** Update tests for new directory structure
+  - Add tests for new key prefixes
+  - Add tests for Lambda package operations
+  - Verify backward compatibility or migration path
+
+- [ ] **T37.6** Update documentation
+  - Document new S3 directory structure in docs/config.md
+  - Update examples to reflect new paths
+
+---
+
+## Milestone 38 — Lambda Event Dataclass Refactoring
+
+_This milestone refactors the Lambda/Batch runtime handlers to use typed dataclasses for event handling, making the code simpler and more maintainable. It leverages AWS Step Functions Context Object to pass flow parameters without explicit flow passing._
+
+### Background
+
+The current handler code has complex branching logic to handle different input patterns (result_url, result_urls, item_url, aggregation lists, etc.). This makes it hard to maintain and error-prone.
+
+AWS Step Functions provides a Context Object (`$$.Execution.Id`, `$$.Execution.Input`, etc.) that can be used to access execution metadata. lokki uses this to get run_id and flow parameters directly in the Lambda handler, eliminating the need for:
+1. InitFlow Pass state
+2. Flow context in manifest items
+3. Complex event parsing logic
+
+### New Event Structure
+
+```python
+@dataclass
+class FlowContext:
+    run_id: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+@dataclass  
+class LambdaEvent:
+    flow: FlowContext
+    input: Any = None  # Data or S3 URL string
+```
+
+### Tasks
+
+- [x] **T38.1** Create `lokki/runtime/event.py` with dataclass definitions
+  - Define `FlowContext` dataclass with `run_id` and `params` fields
+  - Define `LambdaEvent` dataclass with `flow` and `input` fields
+  - Add serialization/deserialization helpers for JSON conversion
+
+- [x] **T38.2** Update Lambda handler to use LambdaEvent dataclass
+  - Simplify handler to read from `event.input`
+  - Read flow params from `event.flow.params`
+  - Handle S3 URL strings in input by reading from S3Store
+  - Reduce handler from ~150 lines to ~40 lines
+
+- [x] **T38.3** Update Batch handler to use LambdaEvent dataclass
+  - Apply same simplifications as Lambda handler
+
+- [x] **T38.4** Update state machine to use Context Object
+  - Keep InitFlow Pass state (constructs initial input to first step from raw Step Functions input)
+  - Add `ItemSelector` to Map state to inject `$$.Execution.Id` and `$$.Execution.Input` into each iteration
+  - Add `ResultWriter` to Map state to write aggregation results to S3
+  - Add `ResultSelector` to Map state to preserve flow context for aggregation step
+  - Update Task states to use consistent `{"input": ..., "flow": {...}}` format
+
+- [ ] **T38.5** Update Lambda handler to extract flow from Context Object
+  - Read `$$.Execution.Id` from event (via JsonPath `$$.Execution.Id`)
+  - Read `$$.Execution.Input` from event for flow params
+  - Handle both direct invocation (with flow in event) and Step Functions invocation (with flow in context)
+
+- [ ] **T38.6** Update manifest format for Map state
+  - Use simplified format: `[{"input": "..."}]` (no flow needed - available via Context Object)
+  - Update handler to read input from each item's "input" key
+
+- [ ] **T38.7** Write comprehensive unit tests
+  - Test LambdaEvent dataclass serialization/deserialization
+  - Test handler with various input scenarios (S3 URL, list, dict)
+  - Test state machine generation with ItemSelector, ResultWriter, ResultSelector
+  - Test map/agg flow end-to-end
+  - Test local runner consistency with deployed flow
+
+---
+
+## Summary
+
+| Milestone | Status |
+|-----------|--------|
+| M1 - Project Scaffolding | Complete |
+| M2 - Configuration | Complete |
+| M3 - Decorator & Graph Model | Complete |
+| M4 - CLI Entry Point | Complete |
+| M5 - S3 & Serialisation Layer | Complete |
+| M6 - Local Runner | Complete |
+| M7 - Runtime Handler | Complete |
+| M8 - Lambda Packaging | Complete |
+| M9 - State Machine Generation | Complete |
+| M10 - CloudFormation Generation | Complete |
+| M11 - Build Orchestrator | Complete |
+| M12 - End-to-End & Hardening | Complete |
+| M13 - Logging & Observability | Complete |
+| M14 - Deploy Command | Complete |
+| M15 - Local Testing with LocalStack | Complete |
+| M16 - Step Functions Local Deployment | Complete |
+| M17 - TOML Configuration Format | Complete |
+| M18 - Test Coverage Improvements | Complete |
+| M19 - CLI Commands: show, logs, destroy | Complete |
+| M20 - Flow-level Parameters in .next() | Complete |
+| M21 - Flow-level Parameters in .map() and .agg() | Complete |
+| M22 - Validate Nested .map() Blocks | Complete |
+| M23 - Step Retry Configuration | Complete |
+| M24 - Code Refactoring | Complete |
+| M25 - Documentation Update | Complete |
+| M26 - Type Safety Improvements | Complete |
+| M27 - Test Coverage Improvements | Complete |
+| M28 - Security Improvements | Complete |
+| M29 - CI/CD Setup | Complete |
+| M30 - Integration Tests | Complete |
+| M31 - Migrate to moto for AWS mocking | Complete |
+| M32 - AWS Batch Support | Complete |
+| M33 - Map Concurrency Limit | Complete |
+| M34 - API Documentation | Complete |
+| M35 - Scheduling | Complete |
+| M36 - Unify Store Interfaces | Complete |
+| M37 - S3 Directory Structure Refactoring | Complete |
+| M38 - Lambda Event Dataclass Refactoring | Complete |
+| M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
+
+---
+
+## Milestone 40 — Flow Params via Kwargs
+
+_Purpose_: Simplify flow parameter handling by always passing them via `**kwargs`. This removes the silent constraint that flow param names must match function param names, making the API more explicit and less error-prone.
+
+### Background
+
+Currently flow params are passed as explicit kwargs to step functions:
+```python
+@flow
+def my_flow(multiplier=2):
+    @step
+    def transform(values, mult):  # must match 'multiplier' name exactly
+        return [v * mult for v in values]
+```
+
+This requires flow param names to match step function param names exactly. With kwargs:
+```python
+@flow
+def my_flow(multiplier=2):
+    @step
+    def transform(values, **kwargs):  # receives all flow params
+        return [v * kwargs["multiplier"] for v in values]
+```
+
+### Tasks
+
+- [x] **T40.1** Update decorators to remove explicit kwargs
+  - Remove `**kwargs` from `StepNode.next()`
+  - Remove `**kwargs` from `StepNode.map()` 
+  - Remove `**kwargs` from `StepNode.agg()`
+
+- [x] **T40.2** Update handler to pass flow params via kwargs
+  - Remove `_filter_flow_params()` function
+  - Always pass flow params as `**kwargs`
+
+- [x] **T40.3** Update runner to pass flow params via kwargs
+  - Update `_execute_step()` to pass flow params as `**kwargs`
+
+- [x] **T40.4** Update CI test pipeline example
+  - Rewrite step functions to use `**kwargs`
+
+- [x] **T40.5** Update tests
+  - Remove tests using explicit kwargs in `.next()`, `.map()`, `.agg()`
+  - Add tests for `**kwargs` flow param usage
+
+- [x] **T40.6** Update documentation
+  - Document new flow params behavior in docs/design.md
+
+---
+
+## Summary
+
+| Milestone | Status |
+|-----------|--------|
+| M1 - Project Scaffolding | Complete |
+| M2 - Configuration | Complete |
+| M3 - Decorator & Graph Model | Complete |
+| M4 - CLI Entry Point | Complete |
+| M5 - S3 & Serialisation Layer | Complete |
+| M6 - Local Runner | Complete |
+| M7 - Runtime Handler | Complete |
+| M8 - Lambda Packaging | Complete |
+| M9 - State Machine Generation | Complete |
+| M10 - CloudFormation Generation | Complete |
+| M11 - Build Orchestrator | Complete |
+| M12 - End-to-End & Hardening | Complete |
+| M13 - Logging & Observability | Complete |
+| M14 - Deploy Command | Complete |
+| M15 - Local Testing with LocalStack | Complete |
+| M16 - Step Functions Local Deployment | Complete |
+| M17 - TOML Configuration Format | Complete |
+| M18 - Test Coverage Improvements | Complete |
+| M19 - CLI Commands: show, logs, destroy | Complete |
+| M20 - Flow-level Parameters in .next() | Complete |
+| M21 - Flow-level Parameters in .map() and .agg() | Complete |
+| M22 - Validate Nested .map() Blocks | Complete |
+| M23 - Step Retry Configuration | Complete |
+| M24 - Code Refactoring | Complete |
+| M25 - Documentation Update | Complete |
+| M26 - Type Safety Improvements | Complete |
+| M27 - Test Coverage Improvements | Complete |
+| M28 - Security Improvements | Complete |
+| M29 - CI/CD Setup | Complete |
+| M30 - Integration Tests | Complete |
+| M31 - Migrate to moto for AWS mocking | Complete |
+| M32 - AWS Batch Support | Complete |
+| M33 - Map Concurrency Limit | Complete |
+| M34 - API Documentation | Complete |
+| M35 - Scheduling | Complete |
+| M36 - Unify Store Interfaces | Complete |
+| M37 - S3 Directory Structure Refactoring | Complete |
+| M38 - Lambda Event Dataclass Refactoring | Complete |
+| M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
+| M40 - Flow Params via Kwargs | Complete |
+| M41 - Runtime Module Reorganization | Complete |
+
+---
+
+## Milestone 41 — Runtime Module Reorganization
+
+_Purpose_: Reorganize runtime module to have shared Runtime class and move runner to runtime/local.py.
+
+### Background
+
+Currently:
+- `lokki/runner.py` contains LocalRunner
+- `lokki/runtime/handler.py` contains Lambda handler
+- Flow params filtering logic is duplicated in handler.py and runner.py
+
+### Goals
+- Single Runtime class with shared logic for calling step functions
+- Move runner to runtime/local.py
+- Move Lambda handler to runtime/lambda.py
+- Consistent interface across all runtimes (Lambda, Batch, Local)
+
+### Tasks
+
+- [ ] **T41.1** Create runtime/runtime.py with Runtime class
+  - Create Runtime class with static methods:
+    - `accepts_kwargs(fn)` - Check if function accepts **kwargs
+    - `filter_flow_params(fn, flow_params)` - Filter flow params based on function signature
+    - `call_step(fn, input_data, flow_params)` - Call step function with input and flow params
+
+- [ ] **T41.2** Move runner.py to runtime/local.py
+  - Move `lokki/runner.py` → `lokki/runtime/local.py`
+  - Update imports to use Runtime class
+
+- [ ] **T41.3** Move runtime/handler.py to runtime/lambda.py
+  - Move `lokki/runtime/handler.py` → `lokki/runtime/lambda.py`
+  - Update imports to use Runtime class
+
+- [ ] **T41.4** Update runtime/batch.py
+  - Update imports to use Runtime class
+
+- [ ] **T41.5** Update exports in runtime/__init__.py
+  - Export Runtime, Lambda, Batch, Local
+
+- [ ] **T41.6** Update all imports throughout codebase
+  - Update imports in builder modules
+  - Update imports in cli.py
+  - Update imports in tests
+
+- [ ] **T41.7** Run tests to verify changes work
+
+---
+
+## Summary

@@ -18,6 +18,7 @@ from typing import Any
 from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
+from lokki.runtime.runtime import Runtime
 from lokki.store import LocalStore
 
 
@@ -46,9 +47,9 @@ class LocalRunner:
                 if isinstance(entry, TaskEntry):
                     self._run_task(store, graph.name, run_id, entry, params)
                 elif isinstance(entry, MapOpenEntry):
-                    self._run_map(store, graph.name, run_id, entry)
+                    self._run_map(store, graph.name, run_id, entry, params)
                 elif isinstance(entry, MapCloseEntry):
-                    self._run_agg(store, graph.name, run_id, entry)
+                    self._run_agg(store, graph.name, run_id, entry, params)
 
             last_entry = graph.entries[-1]
             if isinstance(last_entry, MapCloseEntry):
@@ -100,10 +101,7 @@ class LocalRunner:
                 store.write(flow_name, run_id, step_name, result)
 
                 if isinstance(result, list):
-                    manifest_items = [
-                        {"item": item, "index": i} for i, item in enumerate(result)
-                    ]
-                    store.write_manifest(flow_name, run_id, step_name, manifest_items)
+                    store.write_manifest(flow_name, run_id, step_name, result)
 
                 step_logger.complete(duration)
                 return
@@ -150,31 +148,26 @@ class LocalRunner:
             if prev_path.exists():
                 result = store.read(str(prev_path))
 
-        flow_kwargs = getattr(node, "_flow_kwargs", {})
-
+        # Call step function - filter flow params based on function signature
         if result is not None:
-            if node._default_args or node._default_kwargs or flow_kwargs:
-                result = node.fn(
-                    result,
-                    *node._default_args,
-                    **node._default_kwargs,
-                    **flow_kwargs,
-                )
-            else:
-                result = node.fn(result)
+            # Subsequent step - has input from previous step
+            result = Runtime.call_step(node.fn, result, params)
         elif node._default_args or node._default_kwargs:
+            # First step with default args/kwargs from node()
             result = node.fn(*node._default_args, **node._default_kwargs)
-        elif flow_kwargs:
-            result = node.fn(**flow_kwargs)
-        elif params:
-            result = node.fn(**params)
         else:
-            result = node.fn()
+            # First step - pass params as kwargs (filtered)
+            result = Runtime.call_step(node.fn, None, params)
 
         return result
 
     def _run_map(
-        self, store: LocalStore, flow_name: str, run_id: str, entry: MapOpenEntry
+        self,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        entry: MapOpenEntry,
+        params: dict[str, Any],
     ) -> None:
         source_name = entry.source.name
         manifest_path = store._get_path(
@@ -196,16 +189,13 @@ class LocalRunner:
             fn: Callable[[Any], Any],
             item_data: Any,
             item_idx: int,
-            flow_kwargs: dict[str, Any],
+            flow_params: dict[str, Any],
             retry_config: RetryConfig,
         ) -> Any:
             last_exception: Exception | None = None
             for attempt in range(retry_config.retries + 1):
                 try:
-                    if flow_kwargs:
-                        result = fn(item_data, **flow_kwargs)
-                    else:
-                        result = fn(item_data)
+                    result = Runtime.call_step(fn, item_data, flow_params)
                     return result
                 except Exception as e:
                     if not any(
@@ -222,13 +212,12 @@ class LocalRunner:
             if last_exception:
                 raise last_exception
 
-        item_data_by_idx = {item["index"]: item["item"] for item in manifest}
-        current_results: dict[int, Any] = dict(item_data_by_idx)
+        item_data_by_idx = dict(enumerate(manifest))
+        current_results: dict[int, Any] = item_data_by_idx
 
         for _step_idx, step_node in enumerate(inner_steps):
             step_name = step_node.name
             fn = step_node.fn
-            flow_kwargs = getattr(step_node, "_flow_kwargs", {})
             retry_config = step_node.retry
 
             with ThreadPoolExecutor() as executor:
@@ -239,7 +228,7 @@ class LocalRunner:
                         fn,
                         item_data,
                         item_idx,
-                        flow_kwargs,
+                        params,
                         retry_config,
                     )
                     futures[future] = item_idx
@@ -266,7 +255,12 @@ class LocalRunner:
         step_logger.complete(0.0)
 
     def _run_agg(
-        self, store: LocalStore, flow_name: str, run_id: str, entry: MapCloseEntry
+        self,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        entry: MapCloseEntry,
+        params: dict[str, Any],
     ) -> None:
         if entry.agg_step._map_block is None:
             raise ValueError("Aggregation step must follow a map block")
@@ -281,21 +275,14 @@ class LocalRunner:
             ).read_text()
         )
 
-        result_urls: list[str] = []
-        for item in manifest:
-            item_idx = item["index"]
+        inputs = []
+        for idx in range(len(manifest)):
             result_path = store._get_path(
-                flow_name, run_id, f"{last_inner_step}/{item_idx}", "output.pkl.gz"
+                flow_name, run_id, f"{last_inner_step}/{idx}", "output.pkl.gz"
             )
-            result_urls.append(str(result_path))
+            inputs.append(store.read(str(result_path)))
 
-        inputs = [store.read(url) for url in result_urls]
-
-        flow_kwargs = getattr(entry.agg_step, "_flow_kwargs", {})
-        if flow_kwargs:
-            result = entry.agg_step.fn(inputs, **flow_kwargs)
-        else:
-            result = entry.agg_step.fn(inputs)
+        result = Runtime.call_step(entry.agg_step.fn, inputs, params)
 
         step_name = entry.agg_step.name
         store.write(flow_name, run_id, step_name, result)

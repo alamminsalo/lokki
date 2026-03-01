@@ -92,7 +92,7 @@ def _get_step_names(graph: FlowGraph) -> list[str]:
 def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'run' command."""
     from lokki.config import load_config
-    from lokki.runner import LocalRunner
+    from lokki.runtime.local import LocalRunner
 
     try:
         flow_params = _parse_flow_params(flow_fn, args)
@@ -149,8 +149,8 @@ def _handle_build(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -
 def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'deploy' command."""
     from lokki.builder.builder import Builder
+    from lokki.cli.deploy import Deployer
     from lokki.config import load_config
-    from lokki.deploy import Deployer
 
     try:
         graph = flow_fn()
@@ -175,7 +175,7 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
     print()
 
     try:
-        Builder.build(graph, config, flow_fn)
+        Builder.build(graph, config, flow_fn, force=args.force)
         print()
     except Exception as e:
         print(f"Error: Build failed: {e}")
@@ -213,8 +213,8 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
 
 def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'show' command."""
+    from lokki.cli.show import show
     from lokki.config import load_config
-    from lokki.show import show
 
     try:
         graph = flow_fn()
@@ -247,8 +247,8 @@ def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) ->
 
 def _handle_logs(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'logs' command."""
+    from lokki.cli.logs import logs
     from lokki.config import load_config
-    from lokki.logs import logs
 
     try:
         graph = flow_fn()
@@ -287,8 +287,8 @@ def _handle_destroy(
     args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]
 ) -> None:
     """Handle the 'destroy' command."""
+    from lokki.cli.destroy import destroy
     from lokki.config import load_config
-    from lokki.destroy import destroy
 
     try:
         graph = flow_fn()
@@ -370,6 +370,9 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
     )
     deploy_parser.add_argument(
         "--confirm", action="store_true", help="Skip confirmation prompt"
+    )
+    deploy_parser.add_argument(
+        "--force", action="store_true", help="Force rebuild even if build dir exists"
     )
 
     # show parser

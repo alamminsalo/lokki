@@ -37,11 +37,29 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     states: dict[str, Any] = {}
     state_order: list[str] = []
 
+    # InitFlow Pass state to prepare input for first step
+    # Transforms execution input -> {"flow": {...}}
+    # Input is omitted - first step receives only flow params
+    states["InitFlow"] = {
+        "Type": "Pass",
+        "Parameters": {
+            "flow": {
+                "run_id.$": "$$.Execution.Id",
+                "params.$": "$$.Execution.Input",
+            },
+        },
+        "Next": None,
+    }
+
+    first_state: str | None = None
+
     prev_state: str | None = None
 
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             state_name = to_pascal(entry.node.name)
+            if first_state is None:
+                first_state = state_name
             job_type = entry.job_type or "lambda"
             if job_type == "batch":
                 state = _batch_task_state(entry, config, graph.name)
@@ -57,6 +75,8 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
         elif isinstance(entry, MapOpenEntry):
             source_name = to_pascal(entry.source.name)
+            if first_state is None:
+                first_state = f"{source_name}Map"
             inner_states = {}
 
             step_names = [to_pascal(step_node.name) for step_node in entry.inner_steps]
@@ -72,7 +92,8 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     inner_states[step_name] = {
                         "Type": "Task",
                         "Resource": _lambda_arn(config, step_node.name, graph.name),
-                        "ResultPath": "$.result",
+                        "InputPath": "$",
+                        "ResultPath": "$.input",
                     }
 
                 if i < len(entry.inner_steps) - 1:
@@ -80,14 +101,24 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 else:
                     inner_states[step_name]["End"] = True
 
+            # ItemSelector for passing execution context to each iteration
+            item_selector = {
+                "input.$": "$",
+                "flow": {
+                    "run_id.$": "$$.Execution.Id",
+                    "params.$": "$$.Execution.Input",
+                },
+            }
+
+            # Distributed Map: use S3 ItemReader/ItemWriter
             map_state: dict[str, Any] = {
                 "Type": "Map",
                 "ItemReader": {
                     "Resource": "arn:aws:states:::s3:getObject",
                     "ReaderConfig": {"InputType": "JSON", "MaxItems": 100000},
                     "Parameters": {
-                        "Bucket.$": "$.bucket",
-                        "Key.$": "$.map_manifest_key",
+                        "Bucket": config.artifact_bucket,
+                        "Key.$": "$.input",
                     },
                 },
                 "ItemProcessor": {
@@ -98,13 +129,15 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     "StartAt": list(inner_states.keys())[0],
                     "States": inner_states,
                 },
+                "ItemSelector": item_selector,
                 "ResultWriter": {
                     "Resource": "arn:aws:states:::s3:putObject",
                     "Parameters": {
-                        "Bucket.$": "$.bucket",
-                        "Prefix.$": "States.Format('lokki/"
-                        + graph.name
-                        + "/{}/', $.run_id)",
+                        "Bucket": config.artifact_bucket,
+                        "Key.$": "States.Format('"
+                        + f"{graph.name}/runs/$$.Execution.Name/"
+                        + f"{source_name}/map_result.json', $$.Execution.Name)",
+                        "Body.$": "$",
                     },
                 },
                 "Next": None,
@@ -142,10 +175,12 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             del states[prev_state]["Next"]
         states[prev_state]["End"] = True
 
-    start_at = state_order[0] if state_order else "Pass"
+    # Connect InitFlow to first state
+    assert first_state, "No first state found"
+    states["InitFlow"]["Next"] = first_state
 
     return {
-        "StartAt": start_at,
+        "StartAt": "InitFlow",
         "States": states,
     }
 
@@ -155,7 +190,8 @@ def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str
     state: dict[str, Any] = {
         "Type": "Task",
         "Resource": _lambda_arn(config, step_node.name, flow_name),
-        "ResultPath": "$.result",
+        "InputPath": "$",
+        "ResultPath": "$.input",
         "Next": None,
     }
 
@@ -187,14 +223,13 @@ def _batch_task_state(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": config.artifact_bucket},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
-                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
-                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.result.result_url"},
+                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.input"},
             ],
         },
-        "ResultPath": "$.result",
+        "ResultPath": "$.input",
         "Next": None,
     }
 
@@ -228,14 +263,13 @@ def _batch_task_state_from_node(
                 "Memory": memory_mb,
             },
             "Environment": [
-                {"Name": "LOKKI_S3_BUCKET", "Value.$": "$.s3_bucket"},
+                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": config.artifact_bucket},
                 {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
                 {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
-                {"Name": "LOKKI_RUN_ID", "Value.$": "$.run_id"},
-                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.item.result_url"},
+                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.input"},
             ],
         },
-        "ResultPath": "$.result",
+        "ResultPath": "$.input",
         "Next": None,
     }
 

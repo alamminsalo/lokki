@@ -131,7 +131,7 @@ def build_template(
         memory = cfg.get("memory", config.lambda_cfg.memory)
 
         env_vars = {
-            "LOKKI_S3_BUCKET": {"Ref": "S3Bucket"},
+            "LOKKI_ARTIFACT_BUCKET": {"Ref": "S3Bucket"},
             "LOKKI_FLOW_NAME": {"Ref": "FlowName"},
             "LOKKI_AWS_ENDPOINT": {"Ref": "AWSEndpoint"},
             "LOKKI_STEP_NAME": step_name,
@@ -144,10 +144,13 @@ def build_template(
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
-                    "PackageType": "ZipFile",
+                    "Runtime": "python3.13",
+                    "PackageType": "Zip",
                     "Code": {
                         "S3Bucket": {"Ref": "S3Bucket"},
-                        "S3Key": {"Fn::Sub": "lokki/${FlowName}/lambdas/function.zip"},
+                        "S3Key": {
+                            "Fn::Sub": "${FlowName}/artifacts/lambdas/function.zip"
+                        },
                     },
                     "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},
                     "Timeout": timeout,
@@ -420,7 +423,7 @@ def _has_batch_steps(graph: FlowGraph) -> bool:
 def _build_batch_environment(config: LokkiConfig) -> list[dict[str, Any]]:
     """Build environment variables for Batch jobs from config."""
     env = [
-        {"Name": "LOKKI_S3_BUCKET", "Value": {"Ref": "S3Bucket"}},
+        {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": {"Ref": "S3Bucket"}},
         {"Name": "LOKKI_FLOW_NAME", "Value": {"Ref": "FlowName"}},
         {"Name": "LOKKI_AWS_ENDPOINT", "Value": {"Ref": "AWSEndpoint"}},
     ]

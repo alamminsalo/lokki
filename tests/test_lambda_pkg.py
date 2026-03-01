@@ -22,6 +22,8 @@ def test_zip_installs_to_lambdas_not_deps():
         tmpdir = Path(tmpdir)
         build_dir = tmpdir / "lokki-build"
         lambdas_dir = build_dir / "lambdas"
+        pkg_dir = build_dir / "packages"
+        pkg_dir.mkdir(parents=True)
 
         graph = MagicMock()
         graph.name = "test-flow"
@@ -29,7 +31,7 @@ def test_zip_installs_to_lambdas_not_deps():
         config = MagicMock()
         config.lambda_cfg.package_type = "zip"
 
-        generate_shared_lambda_files(graph, config, build_dir, flow_fn=None)
+        generate_shared_lambda_files(graph, config, build_dir, pkg_dir, flow_fn=None)
 
         deps_dir = build_dir / "deps"
 
@@ -53,6 +55,8 @@ def test_no_deps_in_parent_directory():
         parent_dir.mkdir()
 
         build_dir = parent_dir / "lokki-build"
+        pkg_dir = build_dir / "packages"
+        pkg_dir.mkdir(parents=True)
 
         graph = MagicMock()
         graph.name = "test-flow"
@@ -60,7 +64,7 @@ def test_no_deps_in_parent_directory():
         config = MagicMock()
         config.lambda_cfg.package_type = "zip"
 
-        generate_shared_lambda_files(graph, config, build_dir, flow_fn=None)
+        generate_shared_lambda_files(graph, config, build_dir, pkg_dir, flow_fn=None)
 
         assert not (parent_dir / "deps").exists(), (
             "No deps directory should be created in parent directory"

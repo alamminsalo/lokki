@@ -498,7 +498,7 @@ memory = 512
 
 When `package_type: zip` is set:
 - The build process generates a ZIP file per step instead of a Dockerfile
-- The CloudFormation template uses `PackageType: ZipFile` instead of `PackageType: Image`
+- The CloudFormation template uses `PackageType: Zip` instead of `PackageType: Image`
 - No Docker build or ECR push is performed during deployment
 - The Lambda runtime automatically installs dependencies from `requirements.txt` generated at build time
 

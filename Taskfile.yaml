@@ -1,0 +1,114 @@
+version: '3'
+
+env:
+  AWS_ENDPOINT_URL: http://localhost:4566
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+
+tasks:
+  start-dev:
+    desc: Start LocalStack and pypiserver containers
+    cmds:
+      - docker compose -f dev/docker-compose.yml up
+
+  stop-dev:
+    desc: Stop LocalStack and pypiserver containers
+    cmds:
+      - docker compose -f dev/docker-compose.yml down
+
+  setup-s3:
+    desc: Create lokki S3 bucket in LocalStack
+    cmds:
+      - aws s3 mb s3://lokki
+
+  test:
+    desc: Run all unit tests
+    cmds:
+      - uv run pytest
+
+  test:localstack:
+    desc: Run LocalStack integration tests
+    cmds:
+      - RUN_LOCALSTACK_TESTS=1 uv run pytest tests/test_localstack.py -v
+
+  lint:
+    desc: Run ruff linter
+    cmds:
+      - uv run ruff check lokki/
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format lokki/
+
+  typecheck:
+    desc: Run mypy type checker
+    cmds:
+      - uv run mypy lokki/
+
+  clean:
+    desc: Clean build artifacts and cache
+    cmds:
+      - rm -rf lokki-build/ dist/ .ruff_cache .mypy_cache
+      - rm -rf examples/*/lokki-build examples/*/.ruff_cache examples/*/.mypy_cache
+
+  version:bump:
+    desc: Bump minor version in pyproject.toml
+    cmds:
+      - uv version --bump patch
+
+  publish:
+    desc: Build and publish to local pypiserver (bump version first)
+    deps:
+      - task: version:bump
+    cmds:
+      - uv build
+      - uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
+
+  build:
+    desc: Build ci_test_pipeline example
+    dir: examples/ci_test_pipeline
+    cmds:
+      - uv run flow.py build
+
+  deploy:
+    desc: Deploy ci_test_pipeline to LocalStack
+    dir: examples/ci_test_pipeline
+    cmds:
+      - uv run flow.py deploy
+
+  invoke:
+    desc: Invoke ci_test_pipeline via Step Functions and wait for completion
+    cmds:
+      - |
+        EXECUTION_ARN=$(aws stepfunctions start-execution \
+          --state-machine-arn arn:aws:states:us-east-1:000000000000:stateMachine:ci-test-pipeline \
+          --input '{"size": 256, "multiplier": 2}' \
+          --query 'executionArn' \
+          --output text)
+        echo "Started execution: $EXECUTION_ARN"
+        while true; do
+          STATUS=$(aws stepfunctions describe-execution \
+            --execution-arn "$EXECUTION_ARN" \
+            --query 'status' \
+            --output text)
+          echo "Status: $STATUS"
+          if [ "$STATUS" = "SUCCEEDED" ]; then
+            echo "Execution succeeded!"
+            exit 0
+          elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "TIMED_OUT" ] || [ "$STATUS" = "ABORTED" ]; then
+            echo "Execution $STATUS"
+            aws stepfunctions describe-execution --execution-arn "$EXECUTION_ARN" --query 'output' --output text || true
+            exit 1
+          fi
+          sleep 2
+        done
+
+  ci-flow:
+    desc: Run full CI flow
+    cmds:
+      - task: version:bump
+      - task: setup-s3
+      - task: build
+      - task: deploy
+      - task: invoke

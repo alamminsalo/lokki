@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from lokki.decorators import flow, step
-from lokki.runner import LocalRunner
+from lokki.runtime.local import LocalRunner
 
 
 class TestLocalRunner:
@@ -149,7 +149,7 @@ class TestLocalRunner:
 
 class TestLocalStore:
     def test_store_write_read(self, tmp_path: Path) -> None:
-        from lokki.runner import LocalStore
+        from lokki.runtime.local import LocalStore
 
         store = LocalStore(tmp_path)
         store.write("flow", "run1", "step1", {"key": "value"})
@@ -158,7 +158,7 @@ class TestLocalStore:
         assert result == {"key": "value"}
 
     def test_store_write_manifest(self, tmp_path: Path) -> None:
-        from lokki.runner import LocalStore
+        from lokki.runtime.local import LocalStore
 
         store = LocalStore(tmp_path)
         items = [{"item": "a", "index": 0}, {"item": "b", "index": 1}]

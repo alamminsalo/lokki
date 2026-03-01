@@ -101,20 +101,34 @@ class StepNode:
         return self
 
     def map(
-        self, step_node: StepNode, concurrency_limit: int | None = None, **kwargs: Any
+        self,
+        step_node: StepNode,
+        concurrency_limit: int | None = None,
     ) -> MapBlock:
-        """Start a Map block with optional concurrency limit and flow-level kwargs."""
+        """Start a Map block with optional concurrency limit.
+
+        Args:
+            step_node: The step to run for each item
+            concurrency_limit: Optional limit on parallel iterations
+
+        Note:
+            Flow parameters are passed via **kwargs to the step function.
+        """
         block = MapBlock(
-            source=self, inner_head=step_node, concurrency_limit=concurrency_limit
+            source=self,
+            inner_head=step_node,
+            concurrency_limit=concurrency_limit,
         )
-        step_node._flow_kwargs = kwargs
         self._map_block = block
         return block
 
-    def next(self, step_node: StepNode, **kwargs: Any) -> StepNode:
-        """Chain a step with flow-level kwargs."""
+    def next(self, step_node: StepNode) -> StepNode:
+        """Chain a step to this one.
+
+        Note:
+            Flow parameters are passed via **kwargs to the step function.
+        """
         step_node._prev = self
-        step_node._flow_kwargs = kwargs
         self._next = step_node
         return step_node
 
@@ -164,27 +178,36 @@ class MapBlock:
             current = current._next
         return steps
 
-    def map(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
-        """Add another step to the inner chain with flow-level kwargs."""
+    def map(self, step_node: StepNode) -> MapBlock:
+        """Add another step to the inner chain.
+
+        Note:
+            Flow parameters are passed via **kwargs to the step function.
+        """
         step_node._prev = self.inner_tail
-        step_node._flow_kwargs = kwargs
         self.inner_tail._next = step_node
         self.inner_tail = step_node
         return self
 
-    def next(self, step_node: StepNode, **kwargs: Any) -> MapBlock:
-        """Add step to inner chain (before agg) with flow-level kwargs."""
+    def next(self, step_node: StepNode) -> MapBlock:
+        """Add step to inner chain (before agg).
+
+        Note:
+            Flow parameters are passed via **kwargs to the step function.
+        """
         step_node._prev = self.inner_tail
-        step_node._flow_kwargs = kwargs
         self.inner_tail._next = step_node
         self.inner_tail = step_node
         return self
 
-    def agg(self, step_node: StepNode, **kwargs: Any) -> StepNode:
-        """Close the Map block and attach an aggregation step with flow-level kwargs."""
+    def agg(self, step_node: StepNode) -> StepNode:
+        """Close the Map block and attach an aggregation step.
+
+        Note:
+            Flow parameters are passed via **kwargs to the step function.
+        """
         step_node._closes_map_block = True
         step_node._map_block = self
-        step_node._flow_kwargs = kwargs
         self._next = step_node
         return step_node
 
