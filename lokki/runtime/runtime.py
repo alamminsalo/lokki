@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from lokki.decorators import RetryConfig
+    pass
 
 
 class Runtime:
@@ -17,7 +18,7 @@ class Runtime:
     """
 
     @staticmethod
-    def accepts_kwargs(fn: Callable) -> bool:
+    def accepts_kwargs(fn: Callable[..., Any]) -> bool:
         """Check if function accepts **kwargs.
 
         Args:
@@ -32,7 +33,9 @@ class Runtime:
         )
 
     @staticmethod
-    def filter_flow_params(fn: Callable, flow_params: dict[str, Any]) -> dict[str, Any]:
+    def filter_flow_params(
+        fn: Callable[..., Any], flow_params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Filter flow params based on function signature.
 
         If the function accepts **kwargs, pass all flow params.
@@ -59,7 +62,7 @@ class Runtime:
 
     @staticmethod
     def call_step(
-        fn: Callable,
+        fn: Callable[..., Any],
         input_data: Any = None,
         flow_params: dict[str, Any] | None = None,
     ) -> Any:

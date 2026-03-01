@@ -57,7 +57,7 @@ class S3Store(TransientStore):
         flow_name: str,
         run_id: str,
         step_name: str,
-        items: Sequence[dict[str, Any]],
+        items: Sequence[Any],
     ) -> str:
         key = self._make_key(flow_name, run_id, step_name, "map_manifest.json")
         self._client.put_object(

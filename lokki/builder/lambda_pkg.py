@@ -248,15 +248,15 @@ def _generate_shared_zip_package(
 
     print("Generating shared ZIP package")
 
-    EXCLUDE_DIRS = {".venv", "__pycache__", "build_dir", ".git", "lokki-build"}
-    EXCLUDE_NAMES = {".lock", "pyproject.toml", "uv.lock"}
+    exclude_dirs = {".venv", "__pycache__", "build_dir", ".git", "lokki-build"}
+    exclude_names = {".lock", "pyproject.toml", "uv.lock"}
 
     def should_exclude(path: Path) -> bool:
         """Check if path should be excluded from the zip."""
         for part in path.parts:
-            if part in EXCLUDE_DIRS:
+            if part in exclude_dirs:
                 return True
-        if path.name in EXCLUDE_NAMES:
+        if path.name in exclude_names:
             return True
         if "__pycache__" in path.parts or path.suffix == ".pyc":
             return True

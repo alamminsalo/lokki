@@ -17,10 +17,8 @@ from typing import Any
 
 from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
-from lokki.runtime.runtime import Runtime
-
-
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
+from lokki.runtime.runtime import Runtime
 from lokki.store import LocalStore
 
 
@@ -214,8 +212,8 @@ class LocalRunner:
             if last_exception:
                 raise last_exception
 
-        item_data_by_idx = {idx: item for idx, item in enumerate(manifest)}
-        current_results: dict[int, Any] = dict(item_data_by_idx)
+        item_data_by_idx = dict(enumerate(manifest))
+        current_results: dict[int, Any] = item_data_by_idx
 
         for _step_idx, step_node in enumerate(inner_steps):
             step_name = step_node.name
