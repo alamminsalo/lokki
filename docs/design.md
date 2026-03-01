@@ -130,14 +130,12 @@ class MapBlock:
         source: StepNode,
         inner_head: StepNode,
         concurrency_limit: int | None = None,
-        map_type: str = "distributed",
     ):
         self.source = source          # step before the Map
         self.inner_head = inner_head  # first step inside Map iterator
         self.inner_tail = inner_head  # last step inside Map iterator (grows with chaining)
         self._next: StepNode | None = None
         self.concurrency_limit = concurrency_limit
-        self.map_type = map_type  # "inline" or "distributed"
 
     def map(self, step_node: StepNode) -> "MapBlock":
         # Further chaining inside the Map block
@@ -880,58 +878,28 @@ This adds `MaxConcurrency: 10` to the Map state in the generated Step Functions:
 
 When `concurrency_limit` is not specified, the Map state runs with unlimited parallelism (up to AWS limits).
 
-### Map Type
+### Distributed Map with ItemSelector and ResultWriter
 
-AWS Step Functions Map state supports two modes:
+The distributed Map state uses:
+- **ItemReader**: Reads items from S3 (the manifest JSON file)
+- **ItemSelector**: Injects `$$.Execution.Id` and `$$.Execution.Input` into each iteration
+- **ResultWriter**: Writes aggregation results to S3
 
-- **`distributed`** (default): Uses S3 ItemReader/ItemWriter for large datasets (>256KB items or >40K items)
-- **`inline`**: Passes items directly in the state input (simpler, for smaller datasets)
-
-```python
-@step
-def fetch_items():
-    return list(range(1000))
-
-@step
-def process_item(item):
-    return item * 2
-
-@step
-def aggregate_results(results):
-    return sum(results)
-
-# Use inline Map for smaller datasets
-fetch_items().map(process_item, map_type="inline").agg(aggregate_results)
-
-# Use distributed Map (default) for large datasets
-fetch_items().map(process_item, map_type="distributed").agg(aggregate_results)
-```
-
-This generates different Step Functions state machine configurations:
-
-**inline Map:**
 ```json
 {
   "Type": "Map",
-  "Mode": "INLINE",
-  "ItemsPath": "$.items",
-  "Iterator": { ... },
-  ...
-}
-```
-
-**distributed Map:**
-```json
-{
-  "Type": "Map",
-  "Mode": "DISTRIBUTED",
   "ItemReader": { ... },
   "ItemProcessor": { ... },
-  ...
+  "ItemSelector": {
+    "input.$": "$",
+    "flow": {
+      "run_id.$": "$$.Execution.Id",
+      "params.$": "$$.Execution.Input"
+    }
+  },
+  "ResultWriter": { ... }
 }
 ```
-
-When `map_type` is not specified, `distributed` is used by default.
 
 ### Inter-state data passing
 

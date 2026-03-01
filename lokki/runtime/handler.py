@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -12,6 +13,21 @@ from lokki.store import S3Store
 
 if TYPE_CHECKING:
     from lokki.decorators import RetryConfig
+
+
+def _filter_flow_params(fn: Any, flow_params: dict[str, Any]) -> dict[str, Any]:
+    """Filter flow params to only include those accepted by the step function.
+
+    Args:
+        fn: The step function
+        flow_params: The flow parameters from execution context
+
+    Returns:
+        Filtered dict with only params that fn accepts
+    """
+    sig = inspect.signature(fn)
+    accepted_params = set(sig.parameters.keys())
+    return {k: v for k, v in flow_params.items() if k in accepted_params}
 
 
 def make_handler(
@@ -54,8 +70,9 @@ def make_handler(
         flow_params = lambda_event.flow.params
         input_data = lambda_event.input
 
-        # If input_data is None (first step), use empty dict
-        if input_data is None:
+        # If input_data is None (first step with no prior output), use empty marker
+        is_first_step = input_data is None
+        if is_first_step:
             input_data = {}
 
         store = S3Store()
@@ -79,12 +96,15 @@ def make_handler(
                 )
                 input_data = [store.read(url) for url in input_data]
 
-            # Call step function - merge flow_params with input_data if input is dict
-            if isinstance(input_data, dict) and flow_params:
-                merged_input = {**flow_params, **input_data}
-                result = fn(merged_input)
-            elif flow_params:
-                result = fn(input_data, **flow_params)
+            # Call step function
+            # First step: no input from prior step, pass only flow_params as kwargs
+            # Subsequent steps: pass input_data and flow_params as kwargs
+            # Filter flow_params to only include params the step function accepts
+            filtered_params = _filter_flow_params(fn, flow_params)
+            if is_first_step:
+                result = fn(**filtered_params) if filtered_params else fn()
+            elif filtered_params:
+                result = fn(input_data, **filtered_params)
             else:
                 result = fn(input_data)
 

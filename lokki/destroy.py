@@ -55,7 +55,7 @@ def destroy_stack(
 
     try:
         waiter = cf_client.get_waiter("stack_delete_complete")
-        waiter.wait(StackName=stack_name)
+        waiter.wait(StackName=stack_name, WaiterConfig={"Delay": 2, "MaxAttempts": 30})
         print(f"Stack '{stack_name}' has been deleted successfully.")
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "")

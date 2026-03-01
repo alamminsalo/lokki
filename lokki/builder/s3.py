@@ -5,19 +5,21 @@ from __future__ import annotations
 import os
 
 
-def upload_lambda_zip(flow_name: str, zip_data: bytes) -> str:
+def upload_lambda_zip(flow_name: str, zip_data: bytes, bucket: str = "") -> str:
     """Upload a Lambda function ZIP package to S3.
 
     Args:
         flow_name: The flow name
         zip_data: The ZIP package bytes
+        bucket: The S3 bucket (falls back to LOKKI_ARTIFACT_BUCKET env var)
 
     Returns:
         The S3 URI of the uploaded package
     """
     from lokki._aws import get_s3_client
 
-    bucket = os.environ.get("LOKKI_ARTIFACT_BUCKET", "")
+    if not bucket:
+        bucket = os.environ.get("LOKKI_ARTIFACT_BUCKET", "")
     if not bucket:
         raise ValueError(
             "LOKKI_ARTIFACT_BUCKET environment variable not set. "

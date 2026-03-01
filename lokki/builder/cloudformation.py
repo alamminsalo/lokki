@@ -149,7 +149,7 @@ def build_template(
                     "Code": {
                         "S3Bucket": {"Ref": "S3Bucket"},
                         "S3Key": {
-                            "Fn::Sub": "lokki/${FlowName}/artifacts/lambdas/function.zip"
+                            "Fn::Sub": "${FlowName}/artifacts/lambdas/function.zip"
                         },
                     },
                     "Role": {"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]},

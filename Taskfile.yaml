@@ -21,14 +21,6 @@ tasks:
     cmds:
       - aws s3 mb s3://lokki
 
-  upload-lambdas:
-    deps:
-      - task: setup-s3
-    desc: Upload Lambda ZIP packages to S3
-    dir: examples/ci_test_pipeline
-    cmds:
-      - aws s3 cp lokki-build/lambdas/function.zip s3://lokki/lokki/ci-test-pipeline/artifacts/lambdas/function.zip
-
   test:
     desc: Run all unit tests
     cmds:
@@ -91,7 +83,7 @@ tasks:
       - |
         EXECUTION_ARN=$(aws stepfunctions start-execution \
           --state-machine-arn arn:aws:states:us-east-1:000000000000:stateMachine:ci-test-pipeline \
-          --input '{"param1": "test", "multiplier": 2, "threshold": 0}' \
+          --input '{"size": 256, "multiplier": 2}' \
           --query 'executionArn' \
           --output text)
         echo "Started execution: $EXECUTION_ARN"
@@ -116,7 +108,7 @@ tasks:
     desc: Run full CI flow
     cmds:
       - task: version:bump
+      - task: setup-s3
       - task: build
-      - task: upload-lambdas
       - task: deploy
       - task: invoke

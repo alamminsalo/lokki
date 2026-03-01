@@ -38,12 +38,11 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     state_order: list[str] = []
 
     # InitFlow Pass state to prepare input for first step
-    # Transforms execution input -> {"input": {}, "flow": {"run_id": ..., "params": {...}}}
-    # First step gets empty input - flow params passed via kwargs
+    # Transforms execution input -> {"flow": {...}}
+    # Input is omitted - first step receives only flow params
     states["InitFlow"] = {
         "Type": "Pass",
         "Parameters": {
-            "input": {},
             "flow": {
                 "run_id.$": "$$.Execution.Id",
                 "params.$": "$$.Execution.Input",
@@ -93,13 +92,6 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     inner_states[step_name] = {
                         "Type": "Task",
                         "Resource": _lambda_arn(config, step_node.name, graph.name),
-                        "Parameters": {
-                            "input.$": "$.input",
-                            "flow": {
-                                "run_id.$": "$$.Execution.Id",
-                                "params.$": "$$.Execution.Input",
-                            },
-                        },
                         "InputPath": "$",
                         "ResultPath": "$.input",
                     }
@@ -109,6 +101,16 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 else:
                     inner_states[step_name]["End"] = True
 
+            # ItemSelector for passing execution context to each iteration
+            item_selector = {
+                "input.$": "$",
+                "flow": {
+                    "run_id.$": "$$.Execution.Id",
+                    "params.$": "$$.Execution.Input",
+                },
+            }
+
+            # Distributed Map: use S3 ItemReader/ItemWriter
             map_state: dict[str, Any] = {
                 "Type": "Map",
                 "ItemReader": {
@@ -126,6 +128,17 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                     },
                     "StartAt": list(inner_states.keys())[0],
                     "States": inner_states,
+                },
+                "ItemSelector": item_selector,
+                "ResultWriter": {
+                    "Resource": "arn:aws:states:::s3:putObject",
+                    "Parameters": {
+                        "Bucket": config.artifact_bucket,
+                        "Key.$": "States.Format('"
+                        + f"{graph.name}/runs/$$.Execution.Name/"
+                        + f"{source_name}/map_result.json', $$.Execution.Name)",
+                        "Body.$": "$",
+                    },
                 },
                 "Next": None,
             }

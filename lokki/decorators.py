@@ -101,11 +101,22 @@ class StepNode:
         return self
 
     def map(
-        self, step_node: StepNode, concurrency_limit: int | None = None, **kwargs: Any
+        self,
+        step_node: StepNode,
+        concurrency_limit: int | None = None,
+        **kwargs: Any,
     ) -> MapBlock:
-        """Start a Map block with optional concurrency limit and flow-level kwargs."""
+        """Start a Map block with optional concurrency limit and flow-level kwargs.
+
+        Args:
+            step_node: The step to run for each item
+            concurrency_limit: Optional limit on parallel iterations
+            **kwargs: Flow-level parameters passed to the step
+        """
         block = MapBlock(
-            source=self, inner_head=step_node, concurrency_limit=concurrency_limit
+            source=self,
+            inner_head=step_node,
+            concurrency_limit=concurrency_limit,
         )
         step_node._flow_kwargs = kwargs
         self._map_block = block

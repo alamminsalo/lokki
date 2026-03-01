@@ -802,7 +802,7 @@ class LambdaEvent:
 - [x] **T38.3** Update Batch handler to use LambdaEvent dataclass
   - Apply same simplifications as Lambda handler
 
-- [ ] **T38.4** Update state machine to use Context Object
+- [x] **T38.4** Update state machine to use Context Object
   - Keep InitFlow Pass state (constructs initial input to first step from raw Step Functions input)
   - Add `ItemSelector` to Map state to inject `$$.Execution.Id` and `$$.Execution.Input` into each iteration
   - Add `ResultWriter` to Map state to write aggregation results to S3
@@ -824,49 +824,6 @@ class LambdaEvent:
   - Test state machine generation with ItemSelector, ResultWriter, ResultSelector
   - Test map/agg flow end-to-end
   - Test local runner consistency with deployed flow
-
----
-
-## Milestone 39 — Map Type Support (Inline/Distributed)
-
-_Purpose_: Add support for both inline and distributed Map states in AWS Step Functions. Inline is simpler for smaller datasets, while distributed handles large-scale parallel processing.
-
-### Background
-
-AWS Step Functions Map state supports two modes:
-- **distributed** (default): Uses S3 ItemReader/ItemWriter - required for >256KB items or >40K items
-- **inline**: Passes items directly in state input - simpler but limited to smaller payloads
-
-### Tasks
-
-- [ ] **T39.1** Add `map_type` parameter to MapBlock
-  - Add `map_type: str = "distributed"` field to `MapBlock.__init__`
-  - Validate `map_type` is "inline" or "distributed"
-
-- [ ] **T39.2** Update StepNode.map() to accept map_type
-  - Pass `map_type` parameter to MapBlock constructor
-  - Document usage in docstring
-
-- [ ] **T39.3** Update graph.py MapOpenEntry
-  - Add `map_type` field to `MapOpenEntry` dataclass
-
-- [ ] **T39.4** Update state machine generation for inline Map
-  - Generate inline Map state with `ItemsPath` instead of `ItemReader`
-  - Update `ItemSelector` for inline mode
-  - Remove `ResultWriter` for inline mode (results stay in memory)
-
-- [ ] **T39.5** Update CloudFormation template generation
-  - Ensure inline Map states work correctly with Lambda functions
-
-- [ ] **T39.6** Write unit tests
-  - Test map_type parameter validation
-  - Test state machine generation for inline Map
-  - Test state machine generation for distributed Map (default)
-  - Test end-to-end flow with inline Map
-
-- [ ] **T39.7** Update documentation
-  - Document map_type in docs/design.md
-  - Add examples to README.md
 
 ---
 
@@ -910,6 +867,6 @@ AWS Step Functions Map state supports two modes:
 | M34 - API Documentation | Complete |
 | M35 - Scheduling | Complete |
 | M36 - Unify Store Interfaces | Complete |
-| M37 - S3 Directory Structure Refactoring | In Progress |
-| M38 - Lambda Event Dataclass Refactoring | In Progress |
-| M39 - Map Type Support (Inline/Distributed) | Pending |
+| M37 - S3 Directory Structure Refactoring | Complete |
+| M38 - Lambda Event Dataclass Refactoring | Complete |
+| M39 - Distributed Map with ItemSelector/ResultWriter | Complete |

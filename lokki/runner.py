@@ -7,6 +7,7 @@ It mimics AWS Step Functions behavior using local filesystem storage.
 from __future__ import annotations
 
 import gzip
+import inspect
 import json
 import pickle
 import time
