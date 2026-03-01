@@ -15,6 +15,30 @@ if TYPE_CHECKING:
     from lokki.decorators import RetryConfig
 
 
+def _accepts_kwargs(fn: Any) -> bool:
+    """Check if function accepts **kwargs."""
+    sig = inspect.signature(fn)
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+
+def _filter_flow_params(fn: Any, flow_params: dict[str, Any]) -> dict[str, Any]:
+    """Filter flow params to only include those explicitly accepted by the step function.
+
+    Only filters if the function does NOT accept **kwargs.
+    """
+    if not flow_params:
+        return {}
+
+    # If function accepts **kwargs, pass all flow params
+    if _accepts_kwargs(fn):
+        return flow_params
+
+    # Otherwise, filter to only explicitly accepted params
+    sig = inspect.signature(fn)
+    accepted = set(sig.parameters.keys())
+    return {k: v for k, v in flow_params.items() if k in accepted}
+
+
 def make_handler(
     fn: Any,
     retry_config: RetryConfig | None = None,
@@ -83,13 +107,17 @@ def make_handler(
 
             # Call step function
             # First step: no input from prior step, pass flow_params as kwargs
-            # Subsequent steps: pass input_data and flow_params as kwargs
+            # Subsequent steps: pass input_data and filtered flow_params as kwargs
+            # Filter flow_params: if fn accepts **kwargs, pass all; otherwise filter to accepted params
             if is_first_step:
-                result = fn(**flow_params) if flow_params else fn()
-            elif flow_params:
-                result = fn(input_data, **flow_params)
+                filtered_params = _filter_flow_params(fn, flow_params)
+                result = fn(**filtered_params) if filtered_params else fn()
             else:
-                result = fn(input_data)
+                filtered_params = _filter_flow_params(fn, flow_params)
+                if filtered_params:
+                    result = fn(input_data, **filtered_params)
+                else:
+                    result = fn(input_data)
 
             # Write output to S3
             output_url = store.write(flow_name, run_id, step_name, result)

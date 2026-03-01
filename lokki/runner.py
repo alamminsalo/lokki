@@ -18,6 +18,32 @@ from typing import Any
 
 from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+
+
+def _accepts_kwargs(fn: Any) -> bool:
+    """Check if function accepts **kwargs."""
+    sig = inspect.signature(fn)
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+
+def _filter_flow_params(fn: Any, flow_params: dict[str, Any]) -> dict[str, Any]:
+    """Filter flow params to only include those explicitly accepted by the step function.
+
+    Only filters if the function does NOT accept **kwargs.
+    """
+    if not flow_params:
+        return {}
+
+    # If function accepts **kwargs, pass all flow params
+    if _accepts_kwargs(fn):
+        return flow_params
+
+    # Otherwise, filter to only explicitly accepted params
+    sig = inspect.signature(fn)
+    accepted = set(sig.parameters.keys())
+    return {k: v for k, v in flow_params.items() if k in accepted}
+
+
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
 from lokki.store import LocalStore
 
@@ -148,21 +174,24 @@ class LocalRunner:
             if prev_path.exists():
                 result = store.read(str(prev_path))
 
-        # Call step function - flow params always passed via **kwargs
+        # Call step function - filter flow params based on function signature
         if result is not None:
             # Subsequent step - has input from previous step
-            if params:
-                result = node.fn(result, **params)
+            filtered_params = _filter_flow_params(node.fn, params)
+            if filtered_params:
+                result = node.fn(result, **filtered_params)
             else:
                 result = node.fn(result)
         elif node._default_args or node._default_kwargs:
             # First step with default args/kwargs from node()
             result = node.fn(*node._default_args, **node._default_kwargs)
-        elif params:
-            # First step - pass params as kwargs
-            result = node.fn(**params)
         else:
-            result = node.fn()
+            # First step - pass params as kwargs (filtered)
+            filtered_params = _filter_flow_params(node.fn, params)
+            if filtered_params:
+                result = node.fn(**filtered_params)
+            else:
+                result = node.fn()
 
         return result
 
@@ -200,8 +229,9 @@ class LocalRunner:
             last_exception: Exception | None = None
             for attempt in range(retry_config.retries + 1):
                 try:
-                    if flow_params:
-                        result = fn(item_data, **flow_params)
+                    filtered_params = _filter_flow_params(fn, flow_params)
+                    if filtered_params:
+                        result = fn(item_data, **filtered_params)
                     else:
                         result = fn(item_data)
                     return result
@@ -290,9 +320,9 @@ class LocalRunner:
             )
             inputs.append(store.read(str(result_path)))
 
-        flow_kwargs = getattr(entry.agg_step, "_flow_kwargs", {})
-        if flow_kwargs:
-            result = entry.agg_step.fn(inputs, **flow_kwargs)
+        filtered_params = _filter_flow_params(entry.agg_step.fn, params)
+        if filtered_params:
+            result = entry.agg_step.fn(inputs, **filtered_params)
         else:
             result = entry.agg_step.fn(inputs)
 

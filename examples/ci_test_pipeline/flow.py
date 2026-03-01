@@ -11,9 +11,8 @@ def get_values(size: int) -> list[float]:
 
 
 @step
-def transform(values: list[float], **kwargs) -> list[float]:
-    multiplier = kwargs.get("multiplier", 1)
-    return [v * multiplier for v in values]
+def transform(values: list[float]) -> list[float]:
+    return values  # Flow params automatically filtered if not accepted
 
 
 @flow
