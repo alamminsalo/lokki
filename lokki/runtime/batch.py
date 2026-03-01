@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
+from lokki.runtime.event import FlowContext, LambdaEvent
 from lokki.store import S3Store
-
-if TYPE_CHECKING:
-    from lokki.decorators import RetryConfig
 
 
 def make_batch_handler(
-    fn: Callable[..., Any],
-    retry_config: RetryConfig | None = None,
-) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    fn: Any,
+    retry_config: Any = None,
+) -> Any:
     """Create a handler for AWS Batch jobs.
 
     Args:
@@ -33,62 +30,61 @@ def make_batch_handler(
     def batch_handler(event: dict[str, Any]) -> dict[str, Any]:
         cfg = load_config()
         flow_name = cfg.flow_name or os.environ.get("LOKKI_FLOW_NAME", "unknown")
-        run_id = event.get("run_id", "unknown")
         step_name = fn.__name__
 
-        store = S3Store()
-
         logger.info(
-            f"Batch job invoked: flow={flow_name}, step={step_name}, run_id={run_id}",
+            f"Batch job invoked: flow={flow_name}, step={step_name}",
             extra={
                 "event": "batch_invoke",
                 "flow": flow_name,
                 "step": step_name,
-                "run_id": run_id,
             },
         )
+
+        try:
+            lambda_event = LambdaEvent.from_dict(event)
+        except Exception:
+            lambda_event = LambdaEvent(
+                flow=FlowContext(run_id="unknown", params={}),
+                input=event,
+            )
+
+        run_id = lambda_event.flow.run_id
+        flow_params = lambda_event.flow.params
+        input_data = lambda_event.input
+
+        # If input_data is None (first step), use empty dict
+        if input_data is None:
+            input_data = {}
+
+        store = S3Store()
 
         start_time = datetime.now()
 
         try:
-            if "input_url" in event:
-                input_url = event["input_url"]
+            if isinstance(input_data, str):
                 logger.info(
-                    f"Reading input from {input_url}",
+                    f"Reading input from {input_data}",
                     extra={"event": "input_read", "step": step_name},
                 )
-                input_data = store.read(input_url)
-                result = fn(input_data)
-            elif "result_url" in event:
-                result_url = event["result_url"]
+                input_data = store.read(input_data)
+            elif isinstance(input_data, list) and all(
+                isinstance(x, str) for x in input_data
+            ):
                 logger.info(
-                    f"Reading input from {result_url}",
+                    f"Reading {len(input_data)} inputs from S3",
                     extra={"event": "input_read", "step": step_name},
                 )
-                input_data = store.read(result_url)
-                result = fn(input_data)
-            elif "result_urls" in event:
-                result_urls = event["result_urls"]
-                logger.info(
-                    f"Reading {len(result_urls)} inputs",
-                    extra={
-                        "event": "input_read",
-                        "step": step_name,
-                        "count": len(result_urls),
-                    },
-                )
-                inputs = [store.read(url) for url in result_urls]
-                result = fn(inputs)
-            else:
-                import inspect
+                input_data = [store.read(url) for url in input_data]
 
-                sig = inspect.signature(fn)
-                kwargs = {k: event[k] for k in event if k in sig.parameters}
-                logger.info(
-                    "No upstream input, using event kwargs",
-                    extra={"event": "input_read", "step": step_name},
-                )
-                result = fn(**kwargs)
+            # Call step function - merge flow_params with input_data if input is dict
+            if isinstance(input_data, dict) and flow_params:
+                merged_input = {**flow_params, **input_data}
+                result = fn(merged_input)
+            elif flow_params:
+                result = fn(input_data, **flow_params)
+            else:
+                result = fn(input_data)
 
             output_url = store.write(flow_name, run_id, step_name, result)
 
@@ -98,46 +94,42 @@ def make_batch_handler(
                     item_url = store.write(flow_name, run_id, f"{step_name}/{i}", item)
                     item_urls.append(item_url)
 
-                manifest = [
-                    {"item_url": item_url, "index": i}
-                    for i, item_url in enumerate(item_urls)
-                ]
-
-                map_manifest_key = store.write_manifest(
-                    flow_name, run_id, step_name, manifest
+                manifest_url = store.write_manifest(
+                    flow_name, run_id, step_name, item_urls
                 )
-                duration = (datetime.now() - start_time).total_seconds()
+
                 logger.info(
-                    f"Batch step completed: {step_name} in {duration:.3f}s",
+                    f"Batch step completed: {step_name} in "
+                    f"{(datetime.now() - start_time).total_seconds():.3f}s",
                     extra={
                         "event": "step_complete",
                         "step": step_name,
-                        "duration": duration,
+                        "duration": (datetime.now() - start_time).total_seconds(),
                         "status": "success",
                     },
                 )
-                return {"map_manifest_key": map_manifest_key, "run_id": run_id}
+                return {"input": manifest_url, "flow": lambda_event.flow.to_dict()}
 
-            duration = (datetime.now() - start_time).total_seconds()
             logger.info(
-                f"Batch step completed: {step_name} in {duration:.3f}s",
+                f"Batch step completed: {step_name} in "
+                f"{(datetime.now() - start_time).total_seconds():.3f}s",
                 extra={
                     "event": "step_complete",
                     "step": step_name,
-                    "duration": duration,
+                    "duration": (datetime.now() - start_time).total_seconds(),
                     "status": "success",
                 },
             )
-            return {"result_url": output_url, "run_id": run_id}
+            return {"input": output_url, "flow": lambda_event.flow.to_dict()}
 
         except Exception as e:
-            duration = (datetime.now() - start_time).total_seconds()
             logger.error(
-                f"Batch step failed: {step_name} after {duration:.3f}s: {e}",
+                f"Batch step failed: {step_name} after "
+                f"{(datetime.now() - start_time).total_seconds():.3f}s: {e}",
                 extra={
                     "event": "step_fail",
                     "step": step_name,
-                    "duration": duration,
+                    "duration": (datetime.now() - start_time).total_seconds(),
                     "status": "failed",
                 },
             )

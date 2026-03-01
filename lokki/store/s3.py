@@ -66,7 +66,7 @@ class S3Store(TransientStore):
             Body=json.dumps(items),
             ContentType="application/json",
         )
-        return key
+        return f"s3://{self.bucket}/{key}"
 
     def cleanup(self) -> None:
         pass

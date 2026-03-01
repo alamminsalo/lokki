@@ -175,7 +175,7 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
     print()
 
     try:
-        Builder.build(graph, config, flow_fn)
+        Builder.build(graph, config, flow_fn, force=args.force)
         print()
     except Exception as e:
         print(f"Error: Build failed: {e}")
@@ -370,6 +370,9 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
     )
     deploy_parser.add_argument(
         "--confirm", action="store_true", help="Skip confirmation prompt"
+    )
+    deploy_parser.add_argument(
+        "--force", action="store_true", help="Force rebuild even if build dir exists"
     )
 
     # show parser

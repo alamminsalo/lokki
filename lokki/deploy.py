@@ -48,7 +48,7 @@ class Deployer:
 
         self.cf_client = get_cf_client(region)
         self.ecr_client = get_ecr_client(region)
-        self.sts_client = get_sts_client()
+        self.sts_client = get_sts_client(region)
         self._account_id: str | None = None
 
     @property
@@ -68,8 +68,10 @@ class Deployer:
     ) -> None:
         self._validate_credentials()
         if package_type == "zip":
-            print("Skipping Docker image push for ZIP deployment")
+            print("Uploading Lambda ZIP to S3...")
+            self._upload_lambda_zip(flow_name, build_dir)
         else:
+            print("Pushing Docker images...")
             self._push_images(image_repository, build_dir)
         self._deploy_stack(
             flow_name, artifact_bucket, image_repository, aws_endpoint, build_dir
@@ -135,6 +137,16 @@ class Deployer:
             self._build_image(lambdas_dir, image_uri)
             self._push_image(image_uri)
             print(f"Successfully pushed image: {image_uri}")
+
+    def _upload_lambda_zip(self, flow_name: str, build_dir: Path) -> None:
+        from lokki.builder.s3 import upload_lambda_zip
+
+        zip_path = build_dir / "lambdas" / "function.zip"
+        if not zip_path.exists():
+            raise DeployError(f"Lambda ZIP not found: {zip_path}")
+
+        zip_data = zip_path.read_bytes()
+        upload_lambda_zip(flow_name, zip_data)
 
     def _login_to_ecr(self) -> None:
         try:

@@ -92,7 +92,9 @@ class TestS3StoreWrite:
             obj={"key": "value"},
         )
 
-        assert result == "s3://my-bucket/lokki/my-flow/run-123/my-step/output.pkl.gz"
+        assert (
+            result == "s3://my-bucket/lokki/my-flow/runs/run-123/my-step/output.pkl.gz"
+        )
 
     @mock_aws
     def test_write_serializes_with_gzip_pickle(self, monkeypatch) -> None:
@@ -112,7 +114,7 @@ class TestS3StoreWrite:
         )
 
         response = s3.get_object(
-            Bucket="bucket", Key="lokki/test-flow/run-1/test-step/output.pkl.gz"
+            Bucket="bucket", Key="lokki/test-flow/runs/run-1/test-step/output.pkl.gz"
         )
         body = response["Body"].read()
 
@@ -164,7 +166,10 @@ class TestS3StoreWriteManifest:
             items=items,
         )
 
-        assert result == "s3://bucket/lokki/my-flow/run-123/map-step/map_manifest.json"
+        assert (
+            result
+            == "s3://bucket/lokki/my-flow/runs/run-123/map-step/map_manifest.json"
+        )
 
 
 class TestS3StoreCleanup:

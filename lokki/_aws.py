@@ -46,9 +46,9 @@ def get_ecr_client(region: str = "us-east-1") -> Any:
     return boto3.client("ecr", **kwargs)
 
 
-def get_sts_client() -> Any:
+def get_sts_client(region: str = "us-east-1") -> Any:
     """Get STS client with endpoint from AWS_ENDPOINT_URL env var."""
-    kwargs: dict[str, str] = {}
+    kwargs: dict[str, str] = {"region_name": region}
     if endpoint := os.environ.get("AWS_ENDPOINT_URL"):
         kwargs["endpoint_url"] = endpoint
     return boto3.client("sts", **kwargs)

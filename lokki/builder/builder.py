@@ -96,9 +96,22 @@ class Builder:
         graph: FlowGraph,
         config: LokkiConfig,
         flow_fn: Callable[[], FlowGraph] | None = None,
+        force: bool = False,
     ) -> None:
-        """Build deployment artifacts for a flow."""
+        """Build deployment artifacts for a flow.
+
+        Args:
+            graph: The flow graph to build
+            config: Lokki configuration
+            flow_fn: The flow function (used for module name derivation)
+            force: If True, always rebuild even if build dir exists
+        """
         build_dir = Path(config.build_dir)
+
+        if build_dir.exists() and not force:
+            print(f"Build directory already exists at {build_dir}, skipping build.")
+            print("Use --force to rebuild.")
+            return
 
         if build_dir.exists():
             shutil.rmtree(build_dir)

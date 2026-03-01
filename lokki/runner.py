@@ -100,10 +100,7 @@ class LocalRunner:
                 store.write(flow_name, run_id, step_name, result)
 
                 if isinstance(result, list):
-                    manifest_items = [
-                        {"item": item, "index": i} for i, item in enumerate(result)
-                    ]
-                    store.write_manifest(flow_name, run_id, step_name, manifest_items)
+                    store.write_manifest(flow_name, run_id, step_name, result)
 
                 step_logger.complete(duration)
                 return
@@ -222,7 +219,7 @@ class LocalRunner:
             if last_exception:
                 raise last_exception
 
-        item_data_by_idx = {item["index"]: item["item"] for item in manifest}
+        item_data_by_idx = {idx: item for idx, item in enumerate(manifest)}
         current_results: dict[int, Any] = dict(item_data_by_idx)
 
         for _step_idx, step_node in enumerate(inner_steps):
@@ -281,15 +278,12 @@ class LocalRunner:
             ).read_text()
         )
 
-        result_urls: list[str] = []
-        for item in manifest:
-            item_idx = item["index"]
+        inputs = []
+        for idx in range(len(manifest)):
             result_path = store._get_path(
-                flow_name, run_id, f"{last_inner_step}/{item_idx}", "output.pkl.gz"
+                flow_name, run_id, f"{last_inner_step}/{idx}", "output.pkl.gz"
             )
-            result_urls.append(str(result_path))
-
-        inputs = [store.read(url) for url in result_urls]
+            inputs.append(store.read(str(result_path)))
 
         flow_kwargs = getattr(entry.agg_step, "_flow_kwargs", {})
         if flow_kwargs:

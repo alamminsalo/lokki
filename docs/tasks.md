@@ -745,9 +745,8 @@ s3://<artifact-bucket>/
   - Modify upload command in deploy to use `artifacts/` prefix
   - Update S3 upload path in Taskfile.yaml
 
-- [ ] **T37.4** Add S3Store method for Lambda package operations
-  - `write_lambda_package(flow_name, zip_data) -> str` - returns S3 URI
-  - `read_lambda_package(flow_name) -> bytes`
+- [x] **T37.4** Add S3Store method for Lambda package upload
+  - `upload_lambda_zip(flow_name, zip_data) -> str` - returns S3 URI
 
 - [ ] **T37.5** Update tests for new directory structure
   - Add tests for new key prefixes
@@ -757,3 +756,160 @@ s3://<artifact-bucket>/
 - [ ] **T37.6** Update documentation
   - Document new S3 directory structure in docs/config.md
   - Update examples to reflect new paths
+
+---
+
+## Milestone 38 — Lambda Event Dataclass Refactoring
+
+_This milestone refactors the Lambda/Batch runtime handlers to use typed dataclasses for event handling, making the code simpler and more maintainable. It leverages AWS Step Functions Context Object to pass flow parameters without explicit flow passing._
+
+### Background
+
+The current handler code has complex branching logic to handle different input patterns (result_url, result_urls, item_url, aggregation lists, etc.). This makes it hard to maintain and error-prone.
+
+AWS Step Functions provides a Context Object (`$$.Execution.Id`, `$$.Execution.Input`, etc.) that can be used to access execution metadata. lokki uses this to get run_id and flow parameters directly in the Lambda handler, eliminating the need for:
+1. InitFlow Pass state
+2. Flow context in manifest items
+3. Complex event parsing logic
+
+### New Event Structure
+
+```python
+@dataclass
+class FlowContext:
+    run_id: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+@dataclass  
+class LambdaEvent:
+    flow: FlowContext
+    input: Any = None  # Data or S3 URL string
+```
+
+### Tasks
+
+- [x] **T38.1** Create `lokki/runtime/event.py` with dataclass definitions
+  - Define `FlowContext` dataclass with `run_id` and `params` fields
+  - Define `LambdaEvent` dataclass with `flow` and `input` fields
+  - Add serialization/deserialization helpers for JSON conversion
+
+- [x] **T38.2** Update Lambda handler to use LambdaEvent dataclass
+  - Simplify handler to read from `event.input`
+  - Read flow params from `event.flow.params`
+  - Handle S3 URL strings in input by reading from S3Store
+  - Reduce handler from ~150 lines to ~40 lines
+
+- [x] **T38.3** Update Batch handler to use LambdaEvent dataclass
+  - Apply same simplifications as Lambda handler
+
+- [ ] **T38.4** Update state machine to use Context Object
+  - Keep InitFlow Pass state (constructs initial input to first step from raw Step Functions input)
+  - Add `ItemSelector` to Map state to inject `$$.Execution.Id` and `$$.Execution.Input` into each iteration
+  - Add `ResultWriter` to Map state to write aggregation results to S3
+  - Add `ResultSelector` to Map state to preserve flow context for aggregation step
+  - Update Task states to use consistent `{"input": ..., "flow": {...}}` format
+
+- [ ] **T38.5** Update Lambda handler to extract flow from Context Object
+  - Read `$$.Execution.Id` from event (via JsonPath `$$.Execution.Id`)
+  - Read `$$.Execution.Input` from event for flow params
+  - Handle both direct invocation (with flow in event) and Step Functions invocation (with flow in context)
+
+- [ ] **T38.6** Update manifest format for Map state
+  - Use simplified format: `[{"input": "..."}]` (no flow needed - available via Context Object)
+  - Update handler to read input from each item's "input" key
+
+- [ ] **T38.7** Write comprehensive unit tests
+  - Test LambdaEvent dataclass serialization/deserialization
+  - Test handler with various input scenarios (S3 URL, list, dict)
+  - Test state machine generation with ItemSelector, ResultWriter, ResultSelector
+  - Test map/agg flow end-to-end
+  - Test local runner consistency with deployed flow
+
+---
+
+## Milestone 39 — Map Type Support (Inline/Distributed)
+
+_Purpose_: Add support for both inline and distributed Map states in AWS Step Functions. Inline is simpler for smaller datasets, while distributed handles large-scale parallel processing.
+
+### Background
+
+AWS Step Functions Map state supports two modes:
+- **distributed** (default): Uses S3 ItemReader/ItemWriter - required for >256KB items or >40K items
+- **inline**: Passes items directly in state input - simpler but limited to smaller payloads
+
+### Tasks
+
+- [ ] **T39.1** Add `map_type` parameter to MapBlock
+  - Add `map_type: str = "distributed"` field to `MapBlock.__init__`
+  - Validate `map_type` is "inline" or "distributed"
+
+- [ ] **T39.2** Update StepNode.map() to accept map_type
+  - Pass `map_type` parameter to MapBlock constructor
+  - Document usage in docstring
+
+- [ ] **T39.3** Update graph.py MapOpenEntry
+  - Add `map_type` field to `MapOpenEntry` dataclass
+
+- [ ] **T39.4** Update state machine generation for inline Map
+  - Generate inline Map state with `ItemsPath` instead of `ItemReader`
+  - Update `ItemSelector` for inline mode
+  - Remove `ResultWriter` for inline mode (results stay in memory)
+
+- [ ] **T39.5** Update CloudFormation template generation
+  - Ensure inline Map states work correctly with Lambda functions
+
+- [ ] **T39.6** Write unit tests
+  - Test map_type parameter validation
+  - Test state machine generation for inline Map
+  - Test state machine generation for distributed Map (default)
+  - Test end-to-end flow with inline Map
+
+- [ ] **T39.7** Update documentation
+  - Document map_type in docs/design.md
+  - Add examples to README.md
+
+---
+
+## Summary
+
+| Milestone | Status |
+|-----------|--------|
+| M1 - Project Scaffolding | Complete |
+| M2 - Configuration | Complete |
+| M3 - Decorator & Graph Model | Complete |
+| M4 - CLI Entry Point | Complete |
+| M5 - S3 & Serialisation Layer | Complete |
+| M6 - Local Runner | Complete |
+| M7 - Runtime Handler | Complete |
+| M8 - Lambda Packaging | Complete |
+| M9 - State Machine Generation | Complete |
+| M10 - CloudFormation Generation | Complete |
+| M11 - Build Orchestrator | Complete |
+| M12 - End-to-End & Hardening | Complete |
+| M13 - Logging & Observability | Complete |
+| M14 - Deploy Command | Complete |
+| M15 - Local Testing with LocalStack | Complete |
+| M16 - Step Functions Local Deployment | Complete |
+| M17 - TOML Configuration Format | Complete |
+| M18 - Test Coverage Improvements | Complete |
+| M19 - CLI Commands: show, logs, destroy | Complete |
+| M20 - Flow-level Parameters in .next() | Complete |
+| M21 - Flow-level Parameters in .map() and .agg() | Complete |
+| M22 - Validate Nested .map() Blocks | Complete |
+| M23 - Step Retry Configuration | Complete |
+| M24 - Code Refactoring | Complete |
+| M25 - Documentation Update | Complete |
+| M26 - Type Safety Improvements | Complete |
+| M27 - Test Coverage Improvements | Complete |
+| M28 - Security Improvements | Complete |
+| M29 - CI/CD Setup | Complete |
+| M30 - Integration Tests | Complete |
+| M31 - Migrate to moto for AWS mocking | Complete |
+| M32 - AWS Batch Support | Complete |
+| M33 - Map Concurrency Limit | Complete |
+| M34 - API Documentation | Complete |
+| M35 - Scheduling | Complete |
+| M36 - Unify Store Interfaces | Complete |
+| M37 - S3 Directory Structure Refactoring | In Progress |
+| M38 - Lambda Event Dataclass Refactoring | In Progress |
+| M39 - Map Type Support (Inline/Distributed) | Pending |

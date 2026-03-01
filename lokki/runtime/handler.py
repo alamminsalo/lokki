@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
+from lokki.runtime.event import FlowContext, LambdaEvent
 from lokki.store import S3Store
 
 if TYPE_CHECKING:
@@ -16,9 +15,9 @@ if TYPE_CHECKING:
 
 
 def make_handler(
-    fn: Callable[..., Any],
+    fn: Any,
     retry_config: RetryConfig | None = None,
-) -> Callable[[dict[str, Any], Any], dict[str, Any]]:
+) -> Any:
     """Create a Lambda handler for a step function.
 
     Note: Retry logic for deployed flows is handled by AWS Step Functions,
@@ -34,115 +33,149 @@ def make_handler(
     logger = get_logger("lokki.runtime", LoggingConfig())
 
     def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-        cfg = load_config()
-        flow_name = (
-            cfg.flow_name
-            if cfg.flow_name
-            else os.environ.get("LOKKI_FLOW_NAME", "unknown")
-        )
-        run_id = event.get("run_id", "unknown")
+        assert "LOKKI_FLOW_NAME" in os.environ
+
+        flow_name = os.environ.get("LOKKI_FLOW_NAME", "unknown")
         step_name = fn.__name__
 
-        store = S3Store()
-
         logger.info(
-            f"Lambda invoked: flow={flow_name}, step={step_name}, run_id={run_id}",
+            f"Lambda invoked: flow={flow_name}, step={step_name}",
             extra={
                 "event": "lambda_invoke",
                 "flow": flow_name,
                 "step": step_name,
-                "run_id": run_id,
             },
         )
 
+        # Parse event - try new format first, fall back to old format
+        lambda_event = _parse_event(event)
+
+        run_id = lambda_event.flow.run_id
+        flow_params = lambda_event.flow.params
+        input_data = lambda_event.input
+
+        # If input_data is None (first step), use empty dict
+        if input_data is None:
+            input_data = {}
+
+        store = S3Store()
+
         start_time = datetime.now()
-        result_url: str | None = None
-        result_urls: list[str] | None = None
-        map_manifest_key: str | None = None
 
         try:
-            if "result_url" in event:
-                result_url = event["result_url"]
+            # Read input from S3 if it's a URL string or list of URLs
+            if isinstance(input_data, str):
                 logger.info(
-                    f"Reading input from {result_url}",
+                    f"Reading input from {input_data}",
                     extra={"event": "input_read", "step": step_name},
                 )
-                input_data = store.read(result_url)
-                result = fn(input_data)
-            elif "result_urls" in event:
-                result_urls = event["result_urls"]
+                input_data = store.read(input_data)
+            elif isinstance(input_data, list) and all(
+                isinstance(x, str) for x in input_data
+            ):
                 logger.info(
-                    f"Reading {len(result_urls)} inputs",
-                    extra={
-                        "event": "input_read",
-                        "step": step_name,
-                        "count": len(result_urls),
-                    },
+                    f"Reading {len(input_data)} inputs from S3",
+                    extra={"event": "input_read", "step": step_name},
                 )
-                inputs = [store.read(url) for url in result_urls]
-                result = fn(inputs)
+                input_data = [store.read(url) for url in input_data]
+
+            # Call step function - merge flow_params with input_data if input is dict
+            if isinstance(input_data, dict) and flow_params:
+                merged_input = {**flow_params, **input_data}
+                result = fn(merged_input)
+            elif flow_params:
+                result = fn(input_data, **flow_params)
             else:
-                import inspect
+                result = fn(input_data)
 
-                sig = inspect.signature(fn)
-                kwargs = {k: event[k] for k in event if k in sig.parameters}
-                logger.info(
-                    "No upstream input, using event kwargs",
-                    extra={"event": "input_read", "step": step_name},
-                )
-                result = fn(**kwargs)
-
+            # Write output to S3
             output_url = store.write(flow_name, run_id, step_name, result)
 
+            # Handle map results (list) - write manifest as list of URLs
             if isinstance(result, list):
                 item_urls = []
                 for i, item in enumerate(result):
                     item_url = store.write(flow_name, run_id, f"{step_name}/{i}", item)
                     item_urls.append(item_url)
 
-                manifest = [
-                    {"item_url": item_url, "index": i}
-                    for i, item_url in enumerate(item_urls)
-                ]
-
-                map_manifest_key = store.write_manifest(
-                    flow_name, run_id, step_name, manifest
+                manifest_url = store.write_manifest(
+                    flow_name, run_id, step_name, item_urls
                 )
-                duration = (datetime.now() - start_time).total_seconds()
+
                 logger.info(
-                    f"Step completed: {step_name} in {duration:.3f}s",
+                    f"Step completed: {step_name} in "
+                    f"{(datetime.now() - start_time).total_seconds():.3f}s",
                     extra={
                         "event": "step_complete",
                         "step": step_name,
-                        "duration": duration,
+                        "duration": (datetime.now() - start_time).total_seconds(),
                         "status": "success",
                     },
                 )
-                return {"map_manifest_key": map_manifest_key, "run_id": run_id}
+                return {"input": manifest_url, "flow": lambda_event.flow.to_dict()}
 
-            duration = (datetime.now() - start_time).total_seconds()
             logger.info(
-                f"Step completed: {step_name} in {duration:.3f}s",
+                f"Step completed: {step_name} in "
+                f"{(datetime.now() - start_time).total_seconds():.3f}s",
                 extra={
                     "event": "step_complete",
                     "step": step_name,
-                    "duration": duration,
+                    "duration": (datetime.now() - start_time).total_seconds(),
                     "status": "success",
                 },
             )
-            return {"result_url": output_url, "run_id": run_id}
+            return {"input": output_url, "flow": lambda_event.flow.to_dict()}
 
         except Exception as e:
-            duration = (datetime.now() - start_time).total_seconds()
             logger.error(
-                f"Step failed: {step_name} after {duration:.3f}s: {e}",
+                f"Step failed: {step_name} after "
+                f"{(datetime.now() - start_time).total_seconds():.3f}s: {e}",
                 extra={
-                    "event": "step_fail",
+                    "event": "step_error",
                     "step": step_name,
-                    "duration": duration,
-                    "status": "failed",
+                    "duration": (datetime.now() - start_time).total_seconds(),
+                    "error": str(e),
                 },
             )
             raise
 
     return lambda_handler
+
+
+def _parse_event(event: dict[str, Any]) -> LambdaEvent:
+    """Parse event into LambdaEvent dataclass.
+
+    Supports:
+    - {"flow": {...}, "input": ...} - new format
+    - {"flow": [...]} - list from Map aggregation (extract flow from first item)
+    """
+    # Handle list input (from Map aggregation)
+    if isinstance(event, list):
+        # Extract flow from first item to preserve it
+        run_id = "unknown"
+        flow_params = {}
+        input_items = event
+        if event and isinstance(event[0], dict):
+            first = event[0]
+            if "flow" in first and isinstance(first["flow"], dict):
+                flow = first["flow"]
+                run_id = flow.get("run_id", "unknown")
+                flow_params = flow.get("params", {})
+        return LambdaEvent(
+            flow=FlowContext(run_id=run_id, params=flow_params),
+            input=input_items,
+        )
+
+    # Handle dict input - new format {"flow": {...}, "input": ...}
+    if "flow" in event and isinstance(event["flow"], dict):
+        flow_data = event["flow"]
+        return LambdaEvent(
+            flow=FlowContext.from_dict(flow_data),
+            input=event.get("input"),
+        )
+
+    # Fallback - create default
+    return LambdaEvent(
+        flow=FlowContext(run_id="unknown", params={}),
+        input=event,
+    )

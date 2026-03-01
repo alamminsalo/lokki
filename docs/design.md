@@ -125,11 +125,19 @@ class StepNode:
 
 class MapBlock:
     """Represents an open fan-out block started by .map()."""
-    def __init__(self, source: StepNode, inner_head: StepNode):
+    def __init__(
+        self,
+        source: StepNode,
+        inner_head: StepNode,
+        concurrency_limit: int | None = None,
+        map_type: str = "distributed",
+    ):
         self.source = source          # step before the Map
         self.inner_head = inner_head  # first step inside Map iterator
         self.inner_tail = inner_head  # last step inside Map iterator (grows with chaining)
         self._next: StepNode | None = None
+        self.concurrency_limit = concurrency_limit
+        self.map_type = map_type  # "inline" or "distributed"
 
     def map(self, step_node: StepNode) -> "MapBlock":
         # Further chaining inside the Map block
@@ -774,11 +782,25 @@ The aggregation step receives a list of these URLs, downloads each, and merges t
 |---|---|
 | `TaskEntry` | `Task` — invokes the Lambda ARN |
 | `MapOpenEntry` | `Map` (Distributed Map mode) with `ItemReader` pointing to an S3 JSON manifest |
-| `MapCloseEntry` | `Task` for the aggregation Lambda, preceded by a state that writes collected results to S3 |
+| `MapCloseEntry` | `Task` for the aggregation Lambda |
+
+### Execution Context Object
+
+AWS Step Functions provides a Context Object that contains execution metadata. lokki uses this to pass flow parameters to Lambda functions via the InitFlow Pass state:
+
+| Context Field | Description | Usage |
+|--------------|-------------|-------|
+| `$$.Execution.Id` | Full execution ARN | Extract run_id |
+| `$$.Execution.Input` | Original execution input | Flow parameters |
+| `$$.Execution.Name` | Execution name | Alternative run_id |
+| `$$.Map.Item.Index` | Current item index (in Map) | Map iteration |
+| `$$.Map.Item.Value` | Current item value (in Map) | Map iteration input |
+
+The Lambda handler reads flow from the event (passed via InitFlow and embedded in manifest items).
 
 ### Distributed Map pattern
 
-The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3:
+The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3 via `ItemReader`. The `ItemSelector` extracts flow from each manifest item:
 
 ```json
 {
@@ -788,25 +810,46 @@ The `Map` state uses `"Mode": "DISTRIBUTED"` and reads items from S3:
     "ReaderConfig": { "InputType": "JSON", "MaxItems": 100000 },
     "Parameters": {
       "Bucket": "<bucket>",
-      "Key.$": "$.map_manifest_key"
+      "Key.$": "$.input"
     }
+  },
+  "ItemSelector": {
+    "input.$": "$.Map.Item.Value.input",
+    "flow.$": "$.Map.Item.Value.flow"
   },
   "ItemProcessor": {
     "ProcessorConfig": { "Mode": "DISTRIBUTED", "ExecutionType": "STANDARD" },
     "StartAt": "<inner_first_state>",
     "States": { ... }
   },
-  "ResultWriter": {
-    "Resource": "arn:aws:states:::s3:putObject",
-    "Parameters": {
-      "Bucket": "<bucket>",
-      "Prefix.$": "States.Format('lokki/{}/{}/map_results/', <flow>, $.run_id)"
-    }
+  "ResultPath": "$",
+  "ResultSelector": {
+    "flow.$": "$[0].flow",
+    "input.$": "$"
   }
 }
 ```
 
-The preceding `Task` state (the `source` step) is responsible for writing its output list to S3 as the map manifest JSON, and placing the manifest key into the state output.
+**Key points:**
+- Manifest format: `[{"input": "url", "flow": {...}}, ...]`
+- `ItemSelector` extracts `input` and `flow` from each manifest item using JsonPath
+- `ResultSelector` preserves flow context for aggregation step using inline output
+
+### Event Format
+
+All Lambda functions receive events in the following format:
+
+```json
+{
+  "input": "<data or S3 URL>",
+  "flow": {
+    "run_id": "arn:aws:states:region:account:execution:name",
+    "params": { "param1": "value1", ... }
+  }
+}
+```
+
+For Map iterations, the `input` field contains the individual item. For aggregation steps, the `input` field contains the S3 URL of the aggregated results.
 
 ### Map Concurrency Limit
 
@@ -837,12 +880,65 @@ This adds `MaxConcurrency: 10` to the Map state in the generated Step Functions:
 
 When `concurrency_limit` is not specified, the Map state runs with unlimited parallelism (up to AWS limits).
 
+### Map Type
+
+AWS Step Functions Map state supports two modes:
+
+- **`distributed`** (default): Uses S3 ItemReader/ItemWriter for large datasets (>256KB items or >40K items)
+- **`inline`**: Passes items directly in the state input (simpler, for smaller datasets)
+
+```python
+@step
+def fetch_items():
+    return list(range(1000))
+
+@step
+def process_item(item):
+    return item * 2
+
+@step
+def aggregate_results(results):
+    return sum(results)
+
+# Use inline Map for smaller datasets
+fetch_items().map(process_item, map_type="inline").agg(aggregate_results)
+
+# Use distributed Map (default) for large datasets
+fetch_items().map(process_item, map_type="distributed").agg(aggregate_results)
+```
+
+This generates different Step Functions state machine configurations:
+
+**inline Map:**
+```json
+{
+  "Type": "Map",
+  "Mode": "INLINE",
+  "ItemsPath": "$.items",
+  "Iterator": { ... },
+  ...
+}
+```
+
+**distributed Map:**
+```json
+{
+  "Type": "Map",
+  "Mode": "DISTRIBUTED",
+  "ItemReader": { ... },
+  "ItemProcessor": { ... },
+  ...
+}
+```
+
+When `map_type` is not specified, `distributed` is used by default.
+
 ### Inter-state data passing
 
-Each Task state's output is a small JSON object containing only the S3 URL of the result — never the payload itself. This keeps all Step Functions I/O well within the 256 KB state payload limit.
+Each Task state's output is a small JSON object containing the S3 URL of the result and flow context — never the payload itself. This keeps all Step Functions I/O well within the 256 KB state payload limit.
 
 ```json
-{ "result_url": "s3://bucket/lokki/flow/run123/get_birds/output.pkl.gz" }
+{ "input": "s3://bucket/lokki/flow/run123/get_birds/output.pkl.gz", "flow": { "run_id": "...", "params": {} } }
 ```
 
 ### State naming

@@ -68,7 +68,7 @@ class TestTaskState:
 
         assert state["Type"] == "Task"
         assert "Resource" in state
-        assert state["ResultPath"] == "$.result"
+        assert state["ResultPath"] == "$.input"
         assert state["Next"] is None
         assert "Retry" not in state
 
