@@ -24,16 +24,22 @@ def load_tlc_data(url: str) -> list[dict]:
 
 
 @step
-def filter_by_fare(group_data: dict, min_fare: float) -> dict:
+def filter_by_fare(group_data: dict, min_fare: float = 0.0, **kwargs) -> dict:
     """Filter records by minimum fare."""
+    if kwargs:
+        min_fare = kwargs.get("min_fare", min_fare)
+
     records = group_data["df"]
     filtered = [r for r in records if r.get("fare_amount", 0) >= min_fare]
     return {"month": group_data["month"], "df": filtered, "count": len(filtered)}
 
 
 @step
-def compute_month_stats(group_data: dict, include_tips: bool = True) -> dict:
+def compute_month_stats(group_data: dict, include_tips: bool = True, **kwargs) -> dict:
     """Monthly stats: trip count, mean fare, max tip."""
+    if kwargs:
+        include_tips = kwargs.get("include_tips", include_tips)
+
     records = group_data.get("df", [])
 
     fares = [r["fare_amount"] for r in records if "fare_amount" in r]
@@ -94,17 +100,17 @@ def tlc_taxi_flow(
 ):
     """
     NYC Taxi flow demonstrating various lokki API features:
-    - .map(step, kwarg=val) for flow kwargs in mapped steps
-    - .next(step, kwarg=val) to chain steps inside a map block
-    - .agg(step, kwarg=val) for flow kwargs in aggregation
-    - Flow-level parameters
+    - Flow-level parameters passed via **kwargs
+    - .map() for parallel processing
+    - .next() to chain steps inside a map block
+    - .agg() for aggregation
     """
     return (
         load_tlc_data(url)
-        .map(filter_by_fare, min_fare=min_fare)
-        .next(compute_month_stats, include_tips=include_tips)
-        .agg(aggregate_stats, sort_by=sort_by)
-        .next(format_output, format_type=format_type)
+        .map(filter_by_fare)  # Flow params passed via **kwargs
+        .next(compute_month_stats)
+        .agg(aggregate_stats)
+        .next(format_output)
     )
 
 

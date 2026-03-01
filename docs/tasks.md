@@ -870,3 +870,100 @@ class LambdaEvent:
 | M37 - S3 Directory Structure Refactoring | Complete |
 | M38 - Lambda Event Dataclass Refactoring | Complete |
 | M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
+
+---
+
+## Milestone 40 — Flow Params via Kwargs
+
+_Purpose_: Simplify flow parameter handling by always passing them via `**kwargs`. This removes the silent constraint that flow param names must match function param names, making the API more explicit and less error-prone.
+
+### Background
+
+Currently flow params are passed as explicit kwargs to step functions:
+```python
+@flow
+def my_flow(multiplier=2):
+    @step
+    def transform(values, mult):  # must match 'multiplier' name exactly
+        return [v * mult for v in values]
+```
+
+This requires flow param names to match step function param names exactly. With kwargs:
+```python
+@flow
+def my_flow(multiplier=2):
+    @step
+    def transform(values, **kwargs):  # receives all flow params
+        return [v * kwargs["multiplier"] for v in values]
+```
+
+### Tasks
+
+- [x] **T40.1** Update decorators to remove explicit kwargs
+  - Remove `**kwargs` from `StepNode.next()`
+  - Remove `**kwargs` from `StepNode.map()` 
+  - Remove `**kwargs` from `StepNode.agg()`
+
+- [x] **T40.2** Update handler to pass flow params via kwargs
+  - Remove `_filter_flow_params()` function
+  - Always pass flow params as `**kwargs`
+
+- [x] **T40.3** Update runner to pass flow params via kwargs
+  - Update `_execute_step()` to pass flow params as `**kwargs`
+
+- [x] **T40.4** Update CI test pipeline example
+  - Rewrite step functions to use `**kwargs`
+
+- [x] **T40.5** Update tests
+  - Remove tests using explicit kwargs in `.next()`, `.map()`, `.agg()`
+  - Add tests for `**kwargs` flow param usage
+
+- [x] **T40.6** Update documentation
+  - Document new flow params behavior in docs/design.md
+
+---
+
+## Summary
+
+| Milestone | Status |
+|-----------|--------|
+| M1 - Project Scaffolding | Complete |
+| M2 - Configuration | Complete |
+| M3 - Decorator & Graph Model | Complete |
+| M4 - CLI Entry Point | Complete |
+| M5 - S3 & Serialisation Layer | Complete |
+| M6 - Local Runner | Complete |
+| M7 - Runtime Handler | Complete |
+| M8 - Lambda Packaging | Complete |
+| M9 - State Machine Generation | Complete |
+| M10 - CloudFormation Generation | Complete |
+| M11 - Build Orchestrator | Complete |
+| M12 - End-to-End & Hardening | Complete |
+| M13 - Logging & Observability | Complete |
+| M14 - Deploy Command | Complete |
+| M15 - Local Testing with LocalStack | Complete |
+| M16 - Step Functions Local Deployment | Complete |
+| M17 - TOML Configuration Format | Complete |
+| M18 - Test Coverage Improvements | Complete |
+| M19 - CLI Commands: show, logs, destroy | Complete |
+| M20 - Flow-level Parameters in .next() | Complete |
+| M21 - Flow-level Parameters in .map() and .agg() | Complete |
+| M22 - Validate Nested .map() Blocks | Complete |
+| M23 - Step Retry Configuration | Complete |
+| M24 - Code Refactoring | Complete |
+| M25 - Documentation Update | Complete |
+| M26 - Type Safety Improvements | Complete |
+| M27 - Test Coverage Improvements | Complete |
+| M28 - Security Improvements | Complete |
+| M29 - CI/CD Setup | Complete |
+| M30 - Integration Tests | Complete |
+| M31 - Migrate to moto for AWS mocking | Complete |
+| M32 - AWS Batch Support | Complete |
+| M33 - Map Concurrency Limit | Complete |
+| M34 - API Documentation | Complete |
+| M35 - Scheduling | Complete |
+| M36 - Unify Store Interfaces | Complete |
+| M37 - S3 Directory Structure Refactoring | Complete |
+| M38 - Lambda Event Dataclass Refactoring | Complete |
+| M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
+| M40 - Flow Params via Kwargs | Complete |

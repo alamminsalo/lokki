@@ -47,9 +47,9 @@ class LocalRunner:
                 if isinstance(entry, TaskEntry):
                     self._run_task(store, graph.name, run_id, entry, params)
                 elif isinstance(entry, MapOpenEntry):
-                    self._run_map(store, graph.name, run_id, entry)
+                    self._run_map(store, graph.name, run_id, entry, params)
                 elif isinstance(entry, MapCloseEntry):
-                    self._run_agg(store, graph.name, run_id, entry)
+                    self._run_agg(store, graph.name, run_id, entry, params)
 
             last_entry = graph.entries[-1]
             if isinstance(last_entry, MapCloseEntry):
@@ -148,23 +148,18 @@ class LocalRunner:
             if prev_path.exists():
                 result = store.read(str(prev_path))
 
-        flow_kwargs = getattr(node, "_flow_kwargs", {})
-
+        # Call step function - flow params always passed via **kwargs
         if result is not None:
-            if node._default_args or node._default_kwargs or flow_kwargs:
-                result = node.fn(
-                    result,
-                    *node._default_args,
-                    **node._default_kwargs,
-                    **flow_kwargs,
-                )
+            # Subsequent step - has input from previous step
+            if params:
+                result = node.fn(result, **params)
             else:
                 result = node.fn(result)
         elif node._default_args or node._default_kwargs:
+            # First step with default args/kwargs from node()
             result = node.fn(*node._default_args, **node._default_kwargs)
-        elif flow_kwargs:
-            result = node.fn(**flow_kwargs)
         elif params:
+            # First step - pass params as kwargs
             result = node.fn(**params)
         else:
             result = node.fn()
@@ -172,7 +167,12 @@ class LocalRunner:
         return result
 
     def _run_map(
-        self, store: LocalStore, flow_name: str, run_id: str, entry: MapOpenEntry
+        self,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        entry: MapOpenEntry,
+        params: dict[str, Any],
     ) -> None:
         source_name = entry.source.name
         manifest_path = store._get_path(
@@ -194,14 +194,14 @@ class LocalRunner:
             fn: Callable[[Any], Any],
             item_data: Any,
             item_idx: int,
-            flow_kwargs: dict[str, Any],
+            flow_params: dict[str, Any],
             retry_config: RetryConfig,
         ) -> Any:
             last_exception: Exception | None = None
             for attempt in range(retry_config.retries + 1):
                 try:
-                    if flow_kwargs:
-                        result = fn(item_data, **flow_kwargs)
+                    if flow_params:
+                        result = fn(item_data, **flow_params)
                     else:
                         result = fn(item_data)
                     return result
@@ -226,7 +226,6 @@ class LocalRunner:
         for _step_idx, step_node in enumerate(inner_steps):
             step_name = step_node.name
             fn = step_node.fn
-            flow_kwargs = getattr(step_node, "_flow_kwargs", {})
             retry_config = step_node.retry
 
             with ThreadPoolExecutor() as executor:
@@ -237,7 +236,7 @@ class LocalRunner:
                         fn,
                         item_data,
                         item_idx,
-                        flow_kwargs,
+                        params,
                         retry_config,
                     )
                     futures[future] = item_idx
@@ -264,7 +263,12 @@ class LocalRunner:
         step_logger.complete(0.0)
 
     def _run_agg(
-        self, store: LocalStore, flow_name: str, run_id: str, entry: MapCloseEntry
+        self,
+        store: LocalStore,
+        flow_name: str,
+        run_id: str,
+        entry: MapCloseEntry,
+        params: dict[str, Any],
     ) -> None:
         if entry.agg_step._map_block is None:
             raise ValueError("Aggregation step must follow a map block")

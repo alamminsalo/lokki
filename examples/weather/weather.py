@@ -19,9 +19,17 @@ def geocode_location(location: str) -> tuple[float, float]:
 
 @step
 def fetch_weather(
-    coords: tuple[float, float], start_date: str, end_date: str
+    coords: tuple[float, float],
+    start_date: str = "2024-01-01",
+    end_date: str = "2024-01-31",
+    **kwargs,
 ) -> list[dict]:
     """Fetch historical weather data from Open-Meteo API."""
+    # Override defaults with kwargs if provided
+    if kwargs:
+        start_date = kwargs.get("start_date", start_date)
+        end_date = kwargs.get("end_date", end_date)
+
     latitude, longitude = coords
     url = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -244,7 +252,7 @@ def weather_flow(
     """Weather data analysis pipeline using DuckDB and Open-Meteo."""
     return (
         geocode_location(location)
-        .next(fetch_weather, start_date=start_date, end_date=end_date)
+        .next(fetch_weather)  # Flow params passed via **kwargs
         .next(run_duckdb_analysis)
         .next(format_summary)
     )

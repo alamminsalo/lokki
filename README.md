@@ -143,7 +143,7 @@ def sum_items(items):
 
 @flow
 def my_flow(mult=2):
-    return get_data().map(process_item, mult=mult).next(process_item_2).agg(sum_items)
+    return get_data().map(process_item).next(process_item_2).agg(sum_items)
 
 if __name__ == "__main__":
     main(my_flow)
@@ -166,16 +166,17 @@ Pass parameters to flows at runtime:
 
 ```python
 @step
-def fetch_data(limit: int, offset: int = 0):
-    return list(range(limit))[offset:]
+def fetch_data(limit: int = 100):
+    return list(range(limit))
 
 @step
-def process(item, mult):
+def process(item, **kwargs):
+    mult = kwargs.get("mult", 1)
     return item * mult
 
 @flow
-def paginated_flow(limit: int = 100, offset: int = 0, mult: int = 2):
-    return fetch_data(limit=limit, offset=offset).map(process, mult=mult)
+def paginated_flow(limit: int = 100, mult: int = 2):
+    return fetch_data(limit=limit).map(process)
 
 if __name__ == "__main__":
     main(paginated_flow)

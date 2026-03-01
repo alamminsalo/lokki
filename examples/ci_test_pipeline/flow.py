@@ -11,7 +11,8 @@ def get_values(size: int) -> list[float]:
 
 
 @step
-def transform(values: list[float], multiplier: float) -> list[float]:
+def transform(values: list[float], **kwargs) -> list[float]:
+    multiplier = kwargs.get("multiplier", 1)
     return [v * multiplier for v in values]
 
 
@@ -22,10 +23,10 @@ def ci_test_pipeline(
 ):
     """
     CI test pipeline with 3 steps demonstrating:
-    - Flow parameters (param1, multiplier)
+    - Flow parameters (size, multiplier)
     - Linear step chaining with .next()
     """
-    return get_values(size).next(transform, multiplier=multiplier)
+    return get_values(size).next(transform)
 
 
 if __name__ == "__main__":

@@ -255,7 +255,8 @@ def get_data():
     return [1, 2, 3]
 
 @step
-def process_multiplied(items, multiplier):
+def process_multiplied(items, **kwargs):
+    multiplier = kwargs.get("multiplier", 1)
     return [item * multiplier for item in items]
 
 @step
@@ -264,30 +265,29 @@ def save(result):
 
 @flow
 def flow_with_params(multiplier=2):
-    # Flow input 'multiplier' is passed directly to process_multiplied
-    return get_data().next(process_multiplied, multiplier=multiplier).next(save)
+    # Flow parameters passed via **kwargs
+    return get_data().next(process_multiplied).next(save)
 ```
 
 **Behavior:**
-- `.next(step, **flow_kwargs)` accepts keyword arguments that are injected into the step
-- The step function receives:
-  - **First positional argument**: previous step's output (passed automatically)
-  - **Keyword arguments**: flow-level parameters from `.next()` call
+- Flow parameters are passed to all steps via `**kwargs`
+- Steps access flow params via `kwargs.get("param_name")` or `kwargs["param_name"]`
 
 **Parameter resolution:**
 ```python
 @step
-def fetch_weather(previous_output, start_date, end_date):
-    # previous_output: result from previous step (e.g., tuple(lat, lon))
-    # start_date, end_date: flow kwargs passed via .next()
+def fetch_weather(previous_output, **kwargs):
+    # previous_output: result from previous step
+    # kwargs: flow-level parameters
+    start_date = kwargs.get("start_date", "2024-01-01")
     lat, lon = previous_output
-    return fetch(lat, lon, start_date, end_date)
+    return fetch(lat, lon, start_date)
 
 @flow
 def weather_flow(location="New York", start_date="2024-01-01"):
     return (
-        geocode_location(location)  # Returns (lat, lon)
-        .next(fetch_weather, start_date=start_date, end_date="2024-01-31")
+        geocode_location(location)
+        .next(fetch_weather)  # Flow params passed via **kwargs
     )
 ```
 
@@ -354,14 +354,11 @@ def agg_flow(seed=100):
 
 **Comparison:**
 
-| Method | Input | Flow kwargs | Output | Use Case |
-|--------|-------|-------------|--------|------------|
-| `.map(step)` | list | no | list (per-item) | Parallel processing |
-| `.map(step, kwarg=val)` | list + kwargs | yes | list (per-item) | Parallel with config |
-| `.agg(step)` | list | no | single value | Aggregation |
-| `.agg(step, kwarg=val)` | list + kwargs | yes | single value | Aggregation with config |
-| `.next(step)` | previous output | no | any | Sequential chain |
-| `.next(step, kwarg=val)` | prev output + kwargs | yes | any | Sequential with config |
+| Method | Input | Flow params via | Output | Use Case |
+|--------|-------|----------------|--------|------------|
+| `.map(step)` | list | **kwargs | list (per-item) | Parallel processing |
+| `.agg(step)` | list | **kwargs | single value | Aggregation |
+| `.next(step)` | previous output | **kwargs | any | Sequential chain |
 
 **Error conditions:**
 - Flow ending with an open Map block (without `.agg()`) must raise an exception
