@@ -1110,9 +1110,9 @@ get_birds/
 ```python
 # lokki-build/lambdas/get_birds/handler.py (auto-generated)
 from birds_flow_example import get_birds
-from lokki.runtime.handler import make_handler
+from lokki.runtime import Lambda
 
-lambda_handler = make_handler(get_birds.fn)
+lambda_handler = Lambda(get_birds.fn)
 ```
 
 **CloudFormation template** — Lambda functions use `PackageType: Zip`:
@@ -1140,9 +1140,9 @@ A thin, auto-generated file that binds the specific step function to the generic
 ```python
 # lokki-build/lambdas/get_birds/handler.py  (auto-generated)
 from birds_flow_example import get_birds          # imports user's function
-from lokki.runtime.handler import make_handler
+from lokki.runtime import Lambda
 
-lambda_handler = make_handler(get_birds.fn)
+lambda_handler = Lambda(get_birds.fn)
 ```
 
 The build process writes one of these per step, importing the correct function from the user's flow script.
@@ -1697,7 +1697,7 @@ The @flow function in `__init__.py` is extended to handle the `deploy` command:
 
 ```python
 elif command == "deploy":
-    from lokki.deploy import Deployer
+    from lokki.cli import Deployer
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -1814,8 +1814,8 @@ mod = importlib.import_module(module_name)
 step_node = getattr(mod, step_name)
 step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
-from lokki.runtime.handler import make_handler
-lambda_handler = make_handler(step_func)
+from lokki.runtime import Lambda
+lambda_handler = Lambda(step_func)
 ```
 
 ### S3 Endpoint Configuration
