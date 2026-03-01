@@ -101,7 +101,7 @@ class TestRetryInRunner:
     def test_retry_success_first_try(self) -> None:
         """Test step succeeds on first try, no retries."""
         from lokki.graph import FlowGraph
-        from lokki.runner import LocalRunner
+        from lokki.runtime.local import LocalRunner
 
         call_count = 0
 

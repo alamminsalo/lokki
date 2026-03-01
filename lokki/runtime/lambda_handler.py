@@ -2,41 +2,17 @@
 
 from __future__ import annotations
 
-import inspect
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from lokki.logging import LoggingConfig, get_logger
 from lokki.runtime.event import FlowContext, LambdaEvent
+from lokki.runtime.runtime import Runtime
 from lokki.store import S3Store
 
 if TYPE_CHECKING:
     from lokki.decorators import RetryConfig
-
-
-def _accepts_kwargs(fn: Any) -> bool:
-    """Check if function accepts **kwargs."""
-    sig = inspect.signature(fn)
-    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-
-
-def _filter_flow_params(fn: Any, flow_params: dict[str, Any]) -> dict[str, Any]:
-    """Filter flow params to only include those explicitly accepted by the step function.
-
-    Only filters if the function does NOT accept **kwargs.
-    """
-    if not flow_params:
-        return {}
-
-    # If function accepts **kwargs, pass all flow params
-    if _accepts_kwargs(fn):
-        return flow_params
-
-    # Otherwise, filter to only explicitly accepted params
-    sig = inspect.signature(fn)
-    accepted = set(sig.parameters.keys())
-    return {k: v for k, v in flow_params.items() if k in accepted}
 
 
 def make_handler(
@@ -105,19 +81,11 @@ def make_handler(
                 )
                 input_data = [store.read(url) for url in input_data]
 
-            # Call step function
-            # First step: no input from prior step, pass flow_params as kwargs
-            # Subsequent steps: pass input_data and filtered flow_params as kwargs
-            # Filter flow_params: if fn accepts **kwargs, pass all; otherwise filter to accepted params
+            # Call step function using Runtime.call_step
             if is_first_step:
-                filtered_params = _filter_flow_params(fn, flow_params)
-                result = fn(**filtered_params) if filtered_params else fn()
+                result = Runtime.call_step(fn, None, flow_params)
             else:
-                filtered_params = _filter_flow_params(fn, flow_params)
-                if filtered_params:
-                    result = fn(input_data, **filtered_params)
-                else:
-                    result = fn(input_data)
+                result = Runtime.call_step(fn, input_data, flow_params)
 
             # Write output to S3
             output_url = store.write(flow_name, run_id, step_name, result)

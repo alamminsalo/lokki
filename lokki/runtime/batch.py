@@ -9,6 +9,7 @@ from typing import Any
 from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
 from lokki.runtime.event import FlowContext, LambdaEvent
+from lokki.runtime.runtime import Runtime
 from lokki.store import S3Store
 
 
@@ -77,14 +78,8 @@ def make_batch_handler(
                 )
                 input_data = [store.read(url) for url in input_data]
 
-            # Call step function - merge flow_params with input_data if input is dict
-            if isinstance(input_data, dict) and flow_params:
-                merged_input = {**flow_params, **input_data}
-                result = fn(merged_input)
-            elif flow_params:
-                result = fn(input_data, **flow_params)
-            else:
-                result = fn(input_data)
+            # Call step function using Runtime.call_step
+            result = Runtime.call_step(fn, input_data, flow_params)
 
             output_url = store.write(flow_name, run_id, step_name, result)
 

@@ -3,7 +3,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from lokki.runtime.handler import make_handler
+from lokki.runtime.lambda_handler import make_handler
 
 
 class TestMakeHandler:
@@ -11,7 +11,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_first_step_with_flow_params(self, mock_store_class: MagicMock) -> None:
         """Test first step receives only flow params as kwargs (no input_data)."""
         mock_store = MagicMock()
@@ -35,7 +35,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_single_input_reads_from_s3(self, mock_store_class: MagicMock) -> None:
         mock_store = MagicMock()
         mock_store_class.return_value = mock_store
@@ -60,7 +60,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_multiple_inputs_read_from_s3(self, mock_store_class: MagicMock) -> None:
         mock_store = MagicMock()
         mock_store_class.return_value = mock_store
@@ -85,7 +85,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_step_returns_list_writes_manifest(
         self, mock_store_class: MagicMock
     ) -> None:
@@ -113,7 +113,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_flow_params_merged_into_dict_input(
         self, mock_store_class: MagicMock
     ) -> None:
@@ -143,7 +143,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_flow_params_passed_as_kwargs_to_non_dict_input(
         self, mock_store_class: MagicMock
     ) -> None:
@@ -173,7 +173,7 @@ class TestMakeHandler:
         os.environ,
         {"LOKKI_FLOW_NAME": "test-flow", "LOKKI_ARTIFACT_BUCKET": "test-bucket"},
     )
-    @patch("lokki.runtime.handler.S3Store")
+    @patch("lokki.runtime.lambda_handler.S3Store")
     def test_flow_params_not_passed_when_empty(
         self, mock_store_class: MagicMock
     ) -> None:

@@ -92,7 +92,7 @@ def _get_step_names(graph: FlowGraph) -> list[str]:
 def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'run' command."""
     from lokki.config import load_config
-    from lokki.runner import LocalRunner
+    from lokki.runtime.local import LocalRunner
 
     try:
         flow_params = _parse_flow_params(flow_fn, args)

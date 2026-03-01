@@ -223,7 +223,7 @@ class TestMainCLI:
 
     def test_run_command_no_params(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "run"]):
-            with patch("lokki.runner.LocalRunner.run") as mock_run:
+            with patch("lokki.runtime.local.LocalRunner.run") as mock_run:
                 mock_run.return_value = ["a", "b", "c"]
                 main(simple_flow)
                 mock_run.assert_called_once()
@@ -235,7 +235,7 @@ class TestMainCLI:
         with patch.object(
             sys, "argv", ["test.py", "run", "--start-date", "2024-01-15"]
         ):
-            with patch("lokki.runner.LocalRunner.run") as mock_run:
+            with patch("lokki.runtime.local.LocalRunner.run") as mock_run:
                 mock_run.return_value = ["2024-01-15"]
                 main(param_flow)
                 mock_run.assert_called_once()
@@ -244,7 +244,7 @@ class TestMainCLI:
 
     def test_run_command_with_params_equals_syntax(self, param_flow):
         with patch.object(sys, "argv", ["test.py", "run", "--start-date=2024-01-15"]):
-            with patch("lokki.runner.LocalRunner.run") as mock_run:
+            with patch("lokki.runtime.local.LocalRunner.run") as mock_run:
                 mock_run.return_value = ["2024-01-15"]
                 main(param_flow)
                 mock_run.assert_called_once()
@@ -363,7 +363,7 @@ class TestMainCLI:
     def test_run_command_runner_error(self, simple_flow):
         """Test error handling when runner fails."""
         with patch.object(sys, "argv", ["test.py", "run"]):
-            with patch("lokki.runner.LocalRunner.run") as mock_run:
+            with patch("lokki.runtime.local.LocalRunner.run") as mock_run:
                 mock_run.side_effect = RuntimeError("Runner failed")
                 with pytest.raises(SystemExit) as exc_info:
                     main(simple_flow)

@@ -967,3 +967,56 @@ def my_flow(multiplier=2):
 | M38 - Lambda Event Dataclass Refactoring | Complete |
 | M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
 | M40 - Flow Params via Kwargs | Complete |
+| M41 - Runtime Module Reorganization | Complete |
+
+---
+
+## Milestone 41 — Runtime Module Reorganization
+
+_Purpose_: Reorganize runtime module to have shared Runtime class and move runner to runtime/local.py.
+
+### Background
+
+Currently:
+- `lokki/runner.py` contains LocalRunner
+- `lokki/runtime/handler.py` contains Lambda handler
+- Flow params filtering logic is duplicated in handler.py and runner.py
+
+### Goals
+- Single Runtime class with shared logic for calling step functions
+- Move runner to runtime/local.py
+- Move Lambda handler to runtime/lambda.py
+- Consistent interface across all runtimes (Lambda, Batch, Local)
+
+### Tasks
+
+- [ ] **T41.1** Create runtime/runtime.py with Runtime class
+  - Create Runtime class with static methods:
+    - `accepts_kwargs(fn)` - Check if function accepts **kwargs
+    - `filter_flow_params(fn, flow_params)` - Filter flow params based on function signature
+    - `call_step(fn, input_data, flow_params)` - Call step function with input and flow params
+
+- [ ] **T41.2** Move runner.py to runtime/local.py
+  - Move `lokki/runner.py` → `lokki/runtime/local.py`
+  - Update imports to use Runtime class
+
+- [ ] **T41.3** Move runtime/handler.py to runtime/lambda.py
+  - Move `lokki/runtime/handler.py` → `lokki/runtime/lambda.py`
+  - Update imports to use Runtime class
+
+- [ ] **T41.4** Update runtime/batch.py
+  - Update imports to use Runtime class
+
+- [ ] **T41.5** Update exports in runtime/__init__.py
+  - Export Runtime, Lambda, Batch, Local
+
+- [ ] **T41.6** Update all imports throughout codebase
+  - Update imports in builder modules
+  - Update imports in cli.py
+  - Update imports in tests
+
+- [ ] **T41.7** Run tests to verify changes work
+
+---
+
+## Summary
