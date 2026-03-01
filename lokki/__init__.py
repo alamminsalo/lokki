@@ -1,6 +1,19 @@
 """Lokki - Python library for data pipelines on AWS Step Functions."""
 
 from lokki.cli import main
+from lokki.cli.deploy import Deployer
+from lokki.cli.destroy import DestroyError
+from lokki.cli.logs import logs
+from lokki.cli.show import show
 from lokki.decorators import RetryConfig, flow, step
 
-__all__ = ["flow", "step", "main", "RetryConfig"]
+__all__ = [
+    "main",
+    "Deployer",
+    "DestroyError",
+    "flow",
+    "logs",
+    "show",
+    "RetryConfig",
+    "step",
+]

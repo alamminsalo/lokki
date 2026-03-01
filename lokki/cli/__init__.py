@@ -150,7 +150,7 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
     """Handle the 'deploy' command."""
     from lokki.builder.builder import Builder
     from lokki.config import load_config
-    from lokki.deploy import Deployer
+    from lokki.cli.deploy import Deployer
 
     try:
         graph = flow_fn()
@@ -214,7 +214,7 @@ def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
 def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'show' command."""
     from lokki.config import load_config
-    from lokki.show import show
+    from lokki.cli.show import show
 
     try:
         graph = flow_fn()
@@ -248,7 +248,7 @@ def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) ->
 def _handle_logs(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'logs' command."""
     from lokki.config import load_config
-    from lokki.logs import logs
+    from lokki.cli.logs import logs
 
     try:
         graph = flow_fn()
@@ -288,7 +288,7 @@ def _handle_destroy(
 ) -> None:
     """Handle the 'destroy' command."""
     from lokki.config import load_config
-    from lokki.destroy import destroy
+    from lokki.cli.destroy import destroy
 
     try:
         graph = flow_fn()

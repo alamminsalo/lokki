@@ -8,7 +8,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from lokki.deploy import Deployer, DeployError, DockerNotAvailableError
+from lokki.cli.deploy import Deployer, DeployError, DockerNotAvailableError
 
 
 class TestDeployerInit:
@@ -111,7 +111,7 @@ class TestDeployerPushImages:
                 deployer._push_images("local", build_dir)
 
     @mock_aws
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_push_images_local_success(self, mock_subprocess: MagicMock) -> None:
         """Test successful local Docker image push."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
@@ -136,12 +136,12 @@ class TestDeployerPushImages:
             assert mock_subprocess.call_count >= 1
 
     @mock_aws
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_push_images_local_docker_not_available(
         self, mock_subprocess: MagicMock
     ) -> None:
         """Test error when docker is not available."""
-        from lokki.deploy import DockerNotAvailableError
+        from lokki.cli.deploy import DockerNotAvailableError
 
         mock_subprocess.side_effect = FileNotFoundError("docker not found")
 
@@ -162,7 +162,7 @@ class TestDeployerPushImages:
             with pytest.raises(DockerNotAvailableError):
                 deployer._push_images("local", build_dir)
 
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_push_images_ecr_success(self, mock_subprocess: MagicMock) -> None:
         """Test successful ECR Docker image push."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
@@ -254,7 +254,7 @@ class TestDeployerDeployStack:
                 )
 
     @mock_aws
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_deploy_with_zip_skips_image_push(self, mock_subprocess: MagicMock) -> None:
         """Test that ZIP package type skips image push."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
@@ -291,7 +291,7 @@ Resources:
             assert len(stacks["Stacks"]) == 1
 
     @mock_aws
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_deploy_stack_updates_existing_stack(
         self, mock_subprocess: MagicMock
     ) -> None:
@@ -363,7 +363,7 @@ class TestDeployerValidateCredentials:
             region="us-east-1",
         )
 
-        with patch("lokki.deploy.shutil.which") as mock_which:
+        with patch("lokki.cli.deploy.shutil.which") as mock_which:
             mock_which.return_value = None  # Docker not found
 
             with pytest.raises(
@@ -376,7 +376,7 @@ class TestDeployerBoto3:
     """Tests for boto3 deployment."""
 
     @mock_aws
-    @patch("lokki.deploy.subprocess.run")
+    @patch("lokki.cli.deploy.subprocess.run")
     def test_deploy_boto3_create_stack(self, mock_subprocess: MagicMock) -> None:
         """Test boto3 stack creation."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")

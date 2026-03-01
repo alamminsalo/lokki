@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lokki.logs import (
+from lokki.cli.logs import (
     LogsError,
     _fetch_and_print_logs,
     _fetch_log_events,
@@ -42,7 +42,7 @@ class TestParseDatetime:
 class TestFetchLogs:
     """Tests for fetch_logs function."""
 
-    @patch("lokki.logs.get_logs_client")
+    @patch("lokki.cli.logs.get_logs_client")
     def test_fetch_logs_default_times(self, mock_get_client) -> None:
         mock_logs = MagicMock()
         mock_get_client.return_value = mock_logs
@@ -55,7 +55,7 @@ class TestFetchLogs:
 
         assert mock_logs.filter_log_events.call_count >= 1
 
-    @patch("lokki.logs.get_logs_client")
+    @patch("lokki.cli.logs.get_logs_client")
     def test_fetch_logs_with_run_id(self, mock_get_client) -> None:
         mock_logs = MagicMock()
         mock_get_client.return_value = mock_logs
@@ -71,7 +71,7 @@ class TestFetchLogs:
         assert "filterPattern" in call_kwargs
         assert "test-run-123" in call_kwargs["filterPattern"]
 
-    @patch("lokki.logs.get_logs_client")
+    @patch("lokki.cli.logs.get_logs_client")
     def test_log_group_not_found(self, mock_get_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -195,7 +195,7 @@ class TestTailLogs:
             ]
         }
 
-        from lokki.logs import _tail_log_events
+        from lokki.cli.logs import _tail_log_events
 
         events = _tail_log_events(
             mock_logs,
@@ -216,7 +216,7 @@ class TestTailLogs:
             ]
         }
 
-        from lokki.logs import _tail_log_events
+        from lokki.cli.logs import _tail_log_events
 
         events = _tail_log_events(
             mock_logs,
@@ -236,7 +236,7 @@ class TestTailLogs:
             {"Error": {"Code": "ResourceNotFoundException"}}, "FilterLogEvents"
         )
 
-        from lokki.logs import _tail_log_events
+        from lokki.cli.logs import _tail_log_events
 
         events = _tail_log_events(
             mock_logs,
@@ -249,7 +249,7 @@ class TestTailLogs:
 
 
 class TestFetchAndPrintLogs:
-    @patch("lokki.logs._tail_logs")
+    @patch("lokki.cli.logs._tail_logs")
     def test_fetch_and_print_logs_tail(self, mock_tail):
         mock_logs = MagicMock()
         mock_tail.side_effect = SystemExit
@@ -269,7 +269,7 @@ class TestFetchAndPrintLogs:
 
 
 class TestLogsFunction:
-    @patch("lokki.logs.fetch_logs")
+    @patch("lokki.cli.logs.fetch_logs")
     def test_logs_success(self, mock_fetch):
         logs(
             flow_name="test-flow",
@@ -282,7 +282,7 @@ class TestLogsFunction:
         assert mock_fetch.call_args.kwargs["start_time"] is not None
         assert mock_fetch.call_args.kwargs["end_time"] is not None
 
-    @patch("lokki.logs.fetch_logs")
+    @patch("lokki.cli.logs.fetch_logs")
     def test_logs_no_times(self, mock_fetch):
         logs(
             flow_name="test-flow",
@@ -293,7 +293,7 @@ class TestLogsFunction:
         assert mock_fetch.call_args.kwargs["start_time"] is None
         assert mock_fetch.call_args.kwargs["end_time"] is None
 
-    @patch("lokki.logs.fetch_logs")
+    @patch("lokki.cli.logs.fetch_logs")
     def test_logs_aws_error(self, mock_fetch):
         mock_fetch.side_effect = LogsError("AWS error")
 
@@ -305,7 +305,7 @@ class TestLogsFunction:
 
         assert exc_info.value.code == 1
 
-    @patch("lokki.logs.fetch_logs")
+    @patch("lokki.cli.logs.fetch_logs")
     def test_logs_cloudwatch_not_enabled(self, mock_fetch):
         mock_fetch.side_effect = LogsError(
             "CloudWatch Logs is not enabled in LocalStack"
@@ -320,7 +320,7 @@ class TestLogsFunction:
 
         assert exc_info.value.code == 1
 
-    @patch("lokki.logs.fetch_logs")
+    @patch("lokki.cli.logs.fetch_logs")
     def test_logs_keyboard_interrupt(self, mock_fetch):
         mock_fetch.side_effect = KeyboardInterrupt
 

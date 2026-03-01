@@ -286,12 +286,12 @@ class TestMainCLI:
                     artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
                 )
                 with patch("lokki.builder.builder.Builder.build"):
-                    with patch("lokki.deploy.Deployer.deploy"):
+                    with patch("lokki.cli.deploy.Deployer.deploy"):
                         main(simple_flow)
 
     def test_destroy_command_stub(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "destroy", "--confirm"]):
-            with patch("lokki.destroy.destroy_stack") as mock_destroy:
+            with patch("lokki.cli.destroy.destroy_stack") as mock_destroy:
                 mock_destroy.return_value = None
                 with patch("lokki.config.load_config") as mock_config:
                     from lokki.config import LambdaConfig, LokkiConfig
@@ -310,7 +310,7 @@ class TestMainCLI:
 
     def test_logs_command_stub(self, simple_flow):
         with patch.object(sys, "argv", ["test.py", "logs"]):
-            with patch("lokki.logs.fetch_logs") as mock_logs:
+            with patch("lokki.cli.logs.fetch_logs") as mock_logs:
                 mock_logs.return_value = None
                 with patch("lokki.config.load_config") as mock_config:
                     from lokki.config import LambdaConfig, LokkiConfig
@@ -335,7 +335,7 @@ class TestMainCLI:
                 mock_config.return_value = LokkiConfig(
                     artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
                 )
-                with patch("lokki.show.show_executions") as mock_show:
+                with patch("lokki.cli.show.show_executions") as mock_show:
                     mock_show.return_value = [
                         {
                             "run_id": "test-run",
@@ -355,7 +355,7 @@ class TestMainCLI:
                 mock_config.return_value = LokkiConfig(
                     artifact_bucket="test-bucket", lambda_cfg=LambdaConfig()
                 )
-                with patch("lokki.logs.logs") as mock_logs:
+                with patch("lokki.cli.logs.logs") as mock_logs:
                     mock_logs.return_value = None
                     main(simple_flow)
                     mock_logs.assert_called_once()

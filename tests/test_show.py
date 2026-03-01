@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lokki.show import (
+from lokki.cli.show import (
     ShowError,
     _format_execution,
     _get_status_color,
@@ -66,7 +66,7 @@ class TestFormatExecution:
 class TestShowExecutions:
     """Tests for show_executions function."""
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_list_executions(self, mock_boto_client) -> None:
         mock_sf = MagicMock()
         mock_boto_client.return_value = mock_sf
@@ -96,7 +96,7 @@ class TestShowExecutions:
         assert result[1]["status"] == "FAILED"
         mock_sf.list_executions.assert_called_once()
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_describe_execution(self, mock_boto_client) -> None:
         mock_sf = MagicMock()
         mock_boto_client.return_value = mock_sf
@@ -113,7 +113,7 @@ class TestShowExecutions:
         assert result[0]["run_id"] == "specific-run"
         mock_sf.describe_execution.assert_called_once()
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_execution_not_found(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -126,7 +126,7 @@ class TestShowExecutions:
         with pytest.raises(ShowError, match="Execution"):
             show_executions(flow_name="test-flow", run_id="nonexistent")
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_state_machine_not_found(self, mock_boto_client) -> None:
         from botocore.exceptions import ClientError
 
@@ -181,7 +181,7 @@ class TestGetStatusColor:
 
 
 class TestShowFunction:
-    @patch("lokki.show.show_executions")
+    @patch("lokki.cli.show.show_executions")
     def test_show_success(self, mock_show_exec):
         mock_show_exec.return_value = [
             {
@@ -196,7 +196,7 @@ class TestShowFunction:
 
         mock_show_exec.assert_called_once()
 
-    @patch("lokki.show.show_executions")
+    @patch("lokki.cli.show.show_executions")
     def test_show_error(self, mock_show_exec):
         mock_show_exec.side_effect = ShowError("Test error")
 
@@ -207,7 +207,7 @@ class TestShowFunction:
 
 
 class TestShowExecutionsErrors:
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_invalid_arn_with_endpoint(self, mock_boto_client):
         from botocore.exceptions import ClientError
 
@@ -224,7 +224,7 @@ class TestShowExecutionsErrors:
                 endpoint="http://localhost:4566",
             )
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_invalid_arn_without_endpoint(self, mock_boto_client):
         from botocore.exceptions import ClientError
 
@@ -237,7 +237,7 @@ class TestShowExecutionsErrors:
         with pytest.raises(ShowError, match="Invalid state machine ARN"):
             show_executions(flow_name="test-flow", run_id="test-run")
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_service_not_enabled_with_endpoint(self, mock_boto_client):
         from botocore.exceptions import ClientError
 
@@ -253,7 +253,7 @@ class TestShowExecutionsErrors:
                 endpoint="http://localhost:4566",
             )
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_service_not_enabled_without_endpoint(self, mock_boto_client):
         from botocore.exceptions import ClientError
 
@@ -266,7 +266,7 @@ class TestShowExecutionsErrors:
         with pytest.raises(ShowError, match="AWS error"):
             show_executions(flow_name="test-flow")
 
-    @patch("lokki.show.get_sfn_client")
+    @patch("lokki.cli.show.get_sfn_client")
     def test_generic_aws_error(self, mock_boto_client):
         from botocore.exceptions import ClientError
 
