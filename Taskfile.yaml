@@ -6,6 +6,12 @@ env:
   AWS_SECRET_ACCESS_KEY: test
 
 tasks:
+  ollama-signin:
+    cmds:
+      - ollama signout
+      - ollama signin
+
+
   start-dev:
     desc: Start LocalStack and pypiserver containers
     cmds:

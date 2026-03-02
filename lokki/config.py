@@ -10,6 +10,16 @@ Configuration precedence (highest to lowest):
 4. Default values
 """
 
+__all__ = [
+    "LambdaConfig",
+    "BatchConfig",
+    "LokkiConfig",
+    "LoggingConfig",
+    "load_config",
+    "GLOBAL_CONFIG_PATH",
+    "LOCAL_CONFIG_PATH",
+]
+
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -44,7 +54,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
-@dataclass
+@dataclass(slots=True)
 class LambdaConfig:
     """Lambda function configuration.
 
@@ -64,8 +74,22 @@ class LambdaConfig:
     image_tag: str = "latest"
     env: dict[str, str] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.package_type not in ("image", "zip"):
+            raise ValueError(
+                f"package_type must be 'image' or 'zip', got '{self.package_type}'"
+            )
+        if self.timeout < 1 or self.timeout > 900:
+            raise ValueError(
+                f"timeout must be between 1 and 900 seconds, got {self.timeout}"
+            )
+        if self.memory < 128 or self.memory > 10240:
+            raise ValueError(
+                f"memory must be between 128 and 10240 MB, got {self.memory}"
+            )
 
-@dataclass
+
+@dataclass(slots=True)
 class BatchConfig:
     """AWS Batch job configuration.
 
@@ -89,8 +113,18 @@ class BatchConfig:
     image: str = ""
     env: dict[str, str] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.vcpu <= 0:
+            raise ValueError(f"vcpu must be positive, got {self.vcpu}")
+        if self.memory_mb <= 0:
+            raise ValueError(f"memory_mb must be positive, got {self.memory_mb}")
+        if self.timeout_seconds <= 0:
+            raise ValueError(
+                f"timeout_seconds must be positive, got {self.timeout_seconds}"
+            )
 
-@dataclass
+
+@dataclass(slots=True)
 class LokkiConfig:
     """Main lokki configuration.
 

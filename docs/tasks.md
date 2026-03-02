@@ -923,6 +923,104 @@ def my_flow(multiplier=2):
 
 ---
 
+## Milestone 42 — Code Modernization and Maintainability
+
+_Purpose_: Improve code maintainability through consolidation, modern Python features, and best practices adoption._
+
+### Background
+
+Code review identified several opportunities:
+1. Duplicated CLI error handling across 6 command handlers (~100 lines of duplication)
+2. Duplicate functions in state_machine.py (`_batch_task_state` and `_batch_task_state_from_node`)
+3. Dataclasses missing modern optimizations (slots, frozen)
+4. Verbose if/elif chains instead of Python 3.10+ match statements
+5. print() for error handling instead of logging module
+6. Missing input validation in config
+7. Inconsistent module visibility (public vs private)
+
+### Tasks
+
+- [ ] **T42.1** Create CLI error handling utilities
+  - Create `cli/error_utils.py` with:
+    - `print_error(message: str) -> None` - Print error message to stderr
+    - `exit_on_error(message: str, code: int = 1) -> None` - Print error and exit
+    - `@contextmanager cli_context(flow_fn, require_bucket=True)` - Context manager for command handlers
+  - Reduces ~100 lines of duplicated error handling
+  - Consistent error messages across all commands
+
+- [ ] **T42.2** Refactor CLI command handlers to use context manager
+  - Update `_handle_run`, `_handle_build`, `_handle_deploy`, `_handle_show`, `_handle_logs`, `_handle_destroy`
+  - Use `with cli_context(flow_fn) as (graph, config):` pattern
+  - Remove duplicated try/except/validate blocks
+  - Target: reduce `cli/__init__.py` from 425 lines to ~300 lines
+
+- [ ] **T42.3** Consolidate duplicate state machine functions
+  - Merge `_batch_task_state()` and `_batch_task_state_from_node()` in `builder/state_machine.py`
+  - Create common interface using union type: `StepNode | TaskEntry`
+  - Use `getattr()` for optional attribute access
+  - Target: reduce ~80 lines of duplicate code
+  - Add unit tests for consolidated function
+
+- [ ] **T42.4** Add modern dataclass features
+  - Add `@dataclass(slots=True)` to all dataclasses for memory efficiency
+  - Add `frozen=True` to immutable configs:
+    - `RetryConfig`, `JobTypeConfig`, `LambdaConfig`, `BatchConfig`, `LokkiConfig`
+    - `TaskEntry`, `MapOpenEntry`, `MapCloseEntry`
+    - `FlowContext`, `LambdaEvent` (in runtime/event.py)
+  - Run all tests to verify compatibility
+
+- [ ] **T42.5** Convert command dispatch to match statement
+  - Replace if/elif chain in `main()` with Python 3.10+ match statement
+  - More readable and extensible
+  - Reduces ~15 lines of code
+
+- [x] **T42.6** Replace print() with logging in CLI
+  - Import `logging` module in `cli/__init__.py`
+  - Replace all `print(f"Error:` calls with `logger.error()`
+  - Replace all `print()` info messages with `logger.info()`
+  - Enables JSON logging for machine consumption
+  - Add `--log-format` CLI flag (human/json)
+
+- [x] **T42.7** Add config validation
+  - Add `__post_init__()` validation to `LambdaConfig`:
+    - timeout: 1-900 seconds
+    - memory: 128-10240 MB
+  - Add `__post_init__()` validation to `BatchConfig`:
+    - vcpu: > 0
+    - memory_mb: > 0
+    - timeout_seconds: > 0
+  - Add validation to `LoggingConfig`:
+    - level: one of DEBUG, INFO, WARNING, ERROR
+    - format: one of human, json
+  - Add unit tests for validation errors
+
+- [ ] **T42.8** Standardize module visibility
+  - Rename internal builder modules:
+    - `builder/builder.py` → `builder/_builder.py`
+    - `builder/s3.py` → `builder/_s3.py`
+    - `builder/lambda_pkg.py` → `builder/_lambda_pkg.py`
+    - `builder/batch_pkg.py` → `builder/_batch_pkg.py`
+    - `builder/state_machine.py` → `builder/_state_machine.py`
+    - `builder/cloudformation.py` → `builder/_cloudformation.py`
+  - Update all imports
+  - Export only public API from `builder/__init__.py`
+
+- [x] **T42.9** Add __all__ exports to public modules
+  - Add `__all__` to modules currently missing it:
+    - `decorators.py`
+    - `graph.py`
+    - `config.py`
+    - `logging.py`
+  - Document intentional public API surface
+
+- [x] **T42.10** Run all tests and verify coverage
+  - Run `uv run pytest tests/ -v`
+  - Run `uv run pytest tests/ --cov=lokki`
+  - Ensure coverage remains ≥90%
+  - Add any missing tests for new utility functions
+
+---
+
 ## Summary
 
 | Milestone | Status |
@@ -968,6 +1066,7 @@ def my_flow(multiplier=2):
 | M39 - Distributed Map with ItemSelector/ResultWriter | Complete |
 | M40 - Flow Params via Kwargs | Complete |
 | M41 - Runtime Module Reorganization | Complete |
+| M42 - Code Modernization and Maintainability | Complete |
 
 ---
 

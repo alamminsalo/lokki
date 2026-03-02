@@ -34,6 +34,21 @@ class TestBatchConfig:
         assert config.memory_mb == 16384
         assert config.image == "my-image:latest"
 
+    def test_batch_invalid_vcpu(self) -> None:
+        """Test vcpu <= 0 raises ValueError."""
+        with pytest.raises(ValueError, match="vcpu must be positive"):
+            BatchConfig(vcpu=0)
+
+    def test_batch_invalid_memory_mb(self) -> None:
+        """Test memory_mb <= 0 raises ValueError."""
+        with pytest.raises(ValueError, match="memory_mb must be positive"):
+            BatchConfig(memory_mb=0)
+
+    def test_batch_invalid_timeout_seconds(self) -> None:
+        """Test timeout_seconds <= 0 raises ValueError."""
+        with pytest.raises(ValueError, match="timeout_seconds must be positive"):
+            BatchConfig(timeout_seconds=0)
+
 
 class TestJobTypeConfig:
     def test_job_type_defaults(self):

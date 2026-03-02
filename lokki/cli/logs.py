@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,8 @@ from botocore.exceptions import ClientError
 
 from lokki._aws import get_logs_client
 from lokki._errors import LogsError
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_logs(
@@ -226,7 +229,7 @@ def logs(
             tail=tail,
         )
     except LogsError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error(str(e))
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nStopped tailing logs.")

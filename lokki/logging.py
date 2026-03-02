@@ -10,13 +10,24 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+__all__ = [
+    "LogFormat",
+    "LoggingConfig",
+    "HumanFormatter",
+    "JsonFormatter",
+    "StepLogger",
+    "MapProgressLogger",
+    "get_logger",
+    "get_logging_config",
+]
+
 
 class LogFormat(Enum):
     HUMAN = "human"
     JSON = "json"
 
 
-@dataclass
+@dataclass(slots=True)
 class LoggingConfig:
     """Logging configuration."""
 
@@ -24,6 +35,20 @@ class LoggingConfig:
     format: str = "human"
     progress_interval: int = 10
     show_timestamps: bool = True
+
+    def __post_init__(self) -> None:
+        valid_levels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+        if self.level.upper() not in valid_levels:
+            raise ValueError(f"level must be one of {valid_levels}, got '{self.level}'")
+        valid_formats = ("human", "json")
+        if self.format not in valid_formats:
+            raise ValueError(
+                f"format must be one of {valid_formats}, got '{self.format}'"
+            )
+        if self.progress_interval < 1:
+            raise ValueError(
+                f"progress_interval must be at least 1, got {self.progress_interval}"
+            )
 
 
 class HumanFormatter(logging.Formatter):

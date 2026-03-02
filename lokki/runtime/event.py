@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class FlowContext:
     """Flow context passed to all Lambda/Batch invocations.
 
@@ -32,7 +32,7 @@ class FlowContext:
         }
 
 
-@dataclass
+@dataclass(slots=True)
 class LambdaEvent:
     """Event passed to Lambda/Batch handlers.
 

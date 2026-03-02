@@ -9,6 +9,7 @@ It handles:
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Any
 
 from lokki._aws import get_cf_client, get_ecr_client, get_sts_client
 from lokki._errors import DeployError, DockerNotAvailableError
+
+logger = logging.getLogger(__name__)
 
 
 class Deployer:
@@ -355,7 +358,7 @@ class Deployer:
             for event in events.get("StackEvents", []):
                 status = event.get("ResourceStatus", "")
                 if "FAILED" in status:
-                    return event.get("ResourceStatusReason", "Unknown error")
+                    return str(event.get("ResourceStatusReason", "Unknown error"))
         except Exception:
             pass
         return "Unknown error"
