@@ -228,6 +228,29 @@ def _handle_destroy(
         )
 
 
+def _handle_invoke(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
+    """Handle the 'invoke' command."""
+    from lokki.cli.error_utils import cli_context
+    from lokki.cli.invoke import invoke as invoke_flow
+
+    try:
+        flow_params = _parse_flow_params(flow_fn, args)
+    except argparse.ArgumentError as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+    with cli_context(flow_fn, require_bucket=False) as (graph, config):
+        result = invoke_flow(
+            flow_name=graph.name,
+            input_data=flow_params,
+            region=config.aws_region if config else "us-east-1",
+            endpoint=config.aws_endpoint if config else None,
+            wait=True,
+        )
+        if result.get("status") in ("FAILED", "TIMED_OUT", "ABORTED"):
+            sys.exit(1)
+
+
 def main(flow_fn: Callable[..., FlowGraph]) -> None:
     """CLI entry point for lokki flows."""
     params = _get_flow_params(flow_fn)
@@ -320,6 +343,30 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
         "--confirm", action="store_true", help="Skip confirmation prompt"
     )
 
+    # invoke parser
+    invoke_parser = subparsers.add_parser(
+        "invoke", help="Invoke the deployed flow on AWS"
+    )
+    for name, param in params.items():
+        has_default = param.default is not inspect.Parameter.empty
+        cli_name = name.replace("_", "-")
+        if has_default:
+            invoke_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                default=None,
+                help=f"(default: {param.default})",
+            )
+        else:
+            invoke_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                required=True,
+                help="(required)",
+            )
+
     args = parser.parse_args()
     command = args.command
 
@@ -349,6 +396,8 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
             _handle_logs(args, flow_fn)
         case "destroy":
             _handle_destroy(args, flow_fn)
+        case "invoke":
+            _handle_invoke(args, flow_fn)
         case _:
             parser.print_help()
             sys.exit(1)

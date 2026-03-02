@@ -291,6 +291,22 @@ python flow.py deploy --stack-name <name> --region <region> [--image-tag <tag>] 
 
 ---
 
+### `invoke`
+
+Invoke the deployed flow on AWS via Step Functions.
+
+```bash
+python flow.py invoke [--param1 value1] [--param2 value2]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--param` | Flow parameters (passed to the deployed flow) |
+
+---
+
 ### `show`
 
 Show execution status.

@@ -534,7 +534,18 @@ _Purpose_: Add security scanning and improve input validation.
 
 ---
 
-## Milestone 29 — CI/CD Setup
+## Milestone 29 — CLI Command: invoke
+
+_Purpose_: Implement command to invoke deployed flows on AWS via Step Functions.
+
+- [x] **T29.1** Implement invoke command in CLI
+- [x] **T29.2** Take flow parameters identically to run command
+- [x] **T29.3** Wait for execution completion
+- [x] **T29.4** Fetch and display errors on failure
+
+---
+
+## Milestone 30 — CI/CD Setup
 
 _Purpose_: Add continuous integration workflow.
 
