@@ -26,6 +26,7 @@ jobs:
           docker run -d --name localstack -p 4566:4566 \
             -e SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam,logs,events \
             -e DEFAULT_REGION=$AWS_DEFAULT_REGION \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             localstack/localstack:latest
           # Wait for LocalStack to be ready
           for i in {1..30}; do
