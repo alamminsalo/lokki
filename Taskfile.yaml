@@ -6,6 +6,12 @@ env:
   AWS_SECRET_ACCESS_KEY: test
 
 tasks:
+  ollama-signin:
+    cmds:
+      - ollama signout
+      - ollama signin
+
+
   start-dev:
     desc: Start LocalStack and pypiserver containers
     cmds:
@@ -75,34 +81,13 @@ tasks:
     desc: Deploy ci_test_pipeline to LocalStack
     dir: examples/ci_test_pipeline
     cmds:
-      - uv run flow.py deploy
+      - uv run flow.py deploy --confirm
 
   invoke:
     desc: Invoke ci_test_pipeline via Step Functions and wait for completion
+    dir: examples/ci_test_pipeline
     cmds:
-      - |
-        EXECUTION_ARN=$(aws stepfunctions start-execution \
-          --state-machine-arn arn:aws:states:us-east-1:000000000000:stateMachine:ci-test-pipeline \
-          --input '{"size": 256, "multiplier": 2}' \
-          --query 'executionArn' \
-          --output text)
-        echo "Started execution: $EXECUTION_ARN"
-        while true; do
-          STATUS=$(aws stepfunctions describe-execution \
-            --execution-arn "$EXECUTION_ARN" \
-            --query 'status' \
-            --output text)
-          echo "Status: $STATUS"
-          if [ "$STATUS" = "SUCCEEDED" ]; then
-            echo "Execution succeeded!"
-            exit 0
-          elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "TIMED_OUT" ] || [ "$STATUS" = "ABORTED" ]; then
-            echo "Execution $STATUS"
-            aws stepfunctions describe-execution --execution-arn "$EXECUTION_ARN" --query 'output' --output text || true
-            exit 1
-          fi
-          sleep 2
-        done
+      - uv run flow.py invoke --size 256 --multiplier 2
 
   ci-flow:
     desc: Run full CI flow

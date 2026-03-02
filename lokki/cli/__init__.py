@@ -2,6 +2,7 @@
 
 import argparse
 import inspect
+import logging
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Any, get_args, get_origin
 
 from lokki._errors import DeployError, DockerNotAvailableError
 from lokki.graph import FlowGraph
+
+logger = logging.getLogger(__name__)
 
 
 def _get_flow_params(
@@ -97,13 +100,13 @@ def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> 
     try:
         flow_params = _parse_flow_params(flow_fn, args)
     except (argparse.ArgumentError, argparse.ArgumentTypeError) as e:
-        print(f"Error: {e}")
+        logger.error(str(e))
         sys.exit(1)
 
     try:
         graph = flow_fn(**flow_params)
     except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
+        logger.error(f"Failed to create flow graph: {e}")
         sys.exit(1)
 
     try:
@@ -116,171 +119,97 @@ def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> 
         result = runner.run(graph, flow_params)
         print(result)
     except Exception as e:
-        print(f"Error: Failed to run flow: {e}")
+        logger.error(f"Failed to run flow: {e}")
         sys.exit(1)
 
 
 def _handle_build(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'build' command."""
     from lokki.builder.builder import Builder
-    from lokki.config import load_config
+    from lokki.cli.error_utils import cli_context
 
-    try:
-        graph = flow_fn()
-    except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
-        sys.exit(1)
-
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Error: Failed to load configuration: {e}")
-        sys.exit(1)
-
-    if not config.artifact_bucket:
-        print("Error: 'artifact_bucket' is not configured.")
-        print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
-        sys.exit(1)
-
-    Builder.build(graph, config, flow_fn)
-    print("Build complete!")
+    with cli_context(flow_fn, require_bucket=True) as (graph, config):
+        Builder.build(graph, config, flow_fn)
+        print("Build complete!")
 
 
 def _handle_deploy(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'deploy' command."""
     from lokki.builder.builder import Builder
     from lokki.cli.deploy import Deployer
-    from lokki.config import load_config
+    from lokki.cli.error_utils import cli_context, exit_on_error
 
-    try:
-        graph = flow_fn()
-    except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
-        sys.exit(1)
+    with cli_context(flow_fn, require_bucket=True) as (graph, config):
+        stack_name = args.stack_name or f"{graph.name}-stack"
 
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Error: Failed to load configuration: {e}")
-        sys.exit(1)
-
-    if not config.artifact_bucket:
-        print("Error: 'artifact_bucket' is not configured.")
-        print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
-        sys.exit(1)
-
-    stack_name = args.stack_name or f"{graph.name}-stack"
-
-    print(f"Deploying flow '{graph.name}' to stack '{stack_name}'...")
-    print()
-
-    try:
-        Builder.build(graph, config, flow_fn, force=args.force)
+        print(f"Deploying flow '{graph.name}' to stack '{stack_name}'...")
         print()
-    except Exception as e:
-        print(f"Error: Build failed: {e}")
-        sys.exit(1)
 
-    try:
-        deployer = Deployer(
-            stack_name=stack_name,
-            region=args.region or config.aws_region,
-            image_tag=args.image_tag,
-            endpoint=config.aws_endpoint,
-            package_type=config.lambda_cfg.package_type,
-        )
-        deployer.deploy(
-            flow_name=graph.name,
-            artifact_bucket=config.artifact_bucket,
-            image_repository=config.image_repository,
-            build_dir=Path(config.build_dir),
-            aws_endpoint=config.aws_endpoint,
-            package_type=config.lambda_cfg.package_type,
-        )
-        print()
-        print("Deploy complete!")
-    except DockerNotAvailableError as e:
-        print(f"Error: {e}")
-        print("You can run 'build' first, then manually push images and deploy.")
-        sys.exit(1)
-    except DeployError as e:
-        print(f"Error: Deploy failed: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error: Unexpected error: {e}")
-        sys.exit(1)
+        try:
+            Builder.build(graph, config, flow_fn, force=args.force)
+            print()
+        except Exception as e:
+            exit_on_error(f"Build failed: {e}")
+
+        try:
+            deployer = Deployer(
+                stack_name=stack_name,
+                region=args.region or config.aws_region,
+                image_tag=args.image_tag,
+                endpoint=config.aws_endpoint,
+                package_type=config.lambda_cfg.package_type,
+            )
+            deployer.deploy(
+                flow_name=graph.name,
+                artifact_bucket=config.artifact_bucket,
+                image_repository=config.image_repository,
+                build_dir=Path(config.build_dir),
+                aws_endpoint=config.aws_endpoint,
+                package_type=config.lambda_cfg.package_type,
+            )
+            print()
+            print("Deploy complete!")
+        except DockerNotAvailableError as e:
+            logger.error(str(e))
+            print("You can run 'build' first, then manually push images and deploy.")
+            sys.exit(1)
+        except DeployError as e:
+            exit_on_error(f"Deploy failed: {e}")
+        except Exception as e:
+            exit_on_error(f"Unexpected error: {e}")
 
 
 def _handle_show(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'show' command."""
+    from lokki.cli.error_utils import cli_context
     from lokki.cli.show import show
-    from lokki.config import load_config
 
-    try:
-        graph = flow_fn()
-    except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
-        sys.exit(1)
-
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Error: Failed to load configuration: {e}")
-        sys.exit(1)
-
-    if not config.artifact_bucket:
-        print("Error: 'artifact_bucket' is not configured.")
-        print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
-        sys.exit(1)
-
-    region = config.aws_region
-    endpoint = config.aws_endpoint
-
-    show(
-        flow_name=graph.name,
-        max_count=args.n,
-        run_id=args.run,
-        region=region,
-        endpoint=endpoint,
-    )
+    with cli_context(flow_fn, require_bucket=True) as (graph, config):
+        show(
+            flow_name=graph.name,
+            max_count=args.n,
+            run_id=args.run,
+            region=config.aws_region,
+            endpoint=config.aws_endpoint,
+        )
 
 
 def _handle_logs(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
     """Handle the 'logs' command."""
+    from lokki.cli.error_utils import cli_context
     from lokki.cli.logs import logs
-    from lokki.config import load_config
 
-    try:
-        graph = flow_fn()
-    except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
-        sys.exit(1)
-
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Error: Failed to load configuration: {e}")
-        sys.exit(1)
-
-    if not config.artifact_bucket:
-        print("Error: 'artifact_bucket' is not configured.")
-        print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
-        sys.exit(1)
-
-    step_names = _get_step_names(graph)
-    region = config.aws_region
-    endpoint = config.aws_endpoint
-
-    logs(
-        flow_name=graph.name,
-        step_names=step_names,
-        start_time=args.start,
-        end_time=args.end,
-        run_id=args.run,
-        region=region,
-        endpoint=endpoint,
-        tail=args.tail,
-    )
+    with cli_context(flow_fn, require_bucket=True) as (graph, config):
+        logs(
+            flow_name=graph.name,
+            step_names=_get_step_names(graph),
+            start_time=args.start,
+            end_time=args.end,
+            run_id=args.run,
+            region=config.aws_region,
+            endpoint=config.aws_endpoint,
+            tail=args.tail,
+        )
 
 
 def _handle_destroy(
@@ -288,35 +217,38 @@ def _handle_destroy(
 ) -> None:
     """Handle the 'destroy' command."""
     from lokki.cli.destroy import destroy
-    from lokki.config import load_config
+    from lokki.cli.error_utils import cli_context
+
+    with cli_context(flow_fn, require_bucket=True) as (graph, config):
+        destroy(
+            stack_name=f"{graph.name}-stack",
+            region=config.aws_region,
+            endpoint=config.aws_endpoint,
+            confirm=args.confirm,
+        )
+
+
+def _handle_invoke(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:
+    """Handle the 'invoke' command."""
+    from lokki.cli.error_utils import cli_context
+    from lokki.cli.invoke import invoke as invoke_flow
 
     try:
-        graph = flow_fn()
-    except Exception as e:
-        print(f"Error: Failed to create flow graph: {e}")
+        flow_params = _parse_flow_params(flow_fn, args)
+    except argparse.ArgumentError as e:
+        logger.error(str(e))
         sys.exit(1)
 
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Error: Failed to load configuration: {e}")
-        sys.exit(1)
-
-    if not config.artifact_bucket:
-        print("Error: 'artifact_bucket' is not configured.")
-        print("Please set it in lokki.toml or via LOKKI_ARTIFACT_BUCKET env var.")
-        sys.exit(1)
-
-    stack_name = f"{graph.name}-stack"
-    region = config.aws_region
-    endpoint = config.aws_endpoint
-
-    destroy(
-        stack_name=stack_name,
-        region=region,
-        endpoint=endpoint,
-        confirm=args.confirm,
-    )
+    with cli_context(flow_fn, require_bucket=False) as (graph, config):
+        result = invoke_flow(
+            flow_name=graph.name,
+            input_data=flow_params,
+            region=config.aws_region if config else "us-east-1",
+            endpoint=config.aws_endpoint if config else None,
+            wait=True,
+        )
+        if result.get("status") in ("FAILED", "TIMED_OUT", "ABORTED"):
+            sys.exit(1)
 
 
 def main(flow_fn: Callable[..., FlowGraph]) -> None:
@@ -326,6 +258,12 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
     parser = argparse.ArgumentParser(
         prog="flow_script.py",
         description="Lokki - Python library for data pipelines on AWS Step Functions",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=["human", "json"],
+        default="human",
+        help="Log output format (default: human)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -405,21 +343,61 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
         "--confirm", action="store_true", help="Skip confirmation prompt"
     )
 
+    # invoke parser
+    invoke_parser = subparsers.add_parser(
+        "invoke", help="Invoke the deployed flow on AWS"
+    )
+    for name, param in params.items():
+        has_default = param.default is not inspect.Parameter.empty
+        cli_name = name.replace("_", "-")
+        if has_default:
+            invoke_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                default=None,
+                help=f"(default: {param.default})",
+            )
+        else:
+            invoke_parser.add_argument(
+                f"--{cli_name}",
+                dest=name,
+                type=str,
+                required=True,
+                help="(required)",
+            )
+
     args = parser.parse_args()
     command = args.command
 
-    if command == "run":
-        _handle_run(args, flow_fn)
-    elif command == "build":
-        _handle_build(args, flow_fn)
-    elif command == "deploy":
-        _handle_deploy(args, flow_fn)
-    elif command == "show":
-        _handle_show(args, flow_fn)
-    elif command == "logs":
-        _handle_logs(args, flow_fn)
-    elif command == "destroy":
-        _handle_destroy(args, flow_fn)
+    # Configure logging
+    from lokki.logging import HumanFormatter, JsonFormatter, LoggingConfig
+
+    log_config = LoggingConfig(format=args.log_format)
+    handler = logging.StreamHandler()
+    if log_config.format == "json":
+        handler.setFormatter(JsonFormatter(log_config))
     else:
-        parser.print_help()
-        sys.exit(1)
+        handler.setFormatter(HumanFormatter(log_config))
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
+
+    match command:
+        case "run":
+            _handle_run(args, flow_fn)
+        case "build":
+            _handle_build(args, flow_fn)
+        case "deploy":
+            _handle_deploy(args, flow_fn)
+        case "show":
+            _handle_show(args, flow_fn)
+        case "logs":
+            _handle_logs(args, flow_fn)
+        case "destroy":
+            _handle_destroy(args, flow_fn)
+        case "invoke":
+            _handle_invoke(args, flow_fn)
+        case _:
+            parser.print_help()
+            sys.exit(1)

@@ -72,6 +72,7 @@ When testing with example projects:
    python weather.py run   # Run locally
    python weather.py build # Build artifacts
    python weather.py deploy --confirm  # Deploy to LocalStack
+   python weather.py invoke --param1 value1  # Invoke deployed flow
    python weather.py show   # Show executions (requires real AWS)
    python weather.py logs   # Fetch logs (requires real AWS)
    python weather.py destroy --confirm  # Destroy stack

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from typing import Any
 
@@ -9,6 +10,8 @@ from botocore.exceptions import ClientError
 
 from lokki._aws import get_sfn_client
 from lokki._errors import ShowError
+
+logger = logging.getLogger(__name__)
 
 
 def show_executions(
@@ -161,5 +164,5 @@ def show(
         )
         print_executions(executions)
     except ShowError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error(str(e))
         sys.exit(1)

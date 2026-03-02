@@ -281,6 +281,7 @@ python my_flow.py build            # Build deployment artifacts
 python my_flow.py deploy           # Build and deploy to AWS
 python my_flow.py show             # Show execution status
 python my_flow.py logs             # Fetch CloudWatch logs
+python my_flow.py invoke           # Invoke deployed flow on AWS
 python my_flow.py destroy          # Destroy the CloudFormation stack
 python my_flow.py --help           # Show help
 ```
@@ -295,6 +296,13 @@ python flow.py run --param1 value1 --param2 value2
 
 ```bash
 python flow.py deploy --stack-name my-stack --region us-east-1
+```
+
+### Invoke Command
+
+```bash
+python flow.py invoke                      # Invoke with default params
+python flow.py invoke --param1 value1       # Invoke with custom params
 ```
 
 ### Show Command

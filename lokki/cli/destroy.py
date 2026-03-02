@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 
 from botocore.exceptions import ClientError
 
 from lokki._aws import get_cf_client
 from lokki._errors import DestroyError
+
+logger = logging.getLogger(__name__)
 
 
 def destroy_stack(
@@ -83,5 +86,5 @@ def destroy(
             confirm=confirm,
         )
     except DestroyError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error(str(e))
         sys.exit(1)

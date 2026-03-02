@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__all__ = ["step", "flow", "RetryConfig", "JobTypeConfig", "StepNode", "MapBlock"]
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -10,7 +12,7 @@ if TYPE_CHECKING:
     from lokki.graph import FlowGraph
 
 
-@dataclass
+@dataclass(slots=True)
 class RetryConfig:
     """Configuration for step retry behavior."""
 
@@ -31,7 +33,7 @@ class RetryConfig:
             raise ValueError("max_delay must be positive")
 
 
-@dataclass
+@dataclass(slots=True)
 class JobTypeConfig:
     """Configuration for step execution backend (Lambda or Batch)."""
 

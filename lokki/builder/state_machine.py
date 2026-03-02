@@ -85,7 +85,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 step_name = to_pascal(step_node.name)
                 job_type = getattr(step_node, "job_type", "lambda") or "lambda"
                 if job_type == "batch":
-                    inner_states[step_name] = _batch_task_state_from_node(
+                    inner_states[step_name] = _batch_task_state(
                         step_node, config, graph.name
                     )
                 else:
@@ -159,7 +159,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             state_name = to_pascal(entry.agg_step.name)
             job_type = getattr(entry.agg_step, "job_type", "lambda") or "lambda"
             if job_type == "batch":
-                state = _batch_task_state_from_node(entry.agg_step, config, graph.name)
+                state = _batch_task_state(entry.agg_step, config, graph.name)
             else:
                 state = _task_state(entry.agg_step, config, graph.name)
             states[state_name] = state
@@ -202,13 +202,20 @@ def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str
     return state
 
 
-def _batch_task_state(
-    entry: Any, config: LokkiConfig, flow_name: str
-) -> dict[str, Any]:
-    """Generate a Task state for a Batch step."""
-    vcpu = entry.vcpu if entry.vcpu is not None else config.batch_cfg.vcpu
+def _batch_task_state(node: Any, config: LokkiConfig, flow_name: str) -> dict[str, Any]:
+    """Generate a Task state for a Batch step.
+
+    Args:
+        node: TaskEntry or StepNode with vcpu, memory_mb, and retry attributes
+        config: Lokki configuration
+        flow_name: Flow name for job naming
+
+    Returns:
+        Step Functions Task state dict for Batch job
+    """
+    vcpu = node.vcpu if node.vcpu is not None else config.batch_cfg.vcpu
     memory_mb = (
-        entry.memory_mb if entry.memory_mb is not None else config.batch_cfg.memory_mb
+        node.memory_mb if node.memory_mb is not None else config.batch_cfg.memory_mb
     )
 
     state: dict[str, Any] = {
@@ -233,47 +240,7 @@ def _batch_task_state(
         "Next": None,
     }
 
-    retry_config = getattr(entry, "retry", None)
-    if retry_config and retry_config.retries > 0:
-        state["Retry"] = _build_retry_field(retry_config)
-
-    return state
-
-
-def _batch_task_state_from_node(
-    step_node: Any, config: LokkiConfig, flow_name: str
-) -> dict[str, Any]:
-    """Generate a Task state for a Batch step from a StepNode."""
-    vcpu = step_node.vcpu if step_node.vcpu is not None else config.batch_cfg.vcpu
-    memory_mb = (
-        step_node.memory_mb
-        if step_node.memory_mb is not None
-        else config.batch_cfg.memory_mb
-    )
-
-    state: dict[str, Any] = {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::batch:submitJob.sync",
-        "Parameters": {
-            "JobDefinition": {"Ref": "BatchJobDefinition"},
-            "JobName.$": f"States.Format('{flow_name}-{{}}', $.step_name)",
-            "JobQueue": {"Ref": "BatchJobQueue"},
-            "ContainerOverrides": {
-                "Vcpus": vcpu,
-                "Memory": memory_mb,
-            },
-            "Environment": [
-                {"Name": "LOKKI_ARTIFACT_BUCKET", "Value": config.artifact_bucket},
-                {"Name": "LOKKI_FLOW_NAME", "Value": flow_name},
-                {"Name": "LOKKI_STEP_NAME", "Value.$": "$.step_name"},
-                {"Name": "LOKKI_INPUT_URL", "Value.$": "$.input"},
-            ],
-        },
-        "ResultPath": "$.input",
-        "Next": None,
-    }
-
-    retry_config = getattr(step_node, "retry", None)
+    retry_config = getattr(node, "retry", None)
     if retry_config and retry_config.retries > 0:
         state["Retry"] = _build_retry_field(retry_config)
 

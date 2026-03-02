@@ -55,7 +55,7 @@ step_func = getattr(mod, step_name, None)
 if step_func is None:
     raise ValueError(f"Step function '{step_name}' not found in module '{module_name}'")
 
-from lokki.runtime.handler import make_handler
+from lokki.runtime.lambda_handler import make_handler
 
 lambda_handler = make_handler(step_func)
 """
@@ -291,7 +291,7 @@ def _get_dispatcher_handler_content() -> str:
     return """import os
 import sys
 import importlib
-from lokki.runtime.handler import make_handler
+from lokki.runtime.lambda_handler import make_handler
 
 # Add current directory to path for module imports
 sys.path.insert(0, os.path.dirname(__file__))

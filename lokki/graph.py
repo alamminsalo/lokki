@@ -1,11 +1,13 @@
 """Execution graph model for lokki pipelines."""
 
+__all__ = ["TaskEntry", "MapOpenEntry", "MapCloseEntry", "GraphEntry", "FlowGraph"]
+
 from dataclasses import dataclass, field
 
 from lokki.decorators import MapBlock, StepNode
 
 
-@dataclass
+@dataclass(slots=True)
 class TaskEntry:
     """A single task step in the execution graph."""
 
@@ -16,7 +18,7 @@ class TaskEntry:
     timeout_seconds: int | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class MapOpenEntry:
     """Opens a Map block with source and inner steps."""
 
@@ -25,7 +27,7 @@ class MapOpenEntry:
     concurrency_limit: int | None = None
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class MapCloseEntry:
     """Closes a Map block with an aggregation step."""
 

@@ -4,6 +4,8 @@ import json
 import logging
 from io import StringIO
 
+import pytest
+
 from lokki.logging import (
     HumanFormatter,
     JsonFormatter,
@@ -31,6 +33,26 @@ class TestLoggingConfig:
         assert config.format == "json"
         assert config.progress_interval == 5
         assert config.show_timestamps is False
+
+    def test_invalid_level(self) -> None:
+        """Test invalid level raises ValueError."""
+        with pytest.raises(ValueError, match="level must be one of"):
+            LoggingConfig(level="INVALID")
+
+    def test_invalid_format(self) -> None:
+        """Test invalid format raises ValueError."""
+        with pytest.raises(ValueError, match="format must be one of"):
+            LoggingConfig(format="xml")
+
+    def test_invalid_progress_interval(self) -> None:
+        """Test progress_interval < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="progress_interval must be at least"):
+            LoggingConfig(progress_interval=0)
+
+    def test_level_case_insensitive(self) -> None:
+        """Test that level validation is case-insensitive."""
+        config = LoggingConfig(level="debug")
+        assert config.level == "debug"
 
 
 class TestGetLoggingConfig:

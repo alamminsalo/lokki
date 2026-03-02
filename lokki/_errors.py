@@ -29,3 +29,9 @@ class DestroyError(Exception):
     """Error during destroy operation."""
 
     pass
+
+
+class InvokeError(Exception):
+    """Error during invoke operation."""
+
+    pass

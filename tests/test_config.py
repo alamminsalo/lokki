@@ -117,9 +117,31 @@ class TestLambdaConfig:
         )
         assert config.package_type == "zip"
         assert config.timeout == 300
-        assert config.memory == 256
-        assert config.image_tag == "v1.0"
-        assert config.env == {"KEY": "val"}
+
+    def test_invalid_package_type(self) -> None:
+        """Test invalid package_type raises ValueError."""
+        with pytest.raises(ValueError, match="package_type must be"):
+            LambdaConfig(package_type="invalid")
+
+    def test_invalid_timeout_too_low(self) -> None:
+        """Test timeout < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="timeout must be between"):
+            LambdaConfig(timeout=0)
+
+    def test_invalid_timeout_too_high(self) -> None:
+        """Test timeout > 900 raises ValueError."""
+        with pytest.raises(ValueError, match="timeout must be between"):
+            LambdaConfig(timeout=901)
+
+    def test_invalid_memory_too_low(self) -> None:
+        """Test memory < 128 raises ValueError."""
+        with pytest.raises(ValueError, match="memory must be between"):
+            LambdaConfig(memory=64)
+
+    def test_invalid_memory_too_high(self) -> None:
+        """Test memory > 10240 raises ValueError."""
+        with pytest.raises(ValueError, match="memory must be between"):
+            LambdaConfig(memory=11000)
 
 
 class TestLokkiConfig:

@@ -2,6 +2,16 @@ name: LocalStack Integration
 
 on:
   pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ENDPOINT_URL: http://localhost:4566
+  RUN_LOCALSTACK_TESTS: "1"
 
 jobs:
   localstack-deploy:
@@ -14,8 +24,9 @@ jobs:
       - name: Start LocalStack
         run: |
           docker run -d --name localstack -p 4566:4566 \
-            -e SERVICES=s3,lambda,stepfunctions,cloudformation,iam \
-            -e DEFAULT_REGION=us-east-1 \
+            -e SERVICES=s3,lambda,stepfunctions,cloudformation,ecr,iam,logs,events \
+            -e DEFAULT_REGION=$AWS_DEFAULT_REGION \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             localstack/localstack:latest
           # Wait for LocalStack to be ready
           for i in {1..30}; do
@@ -26,66 +37,24 @@ jobs:
             sleep 2
           done
 
-      - name: Configure AWS
-        run: |
-          aws configure set aws_access_key_id test
-          aws configure set aws_secret_access_key test
-          aws configure set region us-east-1
-
-      - name: Create S3 bucket
-        run: |
-          aws s3 mb s3://lokki --endpoint-url http://localhost:4566
-
       - uses: astral-sh/setup-uv@v4
+
+      - name: Install Task
+        uses: go-task/setup-task@v1
 
       - name: Set up Python
         run: uv python install 3.13
-
-      - name: Build
-        working-directory: examples/ci_test_pipeline
-        run: |
-          uv sync
-          uv run python flow.py build
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          LOKKI_ARTIFACT_BUCKET: lokki
-
-      - name: Deploy
-        working-directory: examples/ci_test_pipeline
-        run: uv run python flow.py deploy --confirm
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-
-      - name: Verify
-        run: |
-          STATUS=$(aws cloudformation describe-stacks \
-            --stack-name ci-test-pipeline-stack \
-            --endpoint-url http://localhost:4566 \
-            --query 'Stacks[0].StackStatus' \
-            --output text)
-          echo "Stack status: $STATUS"
-          if [ "$STATUS" != "CREATE_COMPLETE" ] && [ "$STATUS" != "UPDATE_COMPLETE" ]; then
-            echo "Expected CREATE_COMPLETE or UPDATE_COMPLETE, got $STATUS"
-            exit 1
-          fi
 
       - name: Run Integration Tests
         run: |
           uv sync --extra dev
           uv run pytest tests/test_localstack.py -v --tb=short
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          LOCALSTACK_ENDPOINT: http://localhost:4566
-          RUN_LOCALSTACK_TESTS: "1"
 
-      - name: Cleanup
-        if: always()
+      - name: Run CI flow
+        working-directory: examples/ci_test_pipeline
         run: |
-          aws cloudformation delete-stack --stack-name ci-test-pipeline-stack --endpoint-url http://localhost:4566 || true
-          docker stop localstack || true
+          task ci-flow
+
+      - name: Destroy
+        working-directory: examples/ci_test_pipeline
+        run: uv run python flow.py destroy --confirm
