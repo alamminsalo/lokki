@@ -342,9 +342,23 @@ class Deployer:
             if status == "CREATE_COMPLETE" or status == "UPDATE_COMPLETE":
                 return
             elif "FAILED" in status or "ROLLBACK" in status:
-                raise DeployError(
-                    f"Stack {status}: {stack.get('StackStatusReason', 'Unknown error')}"
-                )
+                reason = stack.get("StackStatusReason", "")
+                if not reason:
+                    reason = self._get_failure_reason()
+                raise DeployError(f"Stack {status}: {reason}")
+
+    def _get_failure_reason(self) -> str:
+        try:
+            events = self.cf_client.describe_stack_events(
+                StackName=self.stack_name, MaxItems=10
+            )
+            for event in events.get("StackEvents", []):
+                status = event.get("ResourceStatus", "")
+                if "FAILED" in status:
+                    return event.get("ResourceStatusReason", "Unknown error")
+        except Exception:
+            pass
+        return "Unknown error"
 
     def _get_stack_outputs(self) -> list[dict[str, Any]]:
         stack = self.cf_client.describe_stacks(StackName=self.stack_name)["Stacks"][0]

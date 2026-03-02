@@ -409,3 +409,87 @@ Resources:
             cf_client = boto3.client("cloudformation", region_name="us-east-1")
             stacks = cf_client.describe_stacks(StackName="test-stack-boto3")
             assert len(stacks["Stacks"]) == 1
+
+
+class TestDeployerWaitForStack:
+    """Tests for stack wait and failure reason handling."""
+
+    @mock_aws
+    def test_wait_for_stack_success(self) -> None:
+        """Test waiting for successful stack creation."""
+        deployer = Deployer(
+            stack_name="test-stack",
+            region="us-east-1",
+        )
+
+        cf_client = boto3.client("cloudformation", region_name="us-east-1")
+        cf_client.create_stack(
+            StackName="test-stack",
+            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Bucket:\n    Type: AWS::S3::Bucket",
+        )
+
+        deployer._wait_for_stack()
+
+    @mock_aws
+    def test_wait_for_stack_failure_with_reason(self) -> None:
+        """Test that stack failure shows status reason."""
+        deployer = Deployer(
+            stack_name="test-stack-fail",
+            region="us-east-1",
+        )
+
+        cf_client = boto3.client("cloudformation", region_name="us-east-1")
+        cf_client.create_stack(
+            StackName="test-stack-fail",
+            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Bucket:\n    Type: AWS::S3::Bucket",
+        )
+
+        with patch.object(deployer, "cf_client") as mock_cf:
+            mock_cf.describe_stacks.return_value = {
+                "Stacks": [
+                    {
+                        "StackName": "test-stack-fail",
+                        "StackStatus": "CREATE_FAILED",
+                        "StackStatusReason": "Insufficient permissions",
+                    }
+                ]
+            }
+
+            with pytest.raises(DeployError, match="Insufficient permissions"):
+                deployer._wait_for_stack()
+
+    @mock_aws
+    def test_wait_for_stack_failure_fetches_event_reason(self) -> None:
+        """Test that failure reason is fetched from stack events when not in status."""
+        deployer = Deployer(
+            stack_name="test-stack-fail",
+            region="us-east-1",
+        )
+
+        with patch.object(deployer, "cf_client") as mock_cf:
+            mock_cf.describe_stacks.return_value = {
+                "Stacks": [
+                    {
+                        "StackName": "test-stack-fail",
+                        "StackStatus": "CREATE_FAILED",
+                    }
+                ]
+            }
+
+            mock_cf.describe_stack_events.return_value = {
+                "StackEvents": [
+                    {
+                        "EventId": "1",
+                        "StackName": "test-stack-fail",
+                        "ResourceStatus": "CREATE_FAILED",
+                        "ResourceStatusReason": "Lambda function failed to create",
+                    }
+                ]
+            }
+
+            with pytest.raises(DeployError, match="Lambda function failed to create"):
+                deployer._wait_for_stack()
+
+            mock_cf.describe_stack_events.assert_called_once_with(
+                StackName="test-stack-fail", MaxItems=10
+            )
