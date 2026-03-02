@@ -2,6 +2,9 @@ name: LocalStack Integration
 
 on:
   pull_request:
+    branches: [main]
+  push:
+    branches: [main]
 
 env:
   AWS_ACCESS_KEY_ID: test
@@ -39,36 +42,21 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
+      - name: Install Task
+        uses: go-task/setup-task@v1
+
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Build
-        working-directory: examples/ci_test_pipeline
+      - name: Run CI flow
         run: |
-          uv sync
-          uv run python flow.py build
+          task ci-flow
 
-      - name: Deploy
+      - name: Destroy
         working-directory: examples/ci_test_pipeline
-        run: uv run python flow.py deploy --confirm
-
-      - name: Verify
-        run: |
-          STATUS=$(aws cloudformation describe-stacks \
-            --stack-name ci-test-pipeline-stack \
-            --query 'Stacks[0].StackStatus' \
-            --output text)
-          echo "Stack status: $STATUS"
-          if [ "$STATUS" != "CREATE_COMPLETE" ] && [ "$STATUS" != "UPDATE_COMPLETE" ]; then
-            echo "Expected CREATE_COMPLETE or UPDATE_COMPLETE, got $STATUS"
-            exit 1
-          fi
+        run: uv run python flow.py destroy --confirm
 
       - name: Run Integration Tests
         run: |
           uv sync --extra dev
           uv run pytest tests/test_localstack.py -v --tb=short
-
-      - name: Destroy
-        working-directory: examples/ci_test_pipeline
-        run: uv run python flow.py destroy --confirm
