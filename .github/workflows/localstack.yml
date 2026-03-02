@@ -37,10 +37,6 @@ jobs:
             sleep 2
           done
 
-      - name: Create S3 bucket
-        run: |
-          aws s3 mb s3://lokki
-
       - uses: astral-sh/setup-uv@v4
 
       - name: Install Task
@@ -49,15 +45,12 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Run CI flow
-        run: |
-          task ci-flow
-
-      - name: Destroy
-        working-directory: examples/ci_test_pipeline
-        run: uv run python flow.py destroy --confirm
-
       - name: Run Integration Tests
         run: |
           uv sync --extra dev
           uv run pytest tests/test_localstack.py -v --tb=short
+
+      - name: Run CI flow
+        run: |
+          task ci-flow
+          uv run python flow.py destroy --confirm
