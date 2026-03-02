@@ -89,6 +89,18 @@ tasks:
     cmds:
       - uv run flow.py invoke --size 256 --multiplier 2
 
+  logs:
+    desc: Fetch CloudWatch logs from Lambda functions
+    dir: examples/ci_test_pipeline
+    cmds:
+      - uv run flow.py logs
+
+  show:
+    desc: Show Step Functions execution status
+    dir: examples/ci_test_pipeline
+    cmds:
+      - uv run flow.py show
+
   ci-flow:
     desc: Run full CI flow
     cmds:
@@ -97,3 +109,5 @@ tasks:
       - task: build
       - task: deploy
       - task: invoke
+      - task: logs
+      - task: show

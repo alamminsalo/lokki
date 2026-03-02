@@ -1,6 +1,5 @@
 from dataclasses import asdict
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import date, datetime, timedelta
 
 import duckdb
 import pandas as pd
@@ -11,15 +10,24 @@ from lokki import flow, step
 
 @step
 def generate_route_date_pairs(
-    route: tuple[str, str], start_date: str, end_date: str
+    route: tuple[str, str],
+    begin_date: str | None,
+    days: int,
 ) -> list:
+    if not begin_date:
+        begin_date = date.today().isoformat()
+
+    end_date = (
+        datetime.strptime(begin_date, "%Y-%m-%d") + timedelta(days=days)
+    ).strftime("%Y-%m-%d")
+
     routes = [
         dict(origin=route[0], destination=route[1]),
         dict(origin=route[1], destination=route[0]),
     ]
 
     date_list = []
-    current = datetime.strptime(start_date, "%Y-%m-%d")
+    current = datetime.strptime(begin_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
 
     while current <= end:
@@ -30,7 +38,7 @@ def generate_route_date_pairs(
 
 
 @step(retry={"retries": 2, "delay": 1, "backoff": 2})
-def fetch_flights(route_tuple: tuple) -> Optional[pd.DataFrame]:
+def fetch_flights(route_tuple: tuple) -> pd.DataFrame | None:
     origin, destination, date = route_tuple
 
     try:
@@ -95,17 +103,13 @@ def collect_dataframes(dfs: list) -> pd.DataFrame:
 @flow(schedule="cron(0 9 * * ? *)")
 def flight_data_pipeline(
     origin: str = "HEL",
-    destination: str = "ARN",
-    begin_date: str = "2025-02-01",
+    destination: str = "AGP",
+    begin_date: str | None = None,
     days: int = 2,
 ):
     """Flight data pipeline using DuckDB for analysis."""
-    end_date = (
-        datetime.strptime(begin_date, "%Y-%m-%d") + timedelta(days=days)
-    ).strftime("%Y-%m-%d")
-
     return (
-        generate_route_date_pairs((origin, destination), begin_date, end_date)
+        generate_route_date_pairs((origin, destination), begin_date, days)
         .map(fetch_flights)
         .agg(collect_dataframes)
     )

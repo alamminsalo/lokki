@@ -1,4 +1,6 @@
 # lokki.toml
+[build]
+build_dir = "/tmp/nyc-taxi-pipeline"
 
 [aws]
 
@@ -12,7 +14,7 @@ image_repository = "local"
 endpoint = "http://localhost:4566"
 
 [lambda]
-package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+package_type = "zip" # Use "zip" for LocalStack testing; "image" for production
 timeout = 900
 memory = 512
 image_tag = "latest"

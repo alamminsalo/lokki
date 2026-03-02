@@ -4,12 +4,8 @@ version = "0.1.1"
 description = "Weather data analysis with DuckDB using lokki"
 requires-python = ">=3.13"
 dependencies = [
-  "lokkiflow>=0.3.20",
+  "lokkiflow @ file:///${PROJECT_ROOT}/../../",
   "duckdb>=1.0.0",
   "requests>=2.31.0",
   "geopy>=2.4.0",
 ]
-
-[[tool.uv.index]]
-url = "http://localhost:8080/simple"
-priority = "supplemental"

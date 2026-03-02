@@ -127,7 +127,7 @@ def _handle_build(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -
     from lokki.cli.error_utils import cli_context
 
     with cli_context(flow_fn, require_bucket=True) as (graph, config):
-        Builder.build(graph, config, flow_fn)
+        Builder.build(graph, config, flow_fn, force=True)
         print("Build complete!")
 
 
