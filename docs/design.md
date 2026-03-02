@@ -33,16 +33,27 @@ lokki/
 │   ├── runner.py                # Local execution engine
 │   ├── builder/
 │   │   ├── __init__.py
-│   │   ├── builder.py           # Orchestrates the full build
-│   │   ├── lambda_pkg.py        # Generates per-step Dockerfile directories
-│   │   ├── state_machine.py     # Generates Step Functions JSON
-│   │   └── cloudformation.py   # Generates CloudFormation YAML
-│   ├── runtime/
-│   │   ├── __init__.py
-│   │   ├── handler.py           # Lambda handler wrapper (runs inside Lambda)
-│   │   ├── batch.py             # AWS Batch handler wrapper
-│   │   └── batch_main.py       # AWS Batch entry point
-│   ├── store/
+│   │   ├── builder/
+│   │   │   ├── __init__.py
+│   │   │   ├── builder.py           # Orchestrates the full build
+│   │   │   ├── lambdafunction/     # Lambda packaging
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── lambda_pkg.py
+│   │   │   ├── batchjob/           # Batch packaging
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── batch_pkg.py
+│   │   │   ├── state_machine.py     # Generates Step Functions JSON
+│   │   │   └── cloudformation.py   # Generates CloudFormation YAML
+│   │   ├── runtime/
+│   │   │   ├── __init__.py
+│   │   │   ├── lambdafunction/    # Lambda runtime handler
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── lambda_handler.py
+│   │   │   ├── batchjob/          # AWS Batch runtime handler
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── batch_handler.py
+│   │   │   └── batch_main.py      # AWS Batch entry point
+│   │   ├── store/
 │   │   ├── __init__.py         # Exports: TransientStore, LocalStore, S3Store
 │   │   ├── protocol.py         # TransientStore Protocol definition
 │   │   ├── local.py            # LocalStore implementation
@@ -708,7 +719,7 @@ lokki-build/
 ├── lambdas/
 │   ├── get_birds/
 │   │   ├── Dockerfile
-│   │   └── handler.py          # thin entrypoint that imports runtime/handler.py
+│   │   └── handler.py          # thin entrypoint that imports lokki.runtime.lambdafunction
 │   ├── flap_bird/
 │   │   ├── Dockerfile
 │   │   └── handler.py
@@ -1151,7 +1162,7 @@ The build process writes one of these per step, importing the correct function f
 
 ## 12. Runtime Wrapper (Lambda Handler)
 
-`lokki/runtime/handler.py` contains `make_handler`, which wraps any user step function so it can run inside Lambda. This is the only lokki code that executes in production.
+`lokki/runtime/lambdafunction/lambda_handler.py` contains `make_handler`, which wraps any user step function so it can run inside Lambda. This is the only lokki code that executes in production.
 
 ```python
 def make_handler(fn: Callable, retry_config: RetryConfig | None = None) -> Callable:
@@ -2020,11 +2031,11 @@ During resolution, step-level values override global values:
 
 #### Lambda Handler (existing)
 
-The Lambda handler (`lokki/runtime/handler.py`) remains unchanged for Lambda steps.
+The Lambda handler (`lokki/runtime/lambdafunction/lambda_handler.py`) remains unchanged for Lambda steps.
 
 #### Batch Handler (new)
 
-A new Batch handler (`lokki/runtime/batch.py`) handles Batch job execution:
+A new Batch handler (`lokki/runtime/batchjob/batch_handler.py`) handles Batch job execution:
 
 ```python
 def make_batch_handler(
@@ -2257,8 +2268,8 @@ StepFunctions execution completes
 ### Packaging
 
 Both Lambda and Batch handlers need to be included in deployment packages. The Lambda package includes:
-- `lokki/runtime/handler.py` - Lambda handler
-- `lokki/runtime/batch.py` - Batch handler  
+- `lokki/runtime/lambdafunction/` - Lambda handler
+- `lokki/runtime/batchjob/` - Batch handler  
 - `lokki/runtime/batch_main.py` - Batch entry point
 
 ---

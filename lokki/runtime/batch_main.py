@@ -28,7 +28,7 @@ def main() -> None:
 
     step_func = step_node.fn if hasattr(step_node, "fn") else step_node
 
-    from lokki.runtime.batch import make_batch_handler
+    from lokki.runtime.batchjob import make_batch_handler
 
     handler = make_batch_handler(step_func)
 

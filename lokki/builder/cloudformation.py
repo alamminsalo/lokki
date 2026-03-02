@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from lokki._utils import get_step_names, to_pascal
+from lokki._utils import to_pascal
 from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
@@ -83,7 +83,7 @@ def build_template(
         },
     }
 
-    step_names = get_step_names(graph)
+    step_names = graph.step_names
     package_type = config.lambda_cfg.package_type
 
     step_config: dict[str, dict[str, Any]] = {}

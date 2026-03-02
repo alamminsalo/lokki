@@ -26,7 +26,7 @@ def make_batch_handler(
     Returns:
         A handler function compatible with AWS Batch container
     """
-    logger = get_logger("lokki.runtime.batch", LoggingConfig())
+    logger = get_logger("lokki.runtime.batchjob", LoggingConfig())
 
     def batch_handler(event: dict[str, Any]) -> dict[str, Any]:
         cfg = load_config()

@@ -1,7 +1,6 @@
 """Unit tests for _utils module."""
 
-
-from lokki._utils import get_step_names, to_kebab, to_pascal
+from lokki._utils import to_kebab, to_pascal
 from lokki.decorators import step
 from lokki.graph import FlowGraph
 
@@ -38,8 +37,8 @@ class TestToKebab:
         assert to_kebab("get-items") == "get-items"
 
 
-class TestGetStepNames:
-    """Tests for get_step_names function."""
+class TestFlowGraphStepNames:
+    """Tests for FlowGraph.step_names property."""
 
     def test_single_step(self) -> None:
         @step
@@ -47,8 +46,7 @@ class TestGetStepNames:
             return 1
 
         graph = FlowGraph(name="test-flow", head=step1)
-        names = get_step_names(graph)
-        assert names == {"step1"}
+        assert graph.step_names == {"step1"}
 
     def test_two_steps(self) -> None:
         @step
@@ -61,8 +59,7 @@ class TestGetStepNames:
 
         step1().next(step2)
         graph = FlowGraph(name="test-flow", head=step2)
-        names = get_step_names(graph)
-        assert names == {"step1", "step2"}
+        assert graph.step_names == {"step1", "step2"}
 
     def test_map_block(self) -> None:
         @step
@@ -79,8 +76,7 @@ class TestGetStepNames:
 
         get_items().map(process).agg(aggregate)
         graph = FlowGraph(name="test-flow", head=aggregate)
-        names = get_step_names(graph)
-        assert names == {"get_items", "process", "aggregate"}
+        assert graph.step_names == {"get_items", "process", "aggregate"}
 
     def test_map_with_next(self) -> None:
         @step
@@ -95,9 +91,6 @@ class TestGetStepNames:
         def save(item):
             return {"result": item}
 
-        # Note: with .next() after .map(), the source step is reached differently
         get_data().map(process).next(save)
         graph = FlowGraph(name="test-flow", head=save)
-        names = get_step_names(graph)
-        # .next() after .map() doesn't include source in traversal from head
-        assert names == {"process", "save"}
+        assert graph.step_names == {"process", "save"}

@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from lokki.builder.cloudformation import build_template
-from lokki.builder.lambda_pkg import (
+from lokki.builder.lambdafunction import (
     _get_flow_module_path,
     generate_shared_lambda_files,
 )

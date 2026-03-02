@@ -50,7 +50,7 @@ if step_node is None:
 
 step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
-from lokki.runtime.batch import make_batch_handler
+from lokki.runtime.batchjob import make_batch_handler
 
 batch_handler = make_batch_handler(step_func)
 """
@@ -85,20 +85,21 @@ def generate_batch_files(
     handler_content = BATCH_HANDLER_TEMPLATE
     (batch_dir / "batch.py").write_text(handler_content)
 
-    runtime_dir = Path(__file__).parent.parent / "runtime"
+    lokki_root = Path(__file__).resolve().parent.parent.parent.parent
+    runtime_dir = lokki_root / "lokki" / "runtime"
     batch_main_src = runtime_dir / "batch_main.py"
     if batch_main_src.exists():
         batch_main_content = batch_main_src.read_text()
         (batch_dir / "batch_main.py").write_text(batch_main_content)
 
-    pyproject_src = Path(__file__).parent.parent.parent / "pyproject.toml"
+    pyproject_src = lokki_root / "pyproject.toml"
     pyproject_target = batch_dir / "pyproject.toml"
     if not pyproject_target.exists():
         import shutil
 
         shutil.copy(pyproject_src, pyproject_target)
 
-    uv_lock_src = Path(__file__).parent.parent.parent / "uv.lock"
+    uv_lock_src = lokki_root / "uv.lock"
     if uv_lock_src.exists():
         import shutil
 

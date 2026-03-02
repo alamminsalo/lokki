@@ -1,6 +1,11 @@
 """Shared utility functions for lokki."""
 
-from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lokki.graph import FlowGraph
 
 
 def to_pascal(name: str) -> str:
@@ -14,15 +19,8 @@ def to_kebab(name: str) -> str:
 
 
 def get_step_names(graph: FlowGraph) -> set[str]:
-    """Extract unique step names from graph."""
-    names: set[str] = set()
-    for entry in graph.entries:
-        if isinstance(entry, TaskEntry):
-            names.add(entry.node.name)
-        elif isinstance(entry, MapOpenEntry):
-            names.add(entry.source.name)
-            for step in entry.inner_steps:
-                names.add(step.name)
-        elif isinstance(entry, MapCloseEntry):
-            names.add(entry.agg_step.name)
-    return names
+    """Extract unique step names from graph.
+
+    Note: This function is deprecated. Use graph.step_names property instead.
+    """
+    return graph.step_names

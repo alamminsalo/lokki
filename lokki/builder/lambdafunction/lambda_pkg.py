@@ -55,7 +55,7 @@ step_func = getattr(mod, step_name, None)
 if step_func is None:
     raise ValueError(f"Step function '{step_name}' not found in module '{module_name}'")
 
-from lokki.runtime.lambda_handler import make_handler
+from lokki.runtime.lambdafunction import make_handler
 
 lambda_handler = make_handler(step_func)
 """
@@ -84,7 +84,7 @@ if step_node is None:
 
 step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
-from lokki.runtime.batch import make_batch_handler
+from lokki.runtime.batchjob import make_batch_handler
 
 batch_handler = make_batch_handler(step_func)
 """
@@ -139,7 +139,8 @@ def _generate_docker_packages(
     batch_handler_content = BATCH_HANDLER_TEMPLATE
     (lambdas_dir / "batch.py").write_text(batch_handler_content)
 
-    runtime_dir = Path(__file__).parent.parent / "runtime"
+    lokki_root = Path(__file__).resolve().parent.parent.parent.parent
+    runtime_dir = lokki_root / "lokki" / "runtime"
     batch_main_src = runtime_dir / "batch_main.py"
     if batch_main_src.exists():
         batch_main_content = batch_main_src.read_text()
@@ -154,9 +155,9 @@ def _copy_project_files(
     lambdas_dir: Path, flow_fn: Callable[[], FlowGraph] | None
 ) -> None:
     """Copy pyproject.toml and uv.lock from project or flow module."""
-    lokki_dir = Path(__file__).parent.parent.parent
+    lokki_root = Path(__file__).resolve().parent.parent.parent.parent
 
-    pyproject_src = lokki_dir / "pyproject.toml"
+    pyproject_src = lokki_root / "pyproject.toml"
     pyproject_target = lambdas_dir / "pyproject.toml"
 
     if pyproject_target.exists():
@@ -172,7 +173,7 @@ def _copy_project_files(
         if flow_pyproject.exists():
             shutil.copy(flow_pyproject, pyproject_target)
 
-    uv_lock_src = lokki_dir / "uv.lock"
+    uv_lock_src = lokki_root / "uv.lock"
     if uv_lock_src.exists():
         uv_lock_target = lambdas_dir / "uv.lock"
         if not uv_lock_target.exists():
@@ -291,7 +292,7 @@ def _get_dispatcher_handler_content() -> str:
     return """import os
 import sys
 import importlib
-from lokki.runtime.lambda_handler import make_handler
+from lokki.runtime.lambdafunction import make_handler
 
 # Add current directory to path for module imports
 sys.path.insert(0, os.path.dirname(__file__))

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from lokki.builder.lambda_pkg import (
+from lokki.builder.lambdafunction import (
     _get_flow_module_path,
     generate_shared_lambda_files,
 )
