@@ -22,11 +22,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start LocalStack
+        env:
+          SERVICES: s3,lambda,stepfunctions,cloudformation,ecr,iam,logs,events
+          DEBUG: 1
+          DEFAULT_REGION: $AWS_DEFAULT_REGION
         run: |
-          docker run -d --name localstack -p 4566:4566 \
-            -e SERVICES=s3,lambda,stepfunctions,cloudformation,iam \
-            -e DEFAULT_REGION=$AWS_DEFAULT_REGION \
-            localstack/localstack:latest
+          docker run -d --name localstack -p 4566:4566 localstack/localstack:latest
           # Wait for LocalStack to be ready
           for i in {1..30}; do
             if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
