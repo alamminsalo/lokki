@@ -68,7 +68,7 @@ class TestBatchMain:
         )
 
         with patch(
-            "lokki.runtime.batch.make_batch_handler",
+            "lokki.runtime.batchjob.make_batch_handler",
             return_value=mock_handler_instance,
             create=True,
         ):
@@ -98,7 +98,7 @@ class TestBatchMain:
         )
 
         with patch(
-            "lokki.runtime.batch.make_batch_handler",
+            "lokki.runtime.batchjob.make_batch_handler",
             return_value=mock_handler_instance,
             create=True,
         ):
@@ -133,7 +133,7 @@ class TestBatchMain:
             }
 
         with patch(
-            "lokki.runtime.batch.make_batch_handler",
+            "lokki.runtime.batchjob.make_batch_handler",
             side_effect=capture_handler,
             create=True,
         ):

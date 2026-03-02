@@ -3,13 +3,13 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from lokki.runtime.batch import make_batch_handler
+from lokki.runtime.batchjob import make_batch_handler
 
 
 class TestMakeBatchHandler:
     @patch.dict(os.environ, {"LOKKI_FLOW_NAME": "test-flow"})
-    @patch("lokki.runtime.batch.load_config")
-    @patch("lokki.runtime.batch.S3Store")
+    @patch("lokki.runtime.batchjob.batch_handler.load_config")
+    @patch("lokki.runtime.batchjob.batch_handler.S3Store")
     def test_step_with_flow_params(
         self, mock_store_class: MagicMock, mock_config: MagicMock
     ) -> None:
@@ -36,8 +36,8 @@ class TestMakeBatchHandler:
         assert "input" in result
 
     @patch.dict(os.environ, {"LOKKI_FLOW_NAME": "test-flow"})
-    @patch("lokki.runtime.batch.load_config")
-    @patch("lokki.runtime.batch.S3Store")
+    @patch("lokki.runtime.batchjob.batch_handler.load_config")
+    @patch("lokki.runtime.batchjob.batch_handler.S3Store")
     def test_single_input_reads_from_s3(
         self, mock_store_class: MagicMock, mock_config: MagicMock
     ) -> None:
@@ -66,8 +66,8 @@ class TestMakeBatchHandler:
         mock_store.read.assert_called_once_with("s3://bucket/key")
 
     @patch.dict(os.environ, {"LOKKI_FLOW_NAME": "test-flow"})
-    @patch("lokki.runtime.batch.load_config")
-    @patch("lokki.runtime.batch.S3Store")
+    @patch("lokki.runtime.batchjob.batch_handler.load_config")
+    @patch("lokki.runtime.batchjob.batch_handler.S3Store")
     def test_multiple_inputs(
         self, mock_store_class: MagicMock, mock_config: MagicMock
     ) -> None:
@@ -96,8 +96,8 @@ class TestMakeBatchHandler:
         assert mock_store.read.call_count == 2
 
     @patch.dict(os.environ, {"LOKKI_FLOW_NAME": "test-flow"})
-    @patch("lokki.runtime.batch.load_config")
-    @patch("lokki.runtime.batch.S3Store")
+    @patch("lokki.runtime.batchjob.batch_handler.load_config")
+    @patch("lokki.runtime.batchjob.batch_handler.S3Store")
     def test_step_returns_list_writes_manifest(
         self, mock_store_class: MagicMock, mock_config: MagicMock
     ) -> None:

@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from lokki.runtime.batch import make_batch_handler as batch
-from lokki.runtime.lambda_handler import make_handler as make_lambda_handler
+from lokki.runtime.batchjob import make_batch_handler as batch
+from lokki.runtime.lambdafunction import make_handler as make_lambda_handler
 from lokki.runtime.local import LocalRunner
 from lokki.runtime.runtime import Runtime
 

@@ -425,7 +425,7 @@ class TestDeployerWaitForStack:
         cf_client = boto3.client("cloudformation", region_name="us-east-1")
         cf_client.create_stack(
             StackName="test-stack",
-            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Bucket:\n    Type: AWS::S3::Bucket",
+            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources: {}",
         )
 
         deployer._wait_for_stack()
@@ -441,7 +441,7 @@ class TestDeployerWaitForStack:
         cf_client = boto3.client("cloudformation", region_name="us-east-1")
         cf_client.create_stack(
             StackName="test-stack-fail",
-            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Bucket:\n    Type: AWS::S3::Bucket",
+            TemplateBody="AWSTemplateFormatVersion: '2010-09-09'\nResources: {}",
         )
 
         with patch.object(deployer, "cf_client") as mock_cf:

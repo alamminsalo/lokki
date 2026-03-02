@@ -87,9 +87,7 @@ def _parse_flow_params(
 
 def _get_step_names(graph: FlowGraph) -> list[str]:
     """Get all step names from a flow graph."""
-    from lokki._utils import get_step_names
-
-    return list(get_step_names(graph))
+    return list(graph.step_names)
 
 
 def _handle_run(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) -> None:

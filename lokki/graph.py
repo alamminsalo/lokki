@@ -180,3 +180,18 @@ class FlowGraph:
                 f"Flow ends with an open Map block from step '{block.source.name}'. "
                 "Use .agg() to close the Map block before ending the flow."
             )
+
+    @property
+    def step_names(self) -> set[str]:
+        """Extract unique step names from graph."""
+        names: set[str] = set()
+        for entry in self.entries:
+            if isinstance(entry, TaskEntry):
+                names.add(entry.node.name)
+            elif isinstance(entry, MapOpenEntry):
+                names.add(entry.source.name)
+                for step in entry.inner_steps:
+                    names.add(step.name)
+            elif isinstance(entry, MapCloseEntry):
+                names.add(entry.agg_step.name)
+        return names

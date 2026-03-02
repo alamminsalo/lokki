@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from lokki.builder.batch_pkg import (
+from lokki.builder.batchjob import (
     BATCH_DOCKERFILE_TEMPLATE,
     BATCH_HANDLER_TEMPLATE,
     generate_batch_files,
