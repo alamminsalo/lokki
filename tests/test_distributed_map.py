@@ -5,12 +5,10 @@ to ensure it uses Distributed Map (not Inline Map) with proper ItemSelector
 and ResultWriter configuration.
 """
 
-import pytest
-
-from lokki.decorators import step
-from lokki.graph import FlowGraph
 from lokki.builder.state_machine import build_state_machine
 from lokki.config import LokkiConfig
+from lokki.decorators import step
+from lokki.graph import FlowGraph
 
 
 class TestDistributedMapBasicStructure:
