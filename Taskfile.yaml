@@ -75,7 +75,7 @@ tasks:
     desc: Deploy ci_test_pipeline to LocalStack
     dir: examples/ci_test_pipeline
     cmds:
-      - uv run flow.py deploy
+      - uv run flow.py deploy --confirm
 
   invoke:
     desc: Invoke ci_test_pipeline via Step Functions and wait for completion
