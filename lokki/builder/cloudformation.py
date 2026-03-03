@@ -100,11 +100,13 @@ def build_template(
                     if entry.memory_mb is not None
                     else config.lambda_cfg.memory
                 ),
+                "job_type": entry.job_type,
             }
         elif isinstance(entry, MapOpenEntry):
             step_config[entry.source.name] = {
                 "timeout": config.lambda_cfg.timeout,
                 "memory": config.lambda_cfg.memory,
+                "job_type": "lambda",
             }
             for step in entry.inner_steps:
                 step_config[step.name] = {
@@ -112,6 +114,7 @@ def build_template(
                     or config.lambda_cfg.timeout,
                     "memory": getattr(step, "memory_mb", None)
                     or config.lambda_cfg.memory,
+                    "job_type": getattr(step, "job_type", "lambda"),
                 }
         elif isinstance(entry, MapCloseEntry):
             step_config[entry.agg_step.name] = {
@@ -123,12 +126,14 @@ def build_template(
                     getattr(entry.agg_step, "memory_mb", None)
                     or config.lambda_cfg.memory
                 ),
+                "job_type": getattr(entry.agg_step, "job_type", "lambda"),
             }
 
     for step_name in step_names:
         cfg = step_config.get(step_name, {})
         timeout = cfg.get("timeout", config.lambda_cfg.timeout)
         memory = cfg.get("memory", config.lambda_cfg.memory)
+        job_type = cfg.get("job_type", "lambda")
 
         env_vars = {
             "LOKKI_ARTIFACT_BUCKET": {"Ref": "S3Bucket"},
@@ -160,7 +165,7 @@ def build_template(
                 },
             }
         else:
-            resources[to_pascal(step_name) + "Function"] = {
+            func_props = {
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
@@ -174,6 +179,15 @@ def build_template(
                     "Environment": {"Variables": env_vars},
                 },
             }
+            if job_type == "batch":
+                func_props["Properties"]["Cmd"] = [
+                    "python",
+                    "-m",
+                    "lokki.runtime.batch_main",
+                ]
+            else:
+                func_props["Properties"]["Cmd"] = ["handler.lambda_handler"]
+            resources[to_pascal(step_name) + "Function"] = func_props
 
     resources["StepFunctionsExecutionRole"] = {
         "Type": "AWS::IAM::Role",

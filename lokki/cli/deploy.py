@@ -124,14 +124,15 @@ class Deployer:
         if not dockerfile_path.exists():
             raise DeployError(f"Dockerfile not found: {dockerfile_path}")
 
-        is_local = image_repository == "local"
-
-        if is_local:
+        if image_repository == "registry:ci":
+            registry_url = "localhost:5000"
             image_name = "lokki"
-            image_uri = f"{image_name}:{self.image_tag}"
-            print(f"Building local Docker image: {image_uri}...")
+            image_uri = f"{registry_url}/{image_name}:{self.image_tag}"
+            print(f"Building Docker image: {image_uri}...")
             self._build_image(lambdas_dir, image_uri)
-            print(f"Successfully built local image: {image_uri}")
+            print(f"Pushing to local registry: {image_uri}...")
+            self._push_image(image_uri)
+            print(f"Successfully pushed image: {image_uri}")
         else:
             self._login_to_ecr()
             image_name = "lokki"
@@ -243,6 +244,11 @@ class Deployer:
         image_repository: str,
         aws_endpoint: str,
     ) -> None:
+        if image_repository == "registry:ci":
+            ecr_repo_prefix = "localhost:5000"
+        else:
+            ecr_repo_prefix = image_repository
+
         try:
             existing_stack = None
             try:
@@ -274,7 +280,7 @@ class Deployer:
                         },
                         {
                             "ParameterKey": "ECRRepoPrefix",
-                            "ParameterValue": image_repository,
+                            "ParameterValue": ecr_repo_prefix,
                         },
                         {
                             "ParameterKey": "ImageTag",
@@ -303,7 +309,7 @@ class Deployer:
                         },
                         {
                             "ParameterKey": "ECRRepoPrefix",
-                            "ParameterValue": image_repository,
+                            "ParameterValue": ecr_repo_prefix,
                         },
                         {
                             "ParameterKey": "ImageTag",

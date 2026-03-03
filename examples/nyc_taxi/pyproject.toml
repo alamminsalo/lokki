@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "lokkiflow @ file:///${PROJECT_ROOT}/../../",
+  "lokkiflow",
   "pandas>=3.0.1",
   "pyarrow>=23.0.1",
 ]

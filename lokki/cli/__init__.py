@@ -263,6 +263,12 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
         default="human",
         help="Log output format (default: human)",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Log level (default: INFO)",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # run parser
@@ -371,7 +377,7 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
     # Configure logging
     from lokki.logging import HumanFormatter, JsonFormatter, LoggingConfig
 
-    log_config = LoggingConfig(format=args.log_format)
+    log_config = LoggingConfig(format=args.log_format, level=args.log_level)
     handler = logging.StreamHandler()
     if log_config.format == "json":
         handler.setFormatter(JsonFormatter(log_config))
@@ -379,7 +385,7 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
         handler.setFormatter(HumanFormatter(log_config))
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(getattr(logging, args.log_level))
 
     match command:
         case "run":

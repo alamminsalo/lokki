@@ -16,7 +16,7 @@ def transform(values: list[float]) -> list[float]:
 
 
 @flow
-def ci_test_pipeline(
+def ci_pipeline(
     size: int = 8,
     multiplier: int = 2,
 ):
@@ -31,4 +31,4 @@ def ci_test_pipeline(
 if __name__ == "__main__":
     from lokki import main
 
-    main(ci_test_pipeline)
+    main(ci_pipeline)

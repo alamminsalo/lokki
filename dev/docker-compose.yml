@@ -28,6 +28,15 @@ services:
       - pypi_packages:/data/packages
     command: run -p 8080 -P . -a . --overwrite /data/packages
 
+  registry-ci:
+    image: registry:2
+    container_name: lokki-registry
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+
 volumes:
   localstack_data:
   pypi_packages:
+  registry_data:

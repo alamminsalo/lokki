@@ -38,18 +38,35 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     state_order: list[str] = []
 
     # InitFlow Pass state to prepare input for first step
-    # Transforms execution input -> {"flow": {...}}
-    # Input is omitted - first step receives only flow params
-    states["InitFlow"] = {
+    # Transforms execution input -> {"flow": {...}, "input": {...}, "step_name": "..."}
+    # Passes through the original input so Batch tasks can access flow params
+    first_step_name: str | None = None
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            first_step_name = entry.node.name
+            break
+        elif isinstance(entry, MapOpenEntry):
+            first_step_name = entry.source.name
+            break
+        elif isinstance(entry, MapCloseEntry):
+            first_step_name = entry.agg_step.name
+            break
+
+    init_flow_state: dict[str, Any] = {
         "Type": "Pass",
+        "InputPath": "$",
         "Parameters": {
             "flow": {
                 "run_id.$": "$$.Execution.Id",
                 "params.$": "$$.Execution.Input",
             },
+            "input": None,
         },
         "Next": None,
     }
+    if first_step_name:
+        init_flow_state["Parameters"]["step_name"] = first_step_name
+    states["InitFlow"] = init_flow_state
 
     first_state: str | None = None
 
@@ -192,7 +209,6 @@ def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str
         "Resource": _lambda_arn(config, step_node.name, flow_name),
         "InputPath": "$",
         "ResultPath": "$.input",
-        "Next": None,
     }
 
     retry_config = getattr(step_node, "retry", None)
@@ -237,7 +253,6 @@ def _batch_task_state(node: Any, config: LokkiConfig, flow_name: str) -> dict[st
             ],
         },
         "ResultPath": "$.input",
-        "Next": None,
     }
 
     retry_config = getattr(node, "retry", None)

@@ -1,8 +1,4 @@
 # lokki.toml - Test pipeline configuration
-
-[build]
-build_dir = "/tmp/lokki-test-pipeline"
-
 [aws]
 
 # S3 bucket for pipeline data and artifacts

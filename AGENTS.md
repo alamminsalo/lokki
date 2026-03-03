@@ -14,7 +14,27 @@ Before working on the codebase, read:
 
 Only use these tools: bash, read, glob, grep, edit, write, task, webfetch, todowrite, question.
 
+## Taskfile
+
+Common development tasks are defined in `Taskfile.yaml`. **Always use `task version:bump`** before testing examples with deployments.
+
+```bash
+# List available tasks
+task --list
+
+# Common tasks
+task dev:start         # Start LocalStack, pypiserver, registry
+task dev:stop         # Stop containers
+task test             # Run all unit tests
+task lint             # Run ruff linter
+task format           # Format code with ruff
+task version:bump     # Bump patch version (ALWAYS run before testing examples)
+task publish:pypiserver  # Publish to local pypiserver
+```
+
 ## Development Commands
+
+> **Important**: Always run `task version:bump` before testing examples with deployments!
 
 ```bash
 uv sync                      # Install dependencies
@@ -27,14 +47,14 @@ python flow_script.py build # Build artifacts
 
 ## Local Development with LocalStack
 
-Before testing deployment-related commands, ensure LocalStack and pypiserver are running:
+Before testing deployment-related commands, ensure LocalStack, pypiserver, and registry are running:
 
 ```bash
 # Check if Docker is running
 docker ps
 
-# Start LocalStack and pypiserver (if not running)
-docker compose up -d
+# Start services (using task)
+task dev:start
 
 # Verify services are running
 docker ps
@@ -43,42 +63,49 @@ docker ps
 Services required:
 - **LocalStack** (port 4566) - AWS mock for S3, Step Functions, Lambda, CloudFormation
 - **pypiserver** (port 8080) - Local Python package index
+- **registry:ci** (port 5000) - Local Docker registry for Lambda container images
 
 ### Testing with Examples
 
 When testing with example projects:
 
-1. **Bump version and publish lokkiflow to pypiserver:**
+1. **Publish new lokkiflow version to pypiserver:**
    ```bash
-   # Edit pyproject.toml - bump version number (e.g., 0.3.0 -> 0.3.1)
-   # Build the package
-   uv build
-   # Upload to local pypiserver (no auth required)
-   uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
-   # Update the example project packages to get the newest version
-   # cd example/<example>
-   uv sync --upgrade
+   task publish:pypiserver
    ```
 
-2. **Update example project to use new version:**
+2. **Sync example project:**
    ```bash
-   # Edit examples/weather/pyproject.toml - update lokkiflow version constraint
    cd examples/weather
    uv sync
    ```
 
 3. **Run deployment commands:**
    ```bash
-   python weather.py run   # Run locally
-   python weather.py build # Build artifacts
-   python weather.py deploy --confirm  # Deploy to LocalStack
-   python weather.py invoke --param1 value1  # Invoke deployed flow
-   python weather.py show   # Show executions (requires real AWS)
-   python weather.py logs   # Fetch logs (requires real AWS)
-   python weather.py destroy --confirm  # Destroy stack
+   python flow.py run   # Run locally
+   python flow.py build # Build artifacts
+   python flow.py deploy --confirm  # Deploy to LocalStack
+   python flow.py invoke --param1 value1  # Invoke deployed flow
+   python flow.py show   # Show executions (requires real AWS)
+   python flow.py logs   # Fetch logs (requires real AWS)
+   python flow.py destroy --confirm  # Destroy stack
    ```
 
 Note: `show` and `logs` commands require real AWS or LocalStack with full service support.
+Note: Lambda Container Images and AWS Batch require LocalStack Pro. Use ZIP package type for Community edition testing.
+
+### Testing Docker Images
+
+Docker image tests verify that Lambda container images work correctly. Tests auto-detect Docker and skip if not available.
+
+```bash
+# Run Docker image tests (auto-detects Docker)
+pytest tests/test_docker_images.py -v
+```
+
+Tests:
+1. Build Docker image with pandas dependency
+2. Verify pandas is installed in the image
 
 ## Agent Workflow
 
@@ -133,7 +160,7 @@ class TestClassName:
 | Variable | Purpose |
 |----------|---------|
 | `LOKKI_ARTIFACT_BUCKET` | S3 bucket for pipeline data |
-| `LOKKI_IMAGE_REPOSITORY` | Docker repository (local, docker.io, or ECR prefix) |
+| `LOKKI_IMAGE_REPOSITORY` | Docker repository (`registry:ci` for local, or ECR prefix) |
 | `LOKKI_AWS_REGION` | AWS region for deployments |
 | `LOKKI_AWS_ENDPOINT` | AWS endpoint for local development |
 | `LOKKI_BUILD_DIR` | Output directory for build artifacts |

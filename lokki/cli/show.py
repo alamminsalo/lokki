@@ -71,11 +71,6 @@ def show_executions(
                 "Has the flow been deployed?"
             ) from e
         if error_code == "InvalidArn":
-            if endpoint:
-                raise ShowError(
-                    "Step Functions is not available in LocalStack. "
-                    "To test the full flow, deploy to real AWS."
-                ) from e
             raise ShowError(f"Invalid state machine ARN: {e}") from e
         if "is not enabled" in error_msg.lower():
             if endpoint:

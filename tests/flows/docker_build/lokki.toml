@@ -1,20 +1,21 @@
-# lokki.toml
+# lokki.toml - Docker build test configuration
 [aws]
 
 # S3 bucket for pipeline data and artifacts
 artifact_bucket = "lokki"
 
-# Docker repository: "registry:ci" for local CI, or ECR prefix (e.g., "123456789012.dkr.ecr.us-east-1")
+# Docker repository for Lambda container images
 image_repository = "registry:ci"
 
-# AWS endpoint for local development (e.g., LocalStack)
+# AWS endpoint for local development
 endpoint = "http://localhost:4566"
 
 [lambda]
+# Use Docker image package type
 package_type = "image"
 base_image = "public.ecr.aws/lambda/python:3.13"
-timeout = 900
-memory = 512
+timeout = 300
+memory = 1024
 image_tag = "latest"
 
 [lambda.env]

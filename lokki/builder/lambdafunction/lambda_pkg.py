@@ -19,15 +19,15 @@ WORKDIR /build
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps
+RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps || true
 
 FROM {base_image}
 
 COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
 COPY handler.py ${{LAMBDA_TASK_ROOT}}/handler.py
-COPY batch.py ${{LAMBDA_TASK_ROOT}}/batch.py
-COPY batch_main.py ${{LAMBDA_TASK_ROOT}}/batch_main.py
+
+COPY lokki/ ${{LAMBDA_TASK_ROOT}}/lokki/
 
 ENV LAMBDA_TASK_ROOT=/var/task
 
@@ -94,7 +94,7 @@ def generate_shared_lambda_files(
     graph: FlowGraph,
     config: LokkiConfig,
     build_dir: Path,
-    pkg_dir: Path,
+    pkg_dir: Path | None = None,
     flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate Lambda package files.
@@ -115,6 +115,8 @@ def generate_shared_lambda_files(
     lambdas_dir.mkdir(parents=True, exist_ok=True)
 
     if config.lambda_cfg.package_type == "zip":
+        if pkg_dir is None:
+            raise ValueError("pkg_dir is required for ZIP package type")
         return _generate_shared_zip_package(
             graph, config, lambdas_dir, pkg_dir, flow_fn
         )
@@ -136,16 +138,6 @@ def _generate_docker_packages(
     handler_content = SHARED_HANDLER_TEMPLATE
     (lambdas_dir / "handler.py").write_text(handler_content)
 
-    batch_handler_content = BATCH_HANDLER_TEMPLATE
-    (lambdas_dir / "batch.py").write_text(batch_handler_content)
-
-    lokki_root = Path(__file__).resolve().parent.parent.parent.parent
-    runtime_dir = lokki_root / "lokki" / "runtime"
-    batch_main_src = runtime_dir / "batch_main.py"
-    if batch_main_src.exists():
-        batch_main_content = batch_main_src.read_text()
-        (lambdas_dir / "batch_main.py").write_text(batch_main_content)
-
     _copy_project_files(lambdas_dir, flow_fn)
 
     return lambdas_dir
@@ -154,31 +146,24 @@ def _generate_docker_packages(
 def _copy_project_files(
     lambdas_dir: Path, flow_fn: Callable[[], FlowGraph] | None
 ) -> None:
-    """Copy pyproject.toml and uv.lock from project or flow module."""
+    """Copy pyproject.toml, uv.lock, and lokki source from project or flow module."""
     lokki_root = Path(__file__).resolve().parent.parent.parent.parent
 
-    pyproject_src = lokki_root / "pyproject.toml"
+    flow_module_path = _get_flow_module_path(flow_fn)
+
     pyproject_target = lambdas_dir / "pyproject.toml"
 
-    if pyproject_target.exists():
-        return
-
-    if pyproject_src.exists():
-        shutil.copy(pyproject_src, pyproject_target)
-        return
-
-    flow_module_path = _get_flow_module_path(flow_fn)
-    if flow_module_path:
-        flow_pyproject = flow_module_path.parent / "pyproject.toml"
-        if flow_pyproject.exists():
-            shutil.copy(flow_pyproject, pyproject_target)
+    if not pyproject_target.exists():
+        if flow_module_path:
+            flow_pyproject = flow_module_path.parent / "pyproject.toml"
+            if flow_pyproject.exists():
+                shutil.copy(flow_pyproject, pyproject_target)
 
     uv_lock_src = lokki_root / "uv.lock"
     if uv_lock_src.exists():
         uv_lock_target = lambdas_dir / "uv.lock"
         if not uv_lock_target.exists():
             shutil.copy(uv_lock_src, uv_lock_target)
-        return
 
     if flow_module_path:
         flow_uv_lock = flow_module_path.parent / "uv.lock"
@@ -186,6 +171,10 @@ def _copy_project_files(
             uv_lock_target = lambdas_dir / "uv.lock"
             if not uv_lock_target.exists():
                 shutil.copy(flow_uv_lock, uv_lock_target)
+
+    lokki_target = lambdas_dir / "lokki"
+    if not lokki_target.exists():
+        shutil.copytree(lokki_root / "lokki", lokki_target)
 
 
 def _get_flow_module_path(

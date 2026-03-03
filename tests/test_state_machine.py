@@ -69,7 +69,7 @@ class TestTaskState:
         assert state["Type"] == "Task"
         assert "Resource" in state
         assert state["ResultPath"] == "$.input"
-        assert state["Next"] is None
+        assert "Next" not in state
         assert "Retry" not in state
 
     def test_task_state_with_retry(self) -> None:

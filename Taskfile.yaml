@@ -12,12 +12,12 @@ tasks:
       - ollama signin
 
 
-  start-dev:
+  dev:start:
     desc: Start LocalStack and pypiserver containers
     cmds:
       - docker compose -f dev/docker-compose.yml up
 
-  stop-dev:
+  dev:stop:
     desc: Stop LocalStack and pypiserver containers
     cmds:
       - docker compose -f dev/docker-compose.yml down
@@ -31,11 +31,6 @@ tasks:
     desc: Run all unit tests
     cmds:
       - uv run pytest
-
-  test:localstack:
-    desc: Run LocalStack integration tests
-    cmds:
-      - RUN_LOCALSTACK_TESTS=1 uv run pytest tests/test_localstack.py -v
 
   lint:
     desc: Run ruff linter
@@ -57,13 +52,14 @@ tasks:
     cmds:
       - rm -rf lokki-build/ dist/ .ruff_cache .mypy_cache
       - rm -rf examples/*/lokki-build examples/*/.ruff_cache examples/*/.mypy_cache
+      - rm -rf tests/flows/ci_pipeline/lokki-build tests/flows/ci_pipeline/.ruff_cache
 
   version:bump:
     desc: Bump minor version in pyproject.toml
     cmds:
       - uv version --bump patch
 
-  publish:
+  publish:pypiserver:
     desc: Build and publish to local pypiserver (bump version first)
     deps:
       - task: version:bump
@@ -71,38 +67,8 @@ tasks:
       - uv build
       - uv run python -m twine upload --repository-url http://localhost:8080 dist/* -u "" -p ""
 
-  build:
-    desc: Build ci_test_pipeline example
-    dir: examples/ci_test_pipeline
-    cmds:
-      - uv run flow.py build
-
-  deploy:
-    desc: Deploy ci_test_pipeline to LocalStack
-    dir: examples/ci_test_pipeline
-    cmds:
-      - uv run flow.py deploy --confirm
-
-  invoke:
-    desc: Invoke ci_test_pipeline via Step Functions and wait for completion
-    dir: examples/ci_test_pipeline
-    cmds:
-      - uv run flow.py invoke --size 256 --multiplier 2
-
-  logs:
-    desc: Fetch CloudWatch logs from Lambda functions
-    dir: examples/ci_test_pipeline
-    cmds:
-      - uv run flow.py logs
-
-  show:
-    desc: Show Step Functions execution status
-    dir: examples/ci_test_pipeline
-    cmds:
-      - uv run flow.py show
-
-  ci-flow:
-    desc: Run full CI flow
+  ci-pipeline:
+    desc: Run full CI pipeline
     cmds:
       - task: version:bump
       - task: setup-s3
@@ -111,3 +77,50 @@ tasks:
       - task: invoke
       - task: logs
       - task: show
+      - task: destroy
+
+  build:
+    desc: Build ci_pipeline flow
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv sync
+      - uv run python flow.py build
+
+  deploy:
+    desc: Deploy ci_pipeline to LocalStack
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv run python flow.py deploy --confirm
+
+  invoke:
+    desc: Invoke ci_pipeline via Step Functions
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv run python flow.py invoke --size 256 --multiplier 2
+
+  logs:
+    desc: Fetch CloudWatch logs from ci_pipeline
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv run python flow.py logs
+
+  show:
+    desc: Show Step Functions execution status
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv run python flow.py show
+
+  destroy:
+    desc: Destroy ci_pipeline stack
+    dir: tests/flows/ci_pipeline
+    cmds:
+      - uv run python flow.py destroy --confirm
+
+  docker:test:
+    desc: Run Docker image integration tests
+    cmds:
+      - docker run -d --name lokki-registry -p 5000:5000 registry:2 || true
+      - sleep 3
+      - uv run pytest tests/test_docker_images.py -v
+      - docker stop lokki-registry || true
+      - docker rm lokki-registry || true
