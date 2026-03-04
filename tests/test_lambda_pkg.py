@@ -12,6 +12,146 @@ from lokki.builder.lambdafunction import (
 )
 
 
+class TestGenerateSharedLambdaFilesWithFlowFn:
+    """Tests for generate_shared_lambda_files with flow_fn parameter."""
+
+    def test_generate_docker_packages_with_flow_fn_copies_flow_pyproject(self):
+        """Test that flow's pyproject.toml is copied for Docker packages."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_dir = tmpdir / "flow_project"
+            flow_dir.mkdir()
+
+            (flow_dir / "pyproject.toml").write_text("[project]\nname = 'flow-project'")
+            (flow_dir / "uv.lock").write_text("# uv lock file")
+
+            build_dir = tmpdir / "lokki-build"
+            lambdas_dir = build_dir / "lambdas"
+            lambdas_dir.mkdir(parents=True)
+
+            from lokki.decorators import step
+            from lokki.graph import FlowGraph
+
+            @step
+            def step1():
+                pass
+
+            graph = FlowGraph(name="test-flow", head=step1)
+
+            from lokki.config import LokkiConfig
+
+            config = LokkiConfig.from_dict({})
+
+            mock_module = MagicMock()
+            mock_module.__file__ = str(flow_dir / "flow.py")
+
+            def mock_flow():
+                pass
+
+            mock_flow.__module__ = "flow_project.flow"
+
+            with patch("sys.modules", {"flow_project.flow": mock_module}):
+                result = generate_shared_lambda_files(
+                    graph, config, build_dir, pkg_dir=None, flow_fn=mock_flow
+                )
+
+            assert result.exists()
+            pyproject = result / "pyproject.toml"
+            assert pyproject.exists()
+            assert pyproject.read_text() == "[project]\nname = 'flow-project'"
+
+    def test_generate_docker_packages_with_flow_fn_copies_flow_uv_lock(self):
+        """Test that flow's uv.lock path is checked (branch coverage)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_dir = tmpdir / "my_flow_project"
+            flow_dir.mkdir()
+
+            (flow_dir / "pyproject.toml").write_text("[project]\nname = 'my-flow'")
+            (flow_dir / "uv.lock").write_text("flow-uv-lock-content")
+
+            build_dir = tmpdir / "lokki-build"
+            lambdas_dir = build_dir / "lambdas"
+            lambdas_dir.mkdir(parents=True)
+
+            (lambdas_dir / "pyproject.toml").write_text("[project]\nname = 'other'")
+
+            from lokki.decorators import step
+            from lokki.graph import FlowGraph
+
+            @step
+            def step1():
+                pass
+
+            graph = FlowGraph(name="test-flow", head=step1)
+
+            from lokki.config import LokkiConfig
+
+            config = LokkiConfig.from_dict({})
+
+            mock_module = MagicMock()
+            mock_module.__file__ = str(flow_dir / "flow.py")
+
+            def mock_flow():
+                pass
+
+            mock_flow.__module__ = "my_flow_project.flow"
+
+            with patch("sys.modules", {"my_flow_project.flow": mock_module}):
+                result = generate_shared_lambda_files(
+                    graph, config, build_dir, pkg_dir=None, flow_fn=mock_flow
+                )
+
+            assert result.exists()
+            uv_lock = result / "uv.lock"
+            assert uv_lock.exists()
+
+    def test_generate_docker_packages_with_flow_fn_no_pyproject(self):
+        """Test when flow module exists but no pyproject.toml (falls back to lokki's).
+
+        This test verifies that the code path where flow_pyproject doesn't exist
+        still allows lokki's pyproject.toml to be used (line 160 in lambda_pkg.py).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_dir = tmpdir / "flow_project3"
+            flow_dir.mkdir()
+
+            (flow_dir / "flow.py").write_text("# flow file")
+
+            build_dir = tmpdir / "lokki-build"
+            lambdas_dir = build_dir / "lambdas"
+            lambdas_dir.mkdir(parents=True)
+
+            from lokki.decorators import step
+            from lokki.graph import FlowGraph
+
+            @step
+            def step1():
+                pass
+
+            graph = FlowGraph(name="test-flow", head=step1)
+
+            from lokki.config import LokkiConfig
+
+            config = LokkiConfig.from_dict({})
+
+            mock_module = MagicMock()
+            mock_module.__file__ = str(flow_dir / "flow.py")
+
+            def mock_flow():
+                pass
+
+            mock_flow.__module__ = "flow_project3.flow"
+
+            with patch("sys.modules", {"flow_project3.flow": mock_module}):
+                result = generate_shared_lambda_files(
+                    graph, config, build_dir, pkg_dir=None, flow_fn=mock_flow
+                )
+
+            assert result.exists()
+
+
 def test_zip_installs_to_lambdas_not_deps():
     """Test that lokki is installed directly to lambdas directory, not to separate deps.
 
