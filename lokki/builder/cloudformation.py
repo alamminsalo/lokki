@@ -180,13 +180,11 @@ def build_template(
                 },
             }
             if job_type == "batch":
-                func_props["Properties"]["Cmd"] = [
-                    "python",
-                    "-m",
-                    "lokki.runtime.batch_main",
-                ]
+                cmd: list[str] = ["python", "-m", "lokki.runtime.batch_main"]
             else:
-                func_props["Properties"]["Cmd"] = ["handler.lambda_handler"]
+                cmd = ["handler.lambda_handler"]
+
+            func_props["Properties"]["Cmd"] = cmd  # type: ignore[index]
             resources[to_pascal(step_name) + "Function"] = func_props
 
     resources["StepFunctionsExecutionRole"] = {
