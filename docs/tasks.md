@@ -1218,4 +1218,46 @@ Currently:
 
 ---
 
+## Milestone 46 — Local Store Support for Lambda/Batch Handlers
+
+_Purpose_: Add environment variable configuration to allow Lambda and Batch handlers to use local filesystem storage instead of S3, enabling full handler testing without AWS services.
+
+### Background
+
+Currently:
+- Lambda and Batch handlers hardcode `S3Store()` - no alternative store
+- Docker tests can only verify imports, not full handler execution
+- Full handler testing requires AWS/S3 mocking
+
+This milestone:
+- Adds `LOKKI_STORE_TYPE` environment variable to switch between S3 and local stores
+- Adds optional `LOKKI_STORE_PATH` for custom local storage directory
+- Enables full Lambda handler testing via HTTP POST in Docker tests
+
+### Tasks
+
+- [ ] **T46.1** Add store type configuration to config.py
+  - Add `store_type` field (default: "s3")
+  - Add `store_path` field (optional, for local store)
+  - Add environment variable support: `LOKKI_STORE_TYPE`, `LOKKI_STORE_PATH`
+
+- [ ] **T46.2** Update Lambda handler to use configurable store
+  - Modify `lokki/runtime/lambdafunction/lambda_handler.py`
+  - Check `LOKKI_STORE_TYPE` env var
+  - Use `LocalStore` when `LOKKI_STORE_TYPE=local`
+  - Default remains `S3Store` for backward compatibility
+
+- [ ] **T46.3** Update Batch handler to use configurable store
+  - Modify `lokki/runtime/batchjob/batch_handler.py`
+  - Same logic as Lambda handler
+
+- [ ] **T46.4** Update Docker test to invoke handler via HTTP POST
+  - Modify `tests/test_docker_images.py`
+  - Add `DOCKER_LAMBDA_STAY_OPEN=1` to Dockerfile template
+  - Set `LOKKI_STORE_TYPE=local` environment variable
+  - Add test method: POST to Lambda Runtime API
+  - Verify full handler execution with data processing
+
+---
+
 ## Summary

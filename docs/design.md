@@ -1417,6 +1417,21 @@ At **build time** (`python flow_script.py build`), `load_config()` reads both TO
 
 At **Lambda runtime**, the TOML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda.env` in the config.
 
+### Store Configuration
+
+The Lambda and Batch handlers use a store for reading input and writing output data. By default, they use S3 storage. For local testing, you can configure them to use local filesystem storage.
+
+| Environment variable | Description | Default |
+|---|---|---|
+| `LOKKI_STORE_TYPE` | Store type: `s3` or `local` | `s3` |
+| `LOKKI_STORE_PATH` | Base directory for local store (optional) | temp directory |
+
+Example for local testing:
+```bash
+LOKKI_STORE_TYPE=local
+LOKKI_STORE_PATH=/tmp/lokki-data
+```
+
 ---
 
 ## 14. Data Flow Walkthrough

@@ -36,6 +36,7 @@ PYPI_INSTALL_TEMPLATE = ""
 
 SHARED_HANDLER_TEMPLATE = """import os
 import sys
+import importlib
 
 step_name = os.environ.get("LOKKI_STEP_NAME", "")
 if not step_name:
@@ -46,12 +47,13 @@ if not module_name:
     raise ValueError("LOKKI_MODULE_NAME environment variable not set")
 
 # Import the user's flow module and get the step function
-import importlib
 mod = importlib.import_module(module_name)
 
-step_func = getattr(mod, step_name, None)
-if step_func is None:
+step_node = getattr(mod, step_name, None)
+if step_node is None:
     raise ValueError(f"Step function '{step_name}' not found in module '{module_name}'")
+
+step_func = step_node.fn if hasattr(step_node, 'fn') else step_node
 
 from lokki.runtime.lambdafunction import make_handler
 

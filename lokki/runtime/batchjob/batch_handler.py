@@ -10,7 +10,16 @@ from lokki.config import load_config
 from lokki.logging import LoggingConfig, get_logger
 from lokki.runtime.event import FlowContext, LambdaEvent
 from lokki.runtime.runtime import Runtime
-from lokki.store import S3Store
+from lokki.store import LocalStore, S3Store
+
+
+def _get_store() -> S3Store | LocalStore:
+    """Get the store based on LOKKI_STORE_TYPE environment variable."""
+    store_type = os.environ.get("LOKKI_STORE_TYPE", "s3").lower()
+    if store_type == "local":
+        store_path = os.environ.get("LOKKI_STORE_PATH", None)
+        return LocalStore(store_path)
+    return S3Store()
 
 
 def make_batch_handler(
@@ -58,7 +67,7 @@ def make_batch_handler(
         if input_data is None:
             input_data = {}
 
-        store = S3Store()
+        store = _get_store()
 
         start_time = datetime.now()
 
