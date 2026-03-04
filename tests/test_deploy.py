@@ -130,7 +130,7 @@ class TestDeployerPushImages:
             lambdas_dir.mkdir()
             (lambdas_dir / "Dockerfile").write_text("FROM python:3.13")
 
-            deployer._push_images("local", build_dir)
+            deployer._push_images("registry:ci", build_dir)
 
             # Verify docker build was called
             assert mock_subprocess.call_count >= 1
@@ -160,7 +160,7 @@ class TestDeployerPushImages:
             (lambdas_dir / "Dockerfile").write_text("FROM python:3.13")
 
             with pytest.raises(DockerNotAvailableError):
-                deployer._push_images("local", build_dir)
+                deployer._push_images("registry:ci", build_dir)
 
     @patch("lokki.cli.deploy.subprocess.run")
     def test_push_images_ecr_success(self, mock_subprocess: MagicMock) -> None:

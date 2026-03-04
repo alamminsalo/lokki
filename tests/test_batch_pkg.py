@@ -93,5 +93,8 @@ class TestGenerateBatchFiles:
 
             result = generate_batch_files(build_dir, config)
 
-            assert result == build_dir / "batch"
+            assert result == build_dir
             assert result.is_dir()
+            assert (result / "Dockerfile").exists()
+            assert (result / "batch.py").exists()
+            assert (result / "batch_main.py").exists()

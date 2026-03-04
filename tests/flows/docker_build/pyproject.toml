@@ -1,0 +1,9 @@
+[project]
+name = "docker-build-test"
+version = "0.1.0"
+description = "Test flow with pandas for Docker build testing"
+requires-python = ">=3.13"
+dependencies = [
+  "pandas>=2.0.0",
+  "lokkiflow @ file:///${PROJECT_ROOT}/../../../",
+]

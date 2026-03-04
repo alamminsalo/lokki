@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from lokki.config import LokkiConfig
+from lokki.graph import FlowGraph
 
 BATCH_DOCKERFILE_TEMPLATE = """FROM {base_image} AS builder
 
@@ -22,7 +24,6 @@ COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
 COPY batch.py ${{LAMBDA_TASK_ROOT}}/batch.py
 COPY batch_main.py ${{LAMBDA_TASK_ROOT}}/batch_main.py
-COPY handler.py ${{LAMBDA_TASK_ROOT}}/handler.py
 
 ENV PYTHONPATH=/var/task
 
@@ -56,20 +57,52 @@ batch_handler = make_batch_handler(step_func)
 """
 
 
+def _get_flow_module_path(
+    flow_fn: Callable[[], FlowGraph] | None,
+) -> Path | None:
+    """Detect the flow module path from the flow function."""
+    if flow_fn is None:
+        return None
+
+    original_fn = flow_fn
+    if hasattr(flow_fn, "_fn"):
+        original_fn = flow_fn._fn
+
+    if hasattr(original_fn, "__module__"):
+        module_name = original_fn.__module__
+
+        if module_name in __import__("sys").modules:
+            module = __import__("sys").modules[module_name]
+            if hasattr(module, "__file__") and module.__file__:
+                return Path(module.__file__)
+
+        if module_name == "__main__":
+            import sys
+
+            if hasattr(sys, "argv") and len(sys.argv) > 0:
+                script_path = Path(sys.argv[0]).resolve()
+                if script_path.exists():
+                    return script_path
+
+    return None
+
+
 def generate_batch_files(
     build_dir: Path,
     config: LokkiConfig | None = None,
+    flow_fn: Callable[[], FlowGraph] | None = None,
 ) -> Path:
     """Generate Batch-specific packaging files.
 
     Args:
         build_dir: The build output directory
         config: Optional LokkiConfig for customizable base image
+        flow_fn: Optional flow function for detecting project files
 
     Returns:
         Path to the generated batch directory
     """
-    batch_dir = build_dir / "batch"
+    batch_dir = build_dir
     batch_dir.mkdir(parents=True, exist_ok=True)
 
     if config and config.batch_cfg.base_image:
@@ -92,19 +125,37 @@ def generate_batch_files(
         batch_main_content = batch_main_src.read_text()
         (batch_dir / "batch_main.py").write_text(batch_main_content)
 
-    pyproject_src = lokki_root / "pyproject.toml"
     pyproject_target = batch_dir / "pyproject.toml"
+    lokki_pyproject = lokki_root / "pyproject.toml"
     if not pyproject_target.exists():
-        import shutil
+        flow_module_path = _get_flow_module_path(flow_fn)
+        flow_pyproject = (
+            flow_module_path.parent / "pyproject.toml" if flow_module_path else None
+        )
 
-        shutil.copy(pyproject_src, pyproject_target)
+        if flow_pyproject and flow_pyproject.exists():
+            import shutil
 
-    uv_lock_src = lokki_root / "uv.lock"
-    if uv_lock_src.exists():
-        import shutil
+            shutil.copy(flow_pyproject, pyproject_target)
+        elif lokki_pyproject.exists():
+            import shutil
 
-        uv_lock_target = batch_dir / "uv.lock"
-        if not uv_lock_target.exists():
-            shutil.copy(uv_lock_src, uv_lock_target)
+            shutil.copy(lokki_pyproject, pyproject_target)
 
+    uv_lock_target = batch_dir / "uv.lock"
+    if not uv_lock_target.exists():
+        lokki_uv_lock = lokki_root / "uv.lock"
+        flow_module_path = _get_flow_module_path(flow_fn)
+        flow_uv_lock = flow_module_path.parent / "uv.lock" if flow_module_path else None
+
+        if flow_uv_lock and flow_uv_lock.exists():
+            import shutil
+
+            shutil.copy(flow_uv_lock, uv_lock_target)
+        elif lokki_uv_lock.exists():
+            import shutil
+
+            shutil.copy(lokki_uv_lock, uv_lock_target)
+
+    # Note: lokki is installed via pyproject.toml dependencies, not copied as source
     return batch_dir

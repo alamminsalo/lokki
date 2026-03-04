@@ -1,5 +1,8 @@
 # lokki.toml - Weather example configuration
 
+[build]
+build_dir = "/tmp/weather-pipeline"
+
 [aws]
 
 # S3 bucket for pipeline data and artifacts
@@ -12,7 +15,7 @@ image_repository = "local"
 endpoint = "http://localhost:4566"
 
 [lambda]
-package_type = "zip"  # Use "zip" for LocalStack testing; "image" for production
+package_type = "zip" # Use "zip" for LocalStack testing; "image" for production
 timeout = 300
 memory = 1024
 image_tag = "latest"

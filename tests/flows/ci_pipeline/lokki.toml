@@ -1,9 +1,4 @@
 # lokki.toml - Test pipeline configuration
-
-[build]
-# Use /tmp for build directory to avoid polluting the repo
-build_dir = "/tmp/lokki-test-pipeline"
-
 [aws]
 
 # S3 bucket for pipeline data and artifacts

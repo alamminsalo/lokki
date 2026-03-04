@@ -15,6 +15,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from lokki.builder.batchjob.batch_pkg import generate_batch_files
 from lokki.builder.cloudformation import build_template
 from lokki.builder.lambdafunction import (
     _get_flow_module_path,
@@ -22,7 +23,7 @@ from lokki.builder.lambdafunction import (
 )
 from lokki.builder.state_machine import build_state_machine
 from lokki.config import LokkiConfig
-from lokki.graph import FlowGraph
+from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
 def _get_flow_module_name(
@@ -36,13 +37,52 @@ def _get_flow_module_name(
     return graph.name.replace("-", "_")
 
 
+def _has_lambda_steps(graph: FlowGraph) -> bool:
+    """Check if the graph contains any Lambda job steps."""
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            if entry.job_type != "batch":
+                return True
+        elif isinstance(entry, MapOpenEntry):
+            for step in entry.inner_steps:
+                if getattr(step, "job_type", "lambda") != "batch":
+                    return True
+        elif isinstance(entry, MapCloseEntry):
+            if getattr(entry.agg_step, "job_type", "lambda") != "batch":
+                return True
+    return False
+
+
+def _has_batch_steps(graph: FlowGraph) -> bool:
+    """Check if the graph contains any Batch job steps."""
+    for entry in graph.entries:
+        if isinstance(entry, TaskEntry):
+            if entry.job_type == "batch":
+                return True
+        elif isinstance(entry, MapOpenEntry):
+            for step in entry.inner_steps:
+                if getattr(step, "job_type", "lambda") == "batch":
+                    return True
+        elif isinstance(entry, MapCloseEntry):
+            if getattr(entry.agg_step, "job_type", "lambda") == "batch":
+                return True
+    return False
+
+
 def _package_deps(config: LokkiConfig) -> Path:
     """
-    Collects dependencies into build_dir.
+    Collects dependencies into build_dir for ZIP deployments.
     Returns package dir path.
-    """
 
+    For image deployments, this function returns an empty Path since
+    dependencies are installed inside the Docker image.
+    """
     build_dir = Path(config.build_dir)
+
+    # For image deployments, dependencies are installed in Dockerfile
+    if config.lambda_cfg.package_type == "image":
+        return build_dir / "packages"
+
     requirements = build_dir / "requirements.txt"
 
     uv = shutil.which("uv")
@@ -117,15 +157,23 @@ class Builder:
             shutil.rmtree(build_dir)
         build_dir.mkdir(parents=True, exist_ok=True)
 
-        lambdas_dir = build_dir / "lambdas"
-        lambdas_dir.mkdir(parents=True, exist_ok=True)
-
         flow_module_name = _get_flow_module_name(flow_fn, graph)
 
-        # Collect package deps
-        pkg_dir = _package_deps(config)
+        has_lambda = _has_lambda_steps(graph)
+        has_batch = _has_batch_steps(graph)
 
-        generate_shared_lambda_files(graph, config, build_dir, pkg_dir, flow_fn)
+        if has_lambda:
+            lambdas_dir = build_dir / "lambdas"
+            lambdas_dir.mkdir(parents=True, exist_ok=True)
+
+            pkg_dir: Path | None = None
+            if config.lambda_cfg.package_type == "zip":
+                pkg_dir = _package_deps(config)
+
+            generate_shared_lambda_files(graph, config, build_dir, pkg_dir, flow_fn)
+
+        if has_batch:
+            generate_batch_files(build_dir, config, flow_fn)
 
         state_machine = build_state_machine(graph, config)
         state_machine_path = build_dir / "statemachine.json"
@@ -136,6 +184,9 @@ class Builder:
         template_path.write_text(template)
 
         print(f"Build complete! Artifacts written to {build_dir}")
-        print(f"  - Lambda packages: {lambdas_dir}")
+        if has_lambda:
+            print(f"  - Lambda packages: {build_dir / 'lambdas'}")
+        if has_batch:
+            print(f"  - Batch packages: {build_dir / 'batch'}")
         print(f"  - State machine: {state_machine_path}")
         print(f"  - CloudFormation template: {template_path}")

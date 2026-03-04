@@ -40,19 +40,19 @@ def show_executions(
         ShowError: If operations fail
     """
     if state_machine_name is None:
-        state_machine_name = f"{flow_name}-state-machine"
+        state_machine_name = flow_name
 
     sf_client = get_sfn_client(region)
 
     try:
         if run_id:
             response = sf_client.describe_execution(
-                executionArn=f"arn:aws:states:{region}::execution:{state_machine_name}:{run_id}"
+                executionArn=f"arn:aws:states:{region}:000000000000:execution:{state_machine_name}:{run_id}"
             )
             executions = [_format_execution(response)]
         else:
             response = sf_client.list_executions(
-                stateMachineArn=f"arn:aws:states:{region}::stateMachine:{state_machine_name}",
+                stateMachineArn=f"arn:aws:states:{region}:000000000000:stateMachine:{state_machine_name}",
                 maxResults=max_count,
             )
             executions = [_format_execution(e) for e in response["executions"]]
@@ -71,11 +71,6 @@ def show_executions(
                 "Has the flow been deployed?"
             ) from e
         if error_code == "InvalidArn":
-            if endpoint:
-                raise ShowError(
-                    "Step Functions is not available in LocalStack. "
-                    "To test the full flow, deploy to real AWS."
-                ) from e
             raise ShowError(f"Invalid state machine ARN: {e}") from e
         if "is not enabled" in error_msg.lower():
             if endpoint:

@@ -716,28 +716,44 @@ def _run_task_with_retry(self, node: StepNode, input_data: Any, store: LocalStor
 
 ```
 lokki-build/
-├── lambdas/
-│   ├── get_birds/
-│   │   ├── Dockerfile
-│   │   └── handler.py          # thin entrypoint that imports lokki.runtime.lambdafunction
-│   ├── flap_bird/
-│   │   ├── Dockerfile
-│   │   └── handler.py
-│   └── join_birds/
-│       ├── Dockerfile
-│       └── handler.py
+├── lambdas/                    # Only if flow has Lambda steps
+│   ├── Dockerfile              # Shared Lambda image
+│   ├── handler.py              # Step dispatcher based on LOKKI_STEP_NAME
+│   ├── pyproject.toml
+│   └── uv.lock
+├── batch/                      # Only if flow has Batch steps
+│   ├── Dockerfile              # Shared Batch image
+│   ├── batch.py                # Batch step dispatcher
+│   ├── batch_main.py           # Batch entry point
+│   ├── pyproject.toml
+│   └── uv.lock
 ├── statemachine.json
 └── template.yaml
 ```
 
 > **Note**: For ZIP-based deployments (used for LocalStack testing), the structure differs.
 
+### Lambda/Batch Image Consolidation
+
+A single Docker image is used for both Lambda and Batch deployments. The image contains:
+- Python runtime with dependencies
+- `handler.py` for Lambda steps
+- `batch.py` and `batch_main.py` for Batch steps
+
+AWS Lambda's `Cmd` property is used to override the entrypoint at deployment time:
+- **Lambda steps**: `Cmd: ["handler.lambda_handler"]`
+- **Batch steps**: `Cmd: ["python", "-m", "lokki.runtime.batch_main"]`
+
+This eliminates the need for separate images per step and allows mixing Lambda and Batch steps in the same flow.
+
 Build steps in order:
 
 1. Resolve the `FlowGraph` from the flow function.
-2. For each `StepNode` in `graph.nodes`, generate a Lambda directory (`lambda_pkg.py`).
-3. Generate `statemachine.json` (`state_machine.py`).
-4. Generate `template.yaml` (`cloudformation.py`).
+2. Determine which job types exist (lambda, batch, or both).
+3. Generate Lambda files only if Lambda steps exist.
+4. Generate Batch files only if Batch steps exist.
+5. Generate `statemachine.json` (`state_machine.py`).
+6. Generate `template.yaml` (`cloudformation.py`).
 
 ---
 
@@ -1062,7 +1078,7 @@ The state machine JSON is inlined into the CloudFormation template using `!Sub` 
 
 ## 11. Lambda Packaging
 
-`lokki/builder/lambda_pkg.py` generates one directory per step under `lokki-build/lambdas/<step_name>/`.
+`lokki/builder/lambda_pkg.py` generates shared Lambda packaging files under `lokki-build/lambdas/`.
 
 ### Dockerfile
 
@@ -1086,17 +1102,19 @@ FROM public.ecr.aws/lambda/python:latest
 # Copy installed deps
 COPY --from=builder /build/deps ${LAMBDA_TASK_ROOT}/
 
-# Symlink the lokki library from the build context into the task root
-# (avoids copying lokki source into every image separately)
-COPY lokki/ ${LAMBDA_TASK_ROOT}/lokki/
-
-# Copy the step-specific handler entrypoint
+# Copy the shared handler entrypoint (dispatches to correct step)
 COPY handler.py ${LAMBDA_TASK_ROOT}/handler.py
 
 CMD ["handler.lambda_handler"]
 ```
 
-> **Symlink note**: Docker `COPY` does not support host symlinks into the image in a way that persists as symlinks inside the container. Instead, the `lokki/` source tree is `COPY`-ed once per image from the build context. To minimise duplication, Docker layer caching means this layer is shared across all step images when built from the same context — effectively the same benefit as symlinking. If the project uses a monorepo and lokki is an editable install, the wheel can be built once and `COPY`-ed into each image.
+The `handler.py` uses `LOKKI_STEP_NAME` and `LOKKI_MODULE_NAME` environment variables to dynamically import and execute the correct step function.
+
+> **Note**: The Lambda Dockerfile does not include batch.py or batch_main.py. Those are only needed for Batch steps and are in a separate `lokki-build/batch/` directory.
+
+### Batch Packaging
+
+`lokki/builder/batchjob/batch_pkg.py` generates Batch packaging files under `lokki-build/batch/`.
 
 ### ZIP Archive Packaging
 
@@ -1283,7 +1301,7 @@ class LokkiConfig:
 
     # AWS configuration (from [aws] table)
     artifact_bucket: str = ""
-    image_repository: str = ""  # "local", "docker.io", or ECR prefix
+    image_repository: str = ""  # "registry:ci" for local CI, or ECR prefix (e.g., "123456789.dkr.ecr.us-east-1.amazonaws.com")
     aws_region: str = "us-east-1"
     aws_endpoint: str = ""
     stepfunctions_role: str = ""
@@ -1398,6 +1416,21 @@ After loading and merging the TOML files, specific fields can be overridden by e
 At **build time** (`python flow_script.py build`), `load_config()` reads both TOML files from the filesystem and uses the merged result to populate the CloudFormation template and Dockerfiles (e.g. IAM role ARNs, image repository, artifact bucket name). The flow name is derived directly from the `@flow`-decorated function name (e.g. `birds_flow` → `"birds-flow"`, lowercased and underscores replaced with hyphens) and is not configurable — it is baked into the CloudFormation resource names and S3 key prefixes at build time.
 
 At **Lambda runtime**, the TOML files are not present. The Lambda functions receive their configuration entirely through environment variables injected by CloudFormation at deploy time — `LOKKI_ARTIFACT_BUCKET`, `LOKKI_FLOW_NAME` (set to the derived flow name), and any entries from `lambda.env` in the config.
+
+### Store Configuration
+
+The Lambda and Batch handlers use a store for reading input and writing output data. By default, they use S3 storage. For local testing, you can configure them to use local filesystem storage.
+
+| Environment variable | Description | Default |
+|---|---|---|
+| `LOKKI_STORE_TYPE` | Store type: `s3` or `local` | `s3` |
+| `LOKKI_STORE_PATH` | Base directory for local store (optional) | temp directory |
+
+Example for local testing:
+```bash
+LOKKI_STORE_TYPE=local
+LOKKI_STORE_PATH=/tmp/lokki-data
+```
 
 ---
 

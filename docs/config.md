@@ -32,7 +32,7 @@ Configuration values are resolved in the following order (highest to lowest):
 | Setting | Type | Default | Environment Variable | Description |
 |---------|------|---------|---------------------|-------------|
 | `artifact_bucket` | `str` | `""` | `LOKKI_ARTIFACT_BUCKET` | S3 bucket for pipeline data and artifacts |
-| `image_repository` | `str` | `""` | `LOKKI_IMAGE_REPOSITORY` | Docker repository (`local`, `docker.io`, or ECR prefix) |
+| `image_repository` | `str` | `""` | `LOKKI_IMAGE_REPOSITORY` | Docker repository: `"registry:ci"` for local CI, or ECR prefix (e.g., `"123456789.dkr.ecr.us-east-1.amazonaws.com"`) |
 | `region` | `str` | `"us-east-1"` | `LOKKI_AWS_REGION` | AWS region for deployments |
 | `endpoint` | `str` | `""` | `LOKKI_AWS_ENDPOINT` | AWS endpoint for local development (e.g., LocalStack) |
 | `stepfunctions_role` | `str` | `""` | - | ARN of existing Step Functions execution role |

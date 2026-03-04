@@ -5,12 +5,11 @@ import pandas as pd
 from lokki import flow, step
 
 
-@step
+@step(job_type="batch")
 def load_tlc_data(url: str) -> list[dict]:
     """
     Downloads a publicly available NYC taxi trips parquet file.
-    Groups data by pickup month (YYYY-MM).
-    Returns a list of dicts grouped by month.
+    Returns a subset of data for testing.
     """
     df = pd.read_parquet(url)
 
@@ -24,35 +23,47 @@ def load_tlc_data(url: str) -> list[dict]:
 
 
 @step
-def filter_by_fare(group_data: dict, min_fare: float = 0.0, **kwargs) -> dict:
+def filter_by_fare(data: list[dict], min_fare: float = 0.0, **kwargs) -> list[dict]:
     """Filter records by minimum fare."""
     if kwargs:
         min_fare = kwargs.get("min_fare", min_fare)
 
-    records = group_data["df"]
-    filtered = [r for r in records if r.get("fare_amount", 0) >= min_fare]
-    return {"month": group_data["month"], "df": filtered, "count": len(filtered)}
+    result = []
+    for group_data in data:
+        records = group_data.get("df", [])
+        filtered = [r for r in records if r.get("fare_amount", 0) >= min_fare]
+        result.append(
+            {"month": group_data["month"], "df": filtered, "count": len(filtered)}
+        )
+    return result
 
 
-@step
-def compute_month_stats(group_data: dict, include_tips: bool = True, **kwargs) -> dict:
+@step(job_type="batch")
+def compute_month_stats(
+    data: list[dict], include_tips: bool = True, **kwargs
+) -> list[dict]:
     """Monthly stats: trip count, mean fare, max tip."""
     if kwargs:
         include_tips = kwargs.get("include_tips", include_tips)
 
-    records = group_data.get("df", [])
+    result = []
+    for group_data in data:
+        records = group_data.get("df", [])
 
-    fares = [r["fare_amount"] for r in records if "fare_amount" in r]
-    tips = []
-    if include_tips:
-        tips = [r["tip_amount"] for r in records if "tip_amount" in r]
+        fares = [r["fare_amount"] for r in records if "fare_amount" in r]
+        tips = []
+        if include_tips:
+            tips = [r["tip_amount"] for r in records if "tip_amount" in r]
 
-    return {
-        "month": group_data.get("month", "unknown"),
-        "count": group_data.get("count", len(records)),
-        "avg_fare": sum(fares) / len(fares) if fares else 0,
-        "max_tip": max(tips) if tips else 0,
-    }
+        result.append(
+            {
+                "month": group_data.get("month", "unknown"),
+                "count": group_data.get("count", len(records)),
+                "avg_fare": sum(fares) / len(fares) if fares else 0,
+                "max_tip": max(tips) if tips else 0,
+            }
+        )
+    return result
 
 
 @step
@@ -99,17 +110,14 @@ def tlc_taxi_flow(
     format_type: str = "summary",
 ):
     """
-    NYC Taxi flow demonstrating various lokki API features:
-    - Flow-level parameters passed via **kwargs
-    - .map() for parallel processing
-    - .next() to chain steps inside a map block
-    - .agg() for aggregation
+    NYC Taxi flow demonstrating linear step -> step flow with Batch:
+    - .next() to chain steps
     """
     return (
         load_tlc_data(url)
-        .map(filter_by_fare)  # Flow params passed via **kwargs
+        .next(filter_by_fare)
         .next(compute_month_stats)
-        .agg(aggregate_stats)
+        .next(aggregate_stats)
         .next(format_output)
     )
 

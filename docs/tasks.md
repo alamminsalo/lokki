@@ -1078,8 +1078,40 @@ Code review identified several opportunities:
 | M40 - Flow Params via Kwargs | Complete |
 | M41 - Runtime Module Reorganization | Complete |
 | M42 - Code Modernization and Maintainability | Complete |
+| M43 - Lambda/Batch Image Consolidation | Complete |
+| M43.7 - LocalStack Pro Requirements | Complete |
+| M44 - Docker Image Integration Tests | Complete |
 
 ---
+
+## Milestone 44 — Docker Image Integration Tests
+
+_Purpose_: Add integration tests that build and test Docker images for Lambda and Batch handlers without requiring LocalStack.
+
+### Background
+
+- Unit tests run without Docker and are fast
+- Integration tests should verify Docker images work correctly
+- Tests should be skippable to avoid slowdown during normal test runs
+
+### Tasks
+
+- [x] **T44.1** Create `tests/test_docker_images.py`
+  - Add fixture to build nyc-taxi example
+  - Build Lambda and Batch Docker images
+  - Test Lambda handler with sample events
+
+- [x] **T44.2** Add Batch handler test
+  - Test Batch entry point with sample events
+  - Verify output is correct
+
+- [x] **T44.3** Configure skip behavior
+  - Skip by default using `@pytest.mark.skip`
+  - Add CLI flag to enable Docker tests
+
+- [x] **T44.4** Test cleanup
+  - Ensure Docker images are cleaned up after tests
+  - Use fixture teardown
 
 ## Milestone 41 — Runtime Module Reorganization
 
@@ -1128,6 +1160,103 @@ Currently:
   - Update imports in tests
 
 - [x] **T41.7** Run tests to verify changes work
+
+---
+
+## Milestone 45 — Test Flows Reorganization
+
+_Purpose_: Move test flows from examples to tests/flows directory. This separates demo examples from test-specific flows and allows test flows to use `host.docker.internal:8080` for pypiserver since Docker tests require Docker anyway.
+
+### Background
+
+Currently:
+- `examples/ci_test_pipeline/` is used by tests but lives in examples
+- `examples/nyc_taxi/` is used for Docker tests but has pypiserver config for host
+- Test flows should be in `tests/flows/` to keep them with other test code
+- Docker tests can use `host.docker.internal:8080` since they require Docker
+
+### Tasks
+
+- [x] **T45.1** Create `tests/flows/` directory structure
+
+- [x] **T45.2** Create `tests/flows/ci_pipeline/`
+  - Copy from `examples/ci_test_pipeline/`
+  - Rename flow from `ci_test_pipeline` → `ci_pipeline`
+  - Uses ZIP package type
+  - References lokki via path dependency (local dev)
+
+- [x] **T45.3** Create `tests/flows/docker_build/`
+  - Simple flow with pandas dependency
+  - Uses Docker image package type
+  - Uses `host.docker.internal:8080` for pypiserver in pyproject.toml
+
+- [x] **T45.4** Update test_localstack.py
+  - Change `TEST_PIPELINE_DIR` to `tests/flows/ci_pipeline/`
+  - Replace all `ci_test_pipeline` → `ci_pipeline`
+
+- [x] **T45.5** Update test_docker_images.py
+  - Point to `tests/flows/docker_build/` instead of `examples/nyc_taxi/`
+
+- [x] **T45.6** Update Taskfile.yaml
+  - Remove ci_test_pipeline build/deploy/invoke tasks
+
+- [x] **T45.7** Update GitHub workflows
+  - examples.yml: Remove ci_test_pipeline from matrix
+  - localstack.yml: Update to use tests/flows/ci_pipeline/
+
+- [x] **T45.8** Update examples/nyc_taxi/pyproject.toml
+  - Change from pypiserver to local lokki directory dependency
+
+- [x] **T45.9** Clean up
+  - Delete `examples/ci_test_pipeline/`
+  - Verify pytest ignores tests/flows/ (via python_files config)
+
+- [x] **T45.10** Run all tests to verify
+  - `uv run pytest tests/ -v`
+  - `uv run pytest tests/test_localstack.py -v --run-localstack`
+  - `uv run pytest tests/test_docker_images.py -v --run-docker`
+
+---
+
+## Milestone 46 — Local Store Support for Lambda/Batch Handlers
+
+_Purpose_: Add environment variable configuration to allow Lambda and Batch handlers to use local filesystem storage instead of S3, enabling full handler testing without AWS services.
+
+### Background
+
+Currently:
+- Lambda and Batch handlers hardcode `S3Store()` - no alternative store
+- Docker tests can only verify imports, not full handler execution
+- Full handler testing requires AWS/S3 mocking
+
+This milestone:
+- Adds `LOKKI_STORE_TYPE` environment variable to switch between S3 and local stores
+- Adds optional `LOKKI_STORE_PATH` for custom local storage directory
+- Enables full Lambda handler testing via HTTP POST in Docker tests
+
+### Tasks
+
+- [ ] **T46.1** Add store type configuration to config.py
+  - Add `store_type` field (default: "s3")
+  - Add `store_path` field (optional, for local store)
+  - Add environment variable support: `LOKKI_STORE_TYPE`, `LOKKI_STORE_PATH`
+
+- [ ] **T46.2** Update Lambda handler to use configurable store
+  - Modify `lokki/runtime/lambdafunction/lambda_handler.py`
+  - Check `LOKKI_STORE_TYPE` env var
+  - Use `LocalStore` when `LOKKI_STORE_TYPE=local`
+  - Default remains `S3Store` for backward compatibility
+
+- [ ] **T46.3** Update Batch handler to use configurable store
+  - Modify `lokki/runtime/batchjob/batch_handler.py`
+  - Same logic as Lambda handler
+
+- [ ] **T46.4** Update Docker test to invoke handler via HTTP POST
+  - Modify `tests/test_docker_images.py`
+  - Add `DOCKER_LAMBDA_STAY_OPEN=1` to Dockerfile template
+  - Set `LOKKI_STORE_TYPE=local` environment variable
+  - Add test method: POST to Lambda Runtime API
+  - Verify full handler execution with data processing
 
 ---
 
