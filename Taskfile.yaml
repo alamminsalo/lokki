@@ -27,6 +27,13 @@ tasks:
     cmds:
       - aws s3 mb s3://lokki
 
+  precommit:
+    desc: Run ruff, mypy, and tests
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+
   test:
     desc: Run all unit tests
     cmds:
