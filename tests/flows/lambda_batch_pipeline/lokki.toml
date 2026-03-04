@@ -1,0 +1,24 @@
+# lokki.toml - Lambda + Batch pipeline test configuration
+[aws]
+
+artifact_bucket = "lokki"
+image_repository = "registry:ci"
+endpoint = "http://localhost:4566"
+
+[lambda]
+package_type = "image"
+base_image = "public.ecr.aws/lambda/python:3.13"
+timeout = 300
+memory = 1024
+image_tag = "latest"
+
+[batch]
+base_image = "public.ecr.aws/lambda/python:3.13"
+job_queue = "default"
+job_definition_name = "lokki-batch"
+vcpu = 2
+memory_mb = 1024
+timeout_seconds = 3600
+
+[lambda.env]
+LOG_LEVEL = "INFO"
