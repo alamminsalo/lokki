@@ -19,15 +19,13 @@ WORKDIR /build
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps || true
+RUN uv pip install --system --no-cache -r pyproject.toml --target /build/deps
 
 FROM {base_image}
 
 COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
 COPY handler.py ${{LAMBDA_TASK_ROOT}}/handler.py
-
-COPY lokki/ ${{LAMBDA_TASK_ROOT}}/lokki/
 
 ENV LAMBDA_TASK_ROOT=/var/task
 
@@ -172,9 +170,7 @@ def _copy_project_files(
             if not uv_lock_target.exists():
                 shutil.copy(flow_uv_lock, uv_lock_target)
 
-    lokki_target = lambdas_dir / "lokki"
-    if not lokki_target.exists():
-        shutil.copytree(lokki_root / "lokki", lokki_target)
+    # Note: lokki is installed via pyproject.toml dependencies, not copied as source
 
 
 def _get_flow_module_path(

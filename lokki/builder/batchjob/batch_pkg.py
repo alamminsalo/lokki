@@ -157,10 +157,5 @@ def generate_batch_files(
 
             shutil.copy(lokki_uv_lock, uv_lock_target)
 
-    lokki_target = batch_dir / "lokki"
-    if not lokki_target.exists():
-        import shutil
-
-        shutil.copytree(lokki_root / "lokki", lokki_target)
-
+    # Note: lokki is installed via pyproject.toml dependencies, not copied as source
     return batch_dir

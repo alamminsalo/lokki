@@ -99,7 +99,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "lokkiflow" },
+    { name = "lokkiflow", directory = "../../../" },
     { name = "pandas", specifier = ">=2.0.0" },
 ]
 
@@ -123,17 +123,33 @@ wheels = [
 
 [[package]]
 name = "lokkiflow"
-version = "0.5.76"
-source = { registry = "https://pypi.org/simple" }
+version = "0.5.104"
+source = { directory = "../../../" }
 dependencies = [
     { name = "boto3" },
     { name = "pyyaml" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/71/74ba80979142675746a55677a8e3acc015fce46bc07e0669d2bc72d125ff/lokkiflow-0.5.76.tar.gz", hash = "sha256:abf8666edf3a5911e7aa2df7521f838e2854ec1fad60bfc52f0c12dfc173bd88", size = 261728, upload-time = "2026-03-02T12:20:24.08Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/d4/9fa4ab79a88c8daadbd419ba662ccabee5a773764a44b864367ecf815bf9/lokkiflow-0.5.76-py3-none-any.whl", hash = "sha256:a41af8d624e59589e948f7ba6f65612e9b4d864db2861f6cfd379ac16ef5f695", size = 56981, upload-time = "2026-03-02T12:20:22.335Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.42" },
+    { name = "docker", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "moto", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "openapi-spec-validator", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.32.5" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "numpy"

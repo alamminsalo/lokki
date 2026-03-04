@@ -217,7 +217,7 @@ class TestShowExecutionsErrors:
             {"Error": {"Code": "InvalidArn"}}, "DescribeExecution"
         )
 
-        with pytest.raises(ShowError, match="Step Functions is not available"):
+        with pytest.raises(ShowError, match="Invalid state machine ARN"):
             show_executions(
                 flow_name="test-flow",
                 run_id="test-run",
