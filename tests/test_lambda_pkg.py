@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from lokki.builder.lambdafunction import (
     _get_flow_module_path,
     generate_shared_lambda_files,
@@ -181,6 +183,26 @@ def test_zip_installs_to_lambdas_not_deps():
         )
 
         assert lambdas_dir.exists(), f"lambdas directory should exist at {lambdas_dir}"
+
+
+def test_zip_package_type_raises_when_no_pkg_dir():
+    """Test that ValueError is raised when pkg_dir is None with ZIP package type."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        build_dir = tmpdir / "lokki-build"
+
+        graph = MagicMock()
+        graph.name = "test-flow"
+
+        config = MagicMock()
+        config.lambda_cfg.package_type = "zip"
+
+        with pytest.raises(
+            ValueError, match="pkg_dir is required for ZIP package type"
+        ):
+            generate_shared_lambda_files(
+                graph, config, build_dir, pkg_dir=None, flow_fn=None
+            )
 
 
 def test_no_deps_in_parent_directory():
