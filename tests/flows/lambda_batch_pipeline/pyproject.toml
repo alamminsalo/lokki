@@ -1,0 +1,8 @@
+[project]
+name = "lambda-batch-pipeline-test"
+version = "0.1.0"
+description = "Test flow with lambda and batch steps for state machine testing"
+requires-python = ">=3.13"
+dependencies = [
+  "lokkiflow @ file:///${PROJECT_ROOT}/../../../",
+]
