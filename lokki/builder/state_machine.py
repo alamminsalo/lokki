@@ -170,7 +170,20 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             if prev_state:
                 states[prev_state]["Next"] = map_state_name
 
-            prev_state = map_state_name
+            # Determine what comes after the map
+            has_agg = getattr(entry, "has_aggregation", True)
+            next_step = getattr(entry, "next_step", None)
+
+            if not has_agg and next_step:
+                # Map without agg has a next step in the outer chain via .next()
+                next_state_name = to_pascal(next_step.name)
+                map_state["Next"] = next_state_name
+                del map_state["End"]  # Don't end the flow, continue to next step
+                prev_state = next_state_name
+            else:
+                # Map with agg OR map without agg that ends the flow
+                # will be handled by final "End" marking
+                prev_state = map_state_name
 
         elif isinstance(entry, MapCloseEntry):
             state_name = to_pascal(entry.agg_step.name)

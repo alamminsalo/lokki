@@ -238,3 +238,74 @@ class TestGraphEntryTypes:
 
         entry = MapCloseEntry(agg_step=agg_step)
         assert entry.agg_step.name == "agg_step"
+
+
+class TestMapWithoutAggregation:
+    """Tests for map blocks without aggregation."""
+
+    def test_map_without_agg_valid(self) -> None:
+        """Test that map without .agg() is valid and doesn't raise."""
+
+        @step
+        def get_events() -> list[dict]:
+            return [{"id": 1}, {"id": 2}]
+
+        @step
+        def send_webhook(event: dict) -> dict:
+            return {"sent": event["id"]}
+
+        head = get_events().map(send_webhook)
+        graph = FlowGraph(name="test", head=head)
+
+        assert len(graph.entries) == 2
+        assert isinstance(graph.entries[0], TaskEntry)
+        assert graph.entries[0].node.name == "get_events"
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert graph.entries[1].source.name == "get_events"
+        assert graph.entries[1].has_aggregation is False
+
+    def test_map_with_agg_still_works(self) -> None:
+        """Test that map with .agg() still works."""
+
+        @step
+        def get_items() -> list[int]:
+            return [1, 2, 3]
+
+        @step
+        def double(item: int) -> int:
+            return item * 2
+
+        @step
+        def sum_items(items: list[int]) -> int:
+            return sum(items)
+
+        head = get_items().map(double).agg(sum_items)
+        graph = FlowGraph(name="test", head=head)
+
+        assert len(graph.entries) == 3
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert graph.entries[1].has_aggregation is True
+        assert isinstance(graph.entries[2], MapCloseEntry)
+
+    def test_map_without_agg_multiple_inner_steps(self) -> None:
+        """Test map without agg with multiple inner steps."""
+
+        @step
+        def get_events() -> list[dict]:
+            return [{"id": 1}]
+
+        @step
+        def validate(event: dict) -> dict:
+            return event
+
+        @step
+        def send(event: dict) -> dict:
+            return {"sent": event["id"]}
+
+        head = get_events().map(validate).map(send)
+        graph = FlowGraph(name="test", head=head)
+
+        assert len(graph.entries) == 2
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert len(graph.entries[1].inner_steps) == 2
+        assert graph.entries[1].has_aggregation is False

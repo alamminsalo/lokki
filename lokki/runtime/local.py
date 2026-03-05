@@ -62,6 +62,9 @@ class LocalRunner:
                     graph.name, run_id, last_entry.node.name, "output.pkl.gz"
                 )
                 return store.read(str(result_path))
+            elif isinstance(last_entry, MapOpenEntry):
+                # Map without aggregation - return None (side-effect only)
+                return None
             return None
         finally:
             store.cleanup()

@@ -146,7 +146,7 @@ step1().next(step2).next(step3)
 
 ### `.agg(step_node, **kwargs)`
 
-Closes a Map block and aggregates results from parallel execution.
+Closes a Map block and aggregates results from parallel execution. **Optional** — map blocks can end without aggregation.
 
 **Parameters:**
 
@@ -157,7 +157,7 @@ Closes a Map block and aggregates results from parallel execution.
 
 **Returns:** `StepNode`
 
-**Example:**
+**Example with aggregation:**
 
 ```python
 @step
@@ -172,6 +172,27 @@ def process(item):
 def aggregate(items):
     return sum(items)
 
+# With aggregation - collect results
+get_items().map(process).agg(aggregate)
+```
+
+**Example without aggregation (side-effect only):**
+
+```python
+@step
+def get_events():
+    return [{"id": 1}, {"id": 2}, {"id": 3}]
+
+@step
+def send_webhook(event):
+    # Send webhook, no return value needed
+    requests.post("https://example.com/webhook", json=event)
+    return None  # Optional - None results are not written to store
+
+# Without aggregation - each event processed independently
+get_events().map(send_webhook)
+```
+
 get_items().map(process).agg(aggregate)
 ```
 
@@ -179,7 +200,7 @@ get_items().map(process).agg(aggregate)
 
 ## MapBlock Methods
 
-A `MapBlock` is returned by `.map()`. It supports:
+A `MapBlock` is returned by `.map()`. It supports chaining steps inside the map block. The `.agg()` method is **optional** — the map can end without aggregation for side-effect-only processing.
 
 ### `.map(step_node, concurrency_limit=None, **kwargs)`
 
@@ -201,6 +222,13 @@ Add a step to the inner chain (shorthand for `.map()`).
 
 ```python
 source.map(step1).next(step2).agg(aggregate)
+```
+
+Or without aggregation:
+
+```python
+# Event sending pipeline - each step processes independently
+source.map(send_event)  # No .agg() needed
 ```
 
 ---

@@ -83,6 +83,51 @@ class TestLocalRunner:
         result = runner.run(test_flow())
         assert result == 18
 
+    def test_run_map_without_agg(self) -> None:
+        """Test running a flow with map but no aggregation (side-effect only)."""
+
+        @step
+        def get_events() -> list[dict]:
+            return [{"id": 1}, {"id": 2}, {"id": 3}]
+
+        @step
+        def send_webhook(event: dict) -> dict:
+            return {"sent": event["id"]}
+
+        @flow
+        def test_flow() -> Any:
+            return get_events().map(send_webhook)
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result is None  # No aggregation, returns None
+
+    def test_run_map_with_none_result(self) -> None:
+        """Test running a map where inner step returns None (side-effect only)."""
+
+        @step
+        def get_items() -> list[int]:
+            return [1, 2, 3]
+
+        SENT: list[int] = []
+
+        @step
+        def notify(item: int) -> None:
+            SENT.append(item)
+
+        @flow
+        def test_flow() -> Any:
+            return get_items().map(notify)
+
+        runner = LocalRunner()
+        result = runner.run(test_flow())
+        assert result is None
+        assert set(SENT) == {
+            1,
+            2,
+            3,
+        }  # Order is non-deterministic due to parallel execution
+
     def test_run_map_with_next(self) -> None:
         """Test running a flow with .map().next().agg() pattern."""
 
