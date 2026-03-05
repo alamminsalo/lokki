@@ -346,3 +346,84 @@ class TestBuildStateMachineComplex:
             "Next" not in sm["States"]["Step2"]
             or sm["States"]["Step2"].get("Next") is None
         )
+
+
+class TestMapWithoutAggregation:
+    """Tests for state machine with map blocks without aggregation."""
+
+    def test_map_without_agg(self) -> None:
+        """Test state machine with map block without aggregation."""
+
+        @step
+        def get_events() -> list[dict]:
+            return [{"id": 1}, {"id": 2}]
+
+        @step
+        def send_webhook(event: dict) -> dict:
+            return {"sent": event["id"]}
+
+        # Must use map result as head, not the step itself
+        head = get_events().map(send_webhook)
+        graph = FlowGraph(name="event-flow", head=head)
+
+        config = LokkiConfig()
+        sm = build_state_machine(graph, config)
+
+        # Source step creates both task and map state
+        assert "GetEvents" in sm["States"]
+        assert "GetEventsMap" in sm["States"]
+
+        map_state = sm["States"]["GetEventsMap"]
+        assert map_state["Type"] == "Map"
+        assert map_state["End"] is True
+
+        inner_states = map_state["ItemProcessor"]["States"]
+        assert "SendWebhook" in inner_states
+
+
+class TestBatchJobTypes:
+    """Tests for state machine with Batch job types."""
+
+    def test_batch_task_state(self) -> None:
+        """Test that batch job types generate correct task states."""
+        from lokki.builder.state_machine import _batch_task_state
+        from lokki.decorators import RetryConfig
+
+        config = MagicMock(spec=LokkiConfig)
+        config.artifact_bucket = "test-bucket"
+        mock_step = MagicMock()
+        mock_step.name = "batch_step"
+        mock_step.retry = RetryConfig()
+        mock_step.vcpu = 4
+        mock_step.memory_mb = 8192
+
+        state = _batch_task_state(mock_step, config, "test-flow")
+
+        assert state["Type"] == "Task"
+        assert "batch:submitJob.sync" in state["Resource"]
+        assert "JobDefinition" in state["Parameters"]
+        assert state["Parameters"]["ContainerOverrides"]["Vcpus"] == 4
+        assert state["Parameters"]["ContainerOverrides"]["Memory"] == 8192
+
+    def test_batch_step_only(self) -> None:
+        """Test state machine with batch step only (no map)."""
+
+        @step(job_type="batch")
+        def batch_process(item: str) -> str:
+            return item.upper()
+
+        @step
+        def get_items() -> list[str]:
+            return ["a"]
+
+        get_items().map(batch_process).agg(batch_process)
+        graph = FlowGraph(name="batch-flow", head=batch_process)
+
+        config = LokkiConfig()
+        sm = build_state_machine(graph, config)
+
+        assert "GetItemsMap" in sm["States"]
+        map_state = sm["States"]["GetItemsMap"]
+        inner_states = map_state["ItemProcessor"]["States"]
+        assert "BatchProcess" in inner_states
+        assert "batch:submitJob.sync" in inner_states["BatchProcess"]["Resource"]
