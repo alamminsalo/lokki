@@ -101,12 +101,16 @@ def build_template(
                     else config.lambda_cfg.memory
                 ),
                 "job_type": entry.job_type,
+                "architecture": config.lambda_cfg.architecture,
+                "python_version": config.lambda_cfg.python_version,
             }
         elif isinstance(entry, MapOpenEntry):
             step_config[entry.source.name] = {
                 "timeout": config.lambda_cfg.timeout,
                 "memory": config.lambda_cfg.memory,
                 "job_type": "lambda",
+                "architecture": config.lambda_cfg.architecture,
+                "python_version": config.lambda_cfg.python_version,
             }
             for step in entry.inner_steps:
                 step_config[step.name] = {
@@ -115,6 +119,8 @@ def build_template(
                     "memory": getattr(step, "memory_mb", None)
                     or config.lambda_cfg.memory,
                     "job_type": getattr(step, "job_type", "lambda"),
+                    "architecture": config.lambda_cfg.architecture,
+                    "python_version": config.lambda_cfg.python_version,
                 }
         elif isinstance(entry, MapCloseEntry):
             step_config[entry.agg_step.name] = {
@@ -127,13 +133,17 @@ def build_template(
                     or config.lambda_cfg.memory
                 ),
                 "job_type": getattr(entry.agg_step, "job_type", "lambda"),
+                "architecture": config.lambda_cfg.architecture,
+                "python_version": config.lambda_cfg.python_version,
             }
 
     for step_name in step_names:
         cfg = step_config.get(step_name, {})
         timeout = cfg.get("timeout", config.lambda_cfg.timeout)
         memory = cfg.get("memory", config.lambda_cfg.memory)
-        job_type = cfg.get("job_type", "lambda")
+        job_type = cfg.get("job_type", "Lambda")
+        architecture = cfg.get("architecture", "x86_64")
+        python_version = cfg.get("python_version", "3.13")
 
         env_vars = {
             "LOKKI_ARTIFACT_BUCKET": {"Ref": "S3Bucket"},
@@ -149,8 +159,9 @@ def build_template(
                 "Type": "AWS::Lambda::Function",
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
-                    "Runtime": "python3.13",
+                    "Runtime": f"python{python_version}",
                     "PackageType": "Zip",
+                    "Architectures": [architecture],
                     "Code": {
                         "S3Bucket": {"Ref": "S3Bucket"},
                         "S3Key": {
@@ -170,6 +181,7 @@ def build_template(
                 "Properties": {
                     "FunctionName": {"Fn::Sub": "${FlowName}-" + step_name},
                     "PackageType": "Image",
+                    "Architectures": [architecture],
                     "Code": {
                         "ImageUri": {"Fn::Sub": "${ECRRepoPrefix}/lokki:${ImageTag}"}
                     },
@@ -305,6 +317,7 @@ def build_template(
             "Properties": {
                 "JobDefinitionName": {"Ref": "BatchJobDefinitionName"},
                 "Type": "container",
+                "PlatformCapabilities": [config.batch_cfg.architecture.upper()],
                 "ContainerProperties": {
                     "Image": {"Fn::Sub": batch_image},
                     "Vcpus": config.batch_cfg.vcpu,

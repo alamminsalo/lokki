@@ -1081,6 +1081,7 @@ Code review identified several opportunities:
 | M43 - Lambda/Batch Image Consolidation | Complete |
 | M43.7 - LocalStack Pro Requirements | Complete |
 | M44 - Docker Image Integration Tests | Complete |
+| M47 - Optional Aggregation for Map Blocks | Pending |
 
 ---
 
@@ -1257,6 +1258,111 @@ This milestone:
   - Set `LOKKI_STORE_TYPE=local` environment variable
   - Add test method: POST to Lambda Runtime API
   - Verify full handler execution with data processing
+
+---
+
+## Milestone 47 — Optional Aggregation for Map Blocks
+
+_Purpose: Allow map blocks to end without `.agg()` for side-effect-only processing pipelines. This enables use cases like event sending, data export, and notification pipelines where each item is processed independently without needing aggregation._
+
+### Background
+
+Previously, all map blocks required closing with `.agg()`. This was too restrictive for pipelines where:
+- Each item triggers an independent side effect (webhook, notification, database write)
+- Results are written to external systems and don't need to be collected
+- The user prefers to handle parallelism without aggregation
+
+### Breaking Changes
+
+- Flows that previously required `.agg()` to close map blocks will now be valid without it
+- Map blocks that don't call `.agg()` will now be allowed (previously raised `ValueError`)
+
+### Tasks
+
+- [x] **T47.1** Update MapBlock to track closure status
+  - Add `_closed: bool = False` attribute to `MapBlock` class in `decorators.py`
+  - Set `_closed = True` in `.agg()` method
+
+- [x] **T47.2** Remove validation for open MapBlocks at flow end
+  - Modify `graph.py:_validate()` to not raise error when flow ends with open MapBlock
+
+- [x] **T47.3** Add `has_aggregation` field to MapOpenEntry
+  - Add `has_aggregation: bool = True` field to `MapOpenEntry` dataclass
+  - Set to `False` when map block has no agg in `_resolve_map_block()`
+
+- [x] **T47.4** Update local runner to handle maps without aggregation
+  - Modify `_run_map()` in `runtime/local.py` to work without aggregation step
+  - Write final item results to store (same as current, but no agg read)
+
+- [x] **T47.5** Update state machine for maps without aggregation
+  - Modify `builder/state_machine.py` to skip aggregation task when `has_aggregation=False`
+  - Keep ResultWriter to collect results to S3
+  - Connect map output to next step or end of flow
+
+- [x] **T47.6** Update CloudFormation template (likely no changes needed)
+
+- [x] **T47.7** Update Lambda handler to skip writing None results
+  - Modify `runtime/lambdafunction/lambda_handler.py`
+  - Add check: `if result is not None: store.write(...)`
+
+- [x] **T47.8** Update Batch handler to skip writing None results
+  - Modify `runtime/batchjob/batch_handler.py`
+  - Same change as T47.7
+
+- [x] **T47.9** Add unit tests for maps without aggregation
+  - `tests/test_graph.py`: Test flow ending with `.map(step)` (no `.agg()`)
+  - `tests/test_builder.py`: Test state machine generation for maps without agg
+  - `tests/test_runner.py`: Test local runner for maps without agg
+
+- [x] **T47.10** Add integration test for event sending pipeline
+  - Create test flow that sends events without aggregation
+
+---
+
+## Milestone 48 — Architecture Support
+
+_Purpose: Add support for arm64 (Graviton2) architecture in addition to x86_64 for Lambda functions and Batch jobs. This enables cost optimization and performance benefits on ARM-based instances._
+
+### Background
+
+AWS Lambda and Batch support both x86_64 and arm64 (Graviton2) architectures. Currently, lokki only supports x86_64. This milestone adds configurable architecture support.
+
+### Breaking Changes
+
+- Default architecture is now `x86_64` (explicit for backward compatibility)
+
+### Tasks
+
+- [ ] **T48.1** Update config for Lambda architecture
+  - Add `architecture: str = "x86_64"` to `LambdaConfig`
+  - Validate it's either "x86_64" or "arm64"
+
+- [ ] **T48.2** Update config for Batch architecture
+  - Add `architecture: str = "x86_64"` to `BatchConfig`
+  - Validate it's either "x86_64" or "arm64"
+
+- [x] **T48.3** Update CloudFormation Lambda function for architecture
+  - Add `Architectures` property to Lambda Function resource
+  - Use parameter or config value
+
+- [x] **T48.4** Update CloudFormation Batch job definition for architecture
+  - Add `platformCapabilities` and architecture to container properties
+  - Use config value for architecture
+
+- [x] **T48.5** Update state machine architecture handling (if needed)
+  - Ensure architecture is passed correctly to Lambda
+
+- [x] **T48.6** Update Lambda packaging for architecture
+  - For ZIP packages: ensure correct platform target
+  - For Image packages: architecture is handled in Dockerfile
+
+- [x] **T48.7** Update Batch packaging for architecture
+  - Pass architecture to Dockerfile build
+
+- [x] **T48.8** Add unit tests for architecture config
+  - Test LambdaConfig with arm64
+  - Test BatchConfig with arm64
+  - Test validation errors for invalid architecture
 
 ---
 

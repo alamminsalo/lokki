@@ -167,6 +167,7 @@ class MapBlock:
         self._next: StepNode | None = None
         self._flow_kwargs: dict[str, Any] = {}
         self.concurrency_limit = concurrency_limit
+        self._closed: bool = False  # Track if block is closed with .agg()
 
     @property
     def inner_steps(self) -> list[StepNode]:
@@ -208,6 +209,7 @@ class MapBlock:
         Note:
             Flow parameters are passed via **kwargs to the step function.
         """
+        self._closed = True
         step_node._closes_map_block = True
         step_node._map_block = self
         self._next = step_node

@@ -490,7 +490,7 @@ class TestFlowGraph:
         assert graph.entries[2].node.name == "third"
 
     def test_flow_graph_open_map_block_raises(self) -> None:
-        """Test that flow ending with open Map block raises ValueError."""
+        """Test that flow ending with open Map block is now valid (no agg required)."""
 
         @step
         def get_items() -> list[str]:
@@ -504,13 +504,13 @@ class TestFlowGraph:
         def open_map_flow():
             return get_items().map(process)
 
-        with pytest.raises(ValueError) as exc_info:
-            open_map_flow()
-
-        assert "open Map block" in str(exc_info.value)
+        graph = open_map_flow()
+        assert len(graph.entries) == 2
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert graph.entries[1].has_aggregation is False
 
     def test_flow_graph_nested_map_raises(self) -> None:
-        """Test that nested .map() calls raise ValueError."""
+        """Test that .map().map() on same source is valid (adds to inner chain)."""
 
         @step
         def get_items() -> list[str]:
@@ -528,9 +528,5 @@ class TestFlowGraph:
         def nested_map_flow():
             return get_items().map(inner1).map(inner2)
 
-        with pytest.raises(ValueError) as exc_info:
-            nested_map_flow()
-
-        assert "Nested .map()" in str(exc_info.value) or "open Map block" in str(
-            exc_info.value
-        )
+        graph = nested_map_flow()
+        assert len(graph.entries[1].inner_steps) == 2

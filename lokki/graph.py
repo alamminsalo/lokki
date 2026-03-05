@@ -25,6 +25,10 @@ class MapOpenEntry:
     source: StepNode
     inner_steps: list[StepNode] = field(default_factory=list)
     concurrency_limit: int | None = None
+    has_aggregation: bool = True  # False when map ends without .agg()
+    next_step: StepNode | None = (
+        None  # Step after the map block (via .next() on MapBlock)
+    )
 
 
 @dataclass(slots=True, frozen=True)
@@ -138,11 +142,18 @@ class FlowGraph:
                 break
             step = step._next
 
+        has_aggregation = block._closed  # True if .agg() was called
+        next_step = (
+            block._next if not has_aggregation else None
+        )  # Step after map if no agg
+
         self.entries.append(
             MapOpenEntry(
                 source=block.source,
                 inner_steps=inner_steps,
                 concurrency_limit=block.concurrency_limit,
+                has_aggregation=has_aggregation,
+                next_step=next_step,
             )
         )
 
@@ -151,7 +162,6 @@ class FlowGraph:
 
     def _validate(self) -> None:
         """Validate the resolved graph for common errors."""
-        open_map_blocks: dict[int, MapBlock] = {}
         in_map_block: bool = False
 
         for entry in self.entries:
@@ -162,24 +172,12 @@ class FlowGraph:
                         "Use .next() to chain steps inside a map block, "
                         "or close with .agg() before opening a new .map()"
                     )
-                map_block = entry.source._map_block
-                if map_block is not None:
-                    open_map_blocks[id(map_block)] = map_block
                 in_map_block = True
 
             if isinstance(entry, MapCloseEntry):
-                if entry.agg_step._map_block is not None:
-                    block_id = id(entry.agg_step._map_block)
-                    if block_id in open_map_blocks:
-                        del open_map_blocks[block_id]
-                        in_map_block = False
+                in_map_block = False
 
-        if open_map_blocks:
-            block = list(open_map_blocks.values())[0]
-            raise ValueError(
-                f"Flow ends with an open Map block from step '{block.source.name}'. "
-                "Use .agg() to close the Map block before ending the flow."
-            )
+        # Note: Map blocks can end without .agg() for side-effect-only processing
 
     @property
     def step_names(self) -> set[str]:

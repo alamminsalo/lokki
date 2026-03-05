@@ -282,3 +282,134 @@ class TestBuilderBuild:
 
             # Both steps should be in the state machine
             assert "Step1" in sm["States"] or "GetItems" in sm["States"]
+
+    def test_build_lambda_zip_x86_64(self) -> None:
+        """Test that ZIP Lambda build uses x86_64 platform."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        config = LokkiConfig()
+        config.lambda_cfg.package_type = "zip"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "Architectures" in content
+            assert "x86_64" in content
+
+    def test_build_lambda_zip_arm64(self) -> None:
+        """Test that ZIP Lambda build uses arm64 platform."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        config = LokkiConfig()
+        config.lambda_cfg.package_type = "zip"
+        config.lambda_cfg.architecture = "arm64"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "Architectures" in content
+            assert "arm64" in content
+
+    def test_build_lambda_image_x86_64(self) -> None:
+        """Test that Image Lambda has x86_64 architecture."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        config = LokkiConfig()
+        config.lambda_cfg.package_type = "image"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "Architectures" in content
+            assert "x86_64" in content
+
+    def test_build_lambda_image_arm64(self) -> None:
+        """Test that Image Lambda has arm64 architecture."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        config = LokkiConfig()
+        config.lambda_cfg.package_type = "image"
+        config.lambda_cfg.architecture = "arm64"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "Architectures" in content
+            assert "arm64" in content
+
+    def test_build_batch_x86_64(self) -> None:
+        """Test that Batch job has x86_64 platform capability."""
+
+        @step(job_type="batch")
+        def batch_step() -> None:
+            pass
+
+        @step
+        def get_items() -> list[str]:
+            return ["a"]
+
+        get_items().map(batch_step).agg(batch_step)
+        graph = FlowGraph(name="batch-flow", head=batch_step)
+        config = LokkiConfig()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "PlatformCapabilities" in content
+            assert "X86_64" in content
+
+    def test_build_batch_arm64(self) -> None:
+        """Test that Batch job has ARM64 platform capability."""
+
+        @step(job_type="batch")
+        def batch_step() -> None:
+            pass
+
+        @step
+        def get_items() -> list[str]:
+            return ["a"]
+
+        get_items().map(batch_step).agg(batch_step)
+        graph = FlowGraph(name="batch-flow", head=batch_step)
+        config = LokkiConfig()
+        config.batch_cfg.architecture = "arm64"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.build_dir = str(Path(tmpdir) / "lokki-build")
+            Builder.build(graph, config, flow_fn=None)
+
+            template_path = Path(config.build_dir) / "template.yaml"
+            content = template_path.read_text()
+            assert "PlatformCapabilities" in content
+            assert "ARM64" in content

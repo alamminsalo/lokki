@@ -90,6 +90,20 @@ def make_batch_handler(
             # Call step function using Runtime.call_step
             result = Runtime.call_step(fn, input_data, flow_params)
 
+            # Handle None result (side-effect only step)
+            if result is None:
+                logger.info(
+                    f"Batch step completed: {step_name} in "
+                    f"{(datetime.now() - start_time).total_seconds():.3f}s (no output)",
+                    extra={
+                        "event": "step_complete",
+                        "step": step_name,
+                        "duration": (datetime.now() - start_time).total_seconds(),
+                        "status": "success",
+                    },
+                )
+                return {"input": None, "flow": lambda_event.flow.to_dict()}
+
             output_url = store.write(flow_name, run_id, step_name, result)
 
             if isinstance(result, list):

@@ -13,10 +13,12 @@
 - Marks a regular Python function as a pipeline step.
 - Each step is independently packaged and executed (as an AWS Lambda function).
 - **S3 abstraction**: inputs and outputs are automatically serialised to/from S3. Functions are authored as if they receive and return plain Python objects; lokki handles all S3 URL resolution transparently.
-- Decorated steps expose two chaining methods:
+- Decorated steps expose chaining methods:
   - `.map(step_fn)` — fan-out: runs the next step in parallel once per item in the current step's output (list). Starts a Map block in the state machine.
-  - `.agg(step_fn)` — fan-in: collects all parallel outputs into a list and passes it to the next step as a single input. Ends the current Map block.
+  - `.agg(step_fn)` — fan-in: collects all parallel outputs into a list and passes it to the next step as a single input. Ends the current Map block. **Optional** — map blocks can end without aggregation for side-effect-only processing.
+  - `.next(step_fn)` — sequential chaining without parallelism.
 - Steps can be chained: `step_a().map(step_b).agg(step_c)`.
+- Map blocks without `.agg()` are valid — useful for event sending, data export, or notification pipelines where each item is processed independently.
 
 ### `@flow` Decorator
 
@@ -76,8 +78,8 @@ def linear_flow():
 - The output of the previous step becomes the input to the next step
 - This is equivalent to a simple linear pipeline without map/aggregation
 - Multiple `.next()` calls create a linear chain: `A.next(B).next(C)` → A → B → C
-- Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section until `.agg(step)` is called:
-- The flow must raise an exception if the flow ends with an open Map block.
+- Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section until `.agg(step)` is called (or the flow ends):
+- Map blocks can end without `.agg()` — useful for side-effect-only processing (event sending, notifications, etc.)
 - Nested .map() calls is not supported and should raise an exception.
 
 ```python
@@ -358,6 +360,7 @@ In AWS Lambda, logs are emitted to CloudWatch. The handler logs:
 - All inter-step data is serialised using **gzip-compressed pickle** and stored in S3 under a structured key prefix (e.g. `s3://<bucket>/lokki/<run_id>/<step_name>/output.pkl.gz`).
 - Step functions receive Python objects, not S3 URLs — lokki's runtime wrapper handles download before invocation and upload after return.
 - The S3 bucket and prefix are configurable via `lokki.toml` or environment variable override.
+- **Optional output**: If a step function returns `None`, no output is written to the store. This is useful for side-effect-only steps (e.g., sending webhooks, notifications).
 
 ---
 

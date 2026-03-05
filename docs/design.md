@@ -368,11 +368,11 @@ def agg_flow(seed=100):
 | Method | Input | Flow params via | Output | Use Case |
 |--------|-------|----------------|--------|------------|
 | `.map(step)` | list | **kwargs | list (per-item) | Parallel processing |
-| `.agg(step)` | list | **kwargs | single value | Aggregation |
+| `.agg(step)` | list | **kwargs | single value | Aggregation (optional) |
 | `.next(step)` | previous output | **kwargs | any | Sequential chain |
 
 **Error conditions:**
-- Flow ending with an open Map block (without `.agg()`) must raise an exception
+- Map blocks can end without `.agg()` — useful for side-effect-only processing
 - Nested `.map()` calls are not supported and should raise an exception
 
 ---
@@ -390,6 +390,7 @@ class TaskEntry:
 class MapOpenEntry:
     source: StepNode
     inner_steps: list[StepNode]
+    has_aggregation: bool = True  # False when map ends without .agg()
 
 @dataclass
 class MapCloseEntry:
@@ -402,8 +403,16 @@ The resolved `entries: list[TaskEntry | MapOpenEntry | MapCloseEntry]` is the si
 
 ```
 TaskEntry(get_birds)
-MapOpenEntry(source=get_birds, inner_steps=[flap_bird])
+MapOpenEntry(source=get_birds, inner_steps=[flap_bird], has_aggregation=True)
 MapCloseEntry(agg_step=join_birds)
+```
+
+**Example — map without aggregation (event sending):**
+
+```
+TaskEntry(get_events)
+MapOpenEntry(source=get_events, inner_steps=[send_webhook], has_aggregation=False)
+# No MapCloseEntry - map ends without aggregation
 ```
 
 ---
