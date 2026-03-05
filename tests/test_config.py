@@ -280,3 +280,26 @@ class TestLoadConfig:
 
             config = load_config()
             assert config.artifact_bucket == "local-bucket"
+
+    def test_load_config_env_batch_overrides(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that batch environment variables override config."""
+        monkeypatch.setenv("LOKKI_BATCH_JOB_QUEUE", "env-queue")
+        monkeypatch.setenv("LOKKI_BATCH_JOB_DEFINITION", "env-definition")
+        monkeypatch.setenv("LOKKI_AWS_REGION", "us-west-2")
+        monkeypatch.setenv("LOKKI_LOG_LEVEL", "DEBUG")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.toml")
+            )
+            mp.setattr(
+                "lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.toml")
+            )
+
+            config = load_config()
+            assert config.batch_cfg.job_queue == "env-queue"
+            assert config.batch_cfg.job_definition_name == "env-definition"
+            assert config.aws_region == "us-west-2"
+            assert config.logging.level == "DEBUG"
