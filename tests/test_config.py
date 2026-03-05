@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from lokki.config import (
+    BatchConfig,
     LambdaConfig,
     LokkiConfig,
     _deep_merge,
@@ -143,10 +144,52 @@ class TestLambdaConfig:
         with pytest.raises(ValueError, match="memory must be between"):
             LambdaConfig(memory=11000)
 
+    def test_architecture_x86_64(self) -> None:
+        """Test default x86_64 architecture."""
+        config = LambdaConfig()
+        assert config.architecture == "x86_64"
+
+    def test_architecture_arm64(self) -> None:
+        """Test arm64 architecture."""
+        config = LambdaConfig(architecture="arm64")
+        assert config.architecture == "arm64"
+
+    def test_invalid_architecture(self) -> None:
+        """Test invalid architecture raises ValueError."""
+        with pytest.raises(ValueError, match="architecture must be"):
+            LambdaConfig(architecture="invalid")
+
+
+class TestBatchConfig:
+    """Tests for BatchConfig dataclass."""
+
+    def test_batch_config_defaults(self):
+        config = BatchConfig()
+        assert config.job_queue == ""
+        assert config.job_definition_name == ""
+        assert config.timeout_seconds == 3600
+        assert config.vcpu == 2
+        assert config.memory_mb == 4096
+        assert config.image == ""
+        assert config.architecture == "x86_64"
+
+    def test_batch_config_arm64(self) -> None:
+        """Test BatchConfig with arm64 architecture."""
+        config = BatchConfig(architecture="arm64")
+        assert config.architecture == "arm64"
+
+    def test_batch_invalid_architecture(self) -> None:
+        """Test invalid architecture raises ValueError."""
+        with pytest.raises(ValueError, match="architecture must be"):
+            BatchConfig(architecture="invalid")
+
+    def test_batch_invalid_vcpu(self) -> None:
+        """Test vcpu <= 0 raises ValueError."""
+        with pytest.raises(ValueError, match="vcpu must be positive"):
+            BatchConfig(vcpu=0)
+
 
 class TestLokkiConfig:
-    """Tests for LokkiConfig dataclass."""
-
     def test_default_values(self) -> None:
         """Test default values for LokkiConfig."""
         config = LokkiConfig()

@@ -1319,4 +1319,51 @@ Previously, all map blocks required closing with `.agg()`. This was too restrict
 
 ---
 
+## Milestone 48 — Architecture Support
+
+_Purpose: Add support for arm64 (Graviton2) architecture in addition to x86_64 for Lambda functions and Batch jobs. This enables cost optimization and performance benefits on ARM-based instances._
+
+### Background
+
+AWS Lambda and Batch support both x86_64 and arm64 (Graviton2) architectures. Currently, lokki only supports x86_64. This milestone adds configurable architecture support.
+
+### Breaking Changes
+
+- Default architecture is now `x86_64` (explicit for backward compatibility)
+
+### Tasks
+
+- [ ] **T48.1** Update config for Lambda architecture
+  - Add `architecture: str = "x86_64"` to `LambdaConfig`
+  - Validate it's either "x86_64" or "arm64"
+
+- [ ] **T48.2** Update config for Batch architecture
+  - Add `architecture: str = "x86_64"` to `BatchConfig`
+  - Validate it's either "x86_64" or "arm64"
+
+- [x] **T48.3** Update CloudFormation Lambda function for architecture
+  - Add `Architectures` property to Lambda Function resource
+  - Use parameter or config value
+
+- [x] **T48.4** Update CloudFormation Batch job definition for architecture
+  - Add `platformCapabilities` and architecture to container properties
+  - Use config value for architecture
+
+- [x] **T48.5** Update state machine architecture handling (if needed)
+  - Ensure architecture is passed correctly to Lambda
+
+- [x] **T48.6** Update Lambda packaging for architecture
+  - For ZIP packages: ensure correct platform target
+  - For Image packages: architecture is handled in Dockerfile
+
+- [x] **T48.7** Update Batch packaging for architecture
+  - Pass architecture to Dockerfile build
+
+- [x] **T48.8** Add unit tests for architecture config
+  - Test LambdaConfig with arm64
+  - Test BatchConfig with arm64
+  - Test validation errors for invalid architecture
+
+---
+
 ## Summary

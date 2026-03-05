@@ -99,6 +99,16 @@ def _package_deps(config: LokkiConfig) -> Path:
     pkg_dir = build_dir / "packages"
     pkg_dir.mkdir(parents=True)
 
+    # Map lokki architecture to manylinux platform
+    arch_platform_map = {
+        "x86_64": "x86_64-manylinux2014",
+        "arm64": "aarch64-manylinux2014",
+    }
+    platform = arch_platform_map.get(
+        config.lambda_cfg.architecture, "x86_64-manylinux2014"
+    )
+    python_version = config.lambda_cfg.python_version
+
     # Collect packages dir
     subprocess.run(
         [
@@ -108,9 +118,9 @@ def _package_deps(config: LokkiConfig) -> Path:
             "--no-installer-metadata",
             "--no-compile-bytecode",
             "--python-platform",
-            "x86_64-manylinux2014",
+            platform,
             "--python",
-            "3.13",
+            python_version,
             "--target",
             pkg_dir,
             "-r",

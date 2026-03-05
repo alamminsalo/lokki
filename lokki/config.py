@@ -61,17 +61,21 @@ class LambdaConfig:
     Attributes:
         package_type: Package type - "image" (Docker) or "zip".
         base_image: Docker base image for Lambda.
+        python_version: Python version (e.g., "3.13").
         timeout: Lambda timeout in seconds.
         memory: Lambda memory in MB.
         image_tag: Docker image tag for Lambda.
+        architecture: CPU architecture - "x86_64" or "arm64".
         env: Environment variables passed to Lambda functions.
     """
 
     package_type: str = "image"  # "image" or "zip"
     base_image: str = "public.ecr.aws/lambda/python:3.13"
+    python_version: str = "3.13"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
+    architecture: str = "x86_64"
     env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -87,6 +91,10 @@ class LambdaConfig:
             raise ValueError(
                 f"memory must be between 128 and 10240 MB, got {self.memory}"
             )
+        if self.architecture not in ("x86_64", "arm64"):
+            raise ValueError(
+                f"architecture must be 'x86_64' or 'arm64', got '{self.architecture}'"
+            )
 
 
 @dataclass(slots=True)
@@ -97,20 +105,24 @@ class BatchConfig:
         job_queue: AWS Batch job queue name.
         job_definition_name: Base name for job definitions.
         base_image: Docker base image for Batch jobs.
+        python_version: Python version (e.g., "3.13").
         timeout_seconds: Default job timeout in seconds.
         vcpu: Default number of vCPUs for jobs.
         memory_mb: Default memory in MB for jobs.
         image: Docker image for jobs (defaults to Lambda image if empty).
+        architecture: CPU architecture - "x86_64" or "arm64".
         env: Environment variables passed to Batch jobs.
     """
 
     job_queue: str = ""
     job_definition_name: str = ""
-    base_image: str = "python:3.11-slim"
+    base_image: str = "python:3.13-slim"
+    python_version: str = "3.13"
     timeout_seconds: int = 3600
     vcpu: int = 2
     memory_mb: int = 4096
     image: str = ""
+    architecture: str = "x86_64"
     env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -121,6 +133,10 @@ class BatchConfig:
         if self.timeout_seconds <= 0:
             raise ValueError(
                 f"timeout_seconds must be positive, got {self.timeout_seconds}"
+            )
+        if self.architecture not in ("x86_64", "arm64"):
+            raise ValueError(
+                f"architecture must be 'x86_64' or 'arm64', got '{self.architecture}'"
             )
 
 
@@ -172,19 +188,23 @@ class LokkiConfig:
             base_image=lambda_config.get(
                 "base_image", "public.ecr.aws/lambda/python:3.13"
             ),
+            python_version=lambda_config.get("python_version", "3.13"),
             timeout=lambda_config.get("timeout", 900),
             memory=lambda_config.get("memory", 512),
             image_tag=lambda_config.get("image_tag", "latest"),
+            architecture=lambda_config.get("architecture", "x86_64"),
             env=lambda_config.get("env", {}),
         )
         batch_cfg = BatchConfig(
             job_queue=batch_config.get("job_queue", ""),
             job_definition_name=batch_config.get("job_definition_name", ""),
-            base_image=batch_config.get("base_image", "python:3.11-slim"),
+            base_image=batch_config.get("base_image", "python:3.13-slim"),
+            python_version=batch_config.get("python_version", "3.13"),
             timeout_seconds=batch_config.get("timeout_seconds", 3600),
             vcpu=batch_config.get("vcpu", 2),
             memory_mb=batch_config.get("memory_mb", 4096),
             image=batch_config.get("image", ""),
+            architecture=batch_config.get("architecture", "x86_64"),
             env=batch_config.get("env", {}),
         )
         logging_cfg = LoggingConfig(

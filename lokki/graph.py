@@ -177,7 +177,7 @@ class FlowGraph:
             if isinstance(entry, MapCloseEntry):
                 in_map_block = False
 
-        # Note: Map blocks can end without .agg() - this is valid for side-effect-only processing
+        # Note: Map blocks can end without .agg() for side-effect-only processing
 
     @property
     def step_names(self) -> set[str]:
