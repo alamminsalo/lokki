@@ -111,7 +111,7 @@ requires-dist = [{ name = "lokkiflow", directory = "../../../" }]
 
 [[package]]
 name = "lokkiflow"
-version = "0.5.107"
+version = "0.5.111"
 source = { directory = "../../../" }
 dependencies = [
     { name = "boto3" },

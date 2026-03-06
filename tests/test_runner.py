@@ -194,7 +194,7 @@ class TestLocalRunner:
 
 class TestLocalStore:
     def test_store_write_read(self, tmp_path: Path) -> None:
-        from lokki.runtime.local import LocalStore
+        from lokki.store.local import LocalStore
 
         store = LocalStore(tmp_path)
         store.write("flow", "run1", "step1", {"key": "value"})
@@ -203,7 +203,7 @@ class TestLocalStore:
         assert result == {"key": "value"}
 
     def test_store_write_manifest(self, tmp_path: Path) -> None:
-        from lokki.runtime.local import LocalStore
+        from lokki.store.local import LocalStore
 
         store = LocalStore(tmp_path)
         items = [{"item": "a", "index": 0}, {"item": "b", "index": 1}]

@@ -26,9 +26,7 @@ class MapOpenEntry:
     inner_steps: list[StepNode] = field(default_factory=list)
     concurrency_limit: int | None = None
     has_aggregation: bool = True  # False when map ends without .agg()
-    next_step: StepNode | None = (
-        None  # Step after the map block (via .next() on MapBlock)
-    )
+    direct_pass: bool = False  # Pass results in memory between inner steps
 
 
 @dataclass(slots=True, frozen=True)
@@ -143,9 +141,6 @@ class FlowGraph:
             step = step._next
 
         has_aggregation = block._closed  # True if .agg() was called
-        next_step = (
-            block._next if not has_aggregation else None
-        )  # Step after map if no agg
 
         self.entries.append(
             MapOpenEntry(
@@ -153,7 +148,7 @@ class FlowGraph:
                 inner_steps=inner_steps,
                 concurrency_limit=block.concurrency_limit,
                 has_aggregation=has_aggregation,
-                next_step=next_step,
+                direct_pass=block.direct_pass,
             )
         )
 
@@ -162,22 +157,9 @@ class FlowGraph:
 
     def _validate(self) -> None:
         """Validate the resolved graph for common errors."""
-        in_map_block: bool = False
-
-        for entry in self.entries:
-            if isinstance(entry, MapOpenEntry):
-                if in_map_block:
-                    raise ValueError(
-                        "Nested .map() calls are not supported. "
-                        "Use .next() to chain steps inside a map block, "
-                        "or close with .agg() before opening a new .map()"
-                    )
-                in_map_block = True
-
-            if isinstance(entry, MapCloseEntry):
-                in_map_block = False
-
-        # Note: Map blocks can end without .agg() for side-effect-only processing
+        # Note: Nested .map() calls are not supported
+        # Each map must be closed with .agg() or end the flow
+        # Map blocks can end without .agg() for side-effect-only processing
 
     @property
     def step_names(self) -> set[str]:

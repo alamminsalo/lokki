@@ -8,34 +8,62 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import pickle
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from lokki.decorators import RetryConfig, StepNode
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 from lokki.logging import LoggingConfig, MapProgressLogger, StepLogger, get_logger
 from lokki.runtime.runtime import Runtime
-from lokki.store import LocalStore
+from lokki.store.protocol import TransientStore
+
+if TYPE_CHECKING:
+    pass
 
 
 class LocalRunner:
     """Executes lokki flows locally.
 
     LocalRunner mimics AWS Step Functions behavior by executing flows
-    on the local machine using filesystem storage for inter-step data.
+    on the local machine using filesystem or in-memory storage.
     """
 
-    def __init__(self, logging_config: LoggingConfig | None = None) -> None:
+    def __init__(
+        self,
+        logging_config: LoggingConfig | None = None,
+        store_type: str | None = None,
+    ) -> None:
         self.logging_config = logging_config or LoggingConfig()
         self.logger = get_logger("lokki.runner", self.logging_config)
+        self._store_type = store_type  # Parameter takes priority
+
+    def _get_store_type(self) -> str:
+        """Get store type with priority: param > env > config."""
+        if self._store_type:
+            return self._store_type
+        if env_store := os.environ.get("LOKKI_STORE_TYPE"):
+            return env_store
+        from lokki.config import load_config
+
+        config = load_config()
+        return config.local_cfg.store_type
 
     def run(self, graph: FlowGraph, params: dict[str, Any] | None = None) -> Any:
+        from lokki.store import LocalStore, MemoryStore  # noqa: F401
+
+        store_type = self._get_store_type()
+        store: TransientStore
+        if store_type == "memory":
+            store = MemoryStore()
+        else:
+            store = LocalStore()
+
         run_id = "local-run"
-        store = LocalStore()
         params = params or {}
 
         self.logger.info(f"Starting flow '{graph.name}' (run_id={run_id})")
@@ -71,7 +99,7 @@ class LocalRunner:
 
     def _run_task(
         self,
-        store: LocalStore,
+        store: TransientStore,
         flow_name: str,
         run_id: str,
         entry: TaskEntry,
@@ -136,7 +164,7 @@ class LocalRunner:
     def _execute_step(
         self,
         node: StepNode,
-        store: LocalStore,
+        store: TransientStore,
         flow_name: str,
         run_id: str,
         params: dict[str, Any],
@@ -166,7 +194,7 @@ class LocalRunner:
 
     def _run_map(
         self,
-        store: LocalStore,
+        store: TransientStore,
         flow_name: str,
         run_id: str,
         entry: MapOpenEntry,
@@ -179,6 +207,7 @@ class LocalRunner:
         manifest = json.loads(manifest_path.read_text())
 
         inner_steps = entry.inner_steps
+        direct_pass = entry.direct_pass
 
         step_logger = StepLogger(source_name, self.logger)
         step_logger.start()
@@ -215,8 +244,8 @@ class LocalRunner:
             if last_exception:
                 raise last_exception
 
-        item_data_by_idx = dict(enumerate(manifest))
-        current_results: dict[int, Any] = item_data_by_idx
+        # First step always uses manifest items as input
+        current_results: dict[int, Any] = dict(enumerate(manifest))
 
         for _step_idx, step_node in enumerate(inner_steps):
             step_name = step_node.name
@@ -242,6 +271,7 @@ class LocalRunner:
                     item_idx = futures[future]
                     new_results[item_idx] = result
 
+                    # Always write results to S3 for aggregation and persistence
                     item_result_path = store._get_path(
                         flow_name, run_id, f"{step_name}/{item_idx}", "output.pkl.gz"
                     )
@@ -252,14 +282,37 @@ class LocalRunner:
                     item_result_path.write_bytes(data)
                     map_logger.update("completed")
 
-            current_results = new_results
+            # For next step: if direct_pass, use in-memory results
+            if direct_pass:
+                current_results = new_results
+            else:
+                current_results = self._read_map_results(
+                    store, flow_name, run_id, step_name, len(manifest)
+                )
 
         map_logger.complete()
         step_logger.complete(0.0)
 
+    def _read_map_results(
+        self,
+        store: TransientStore,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+        count: int,
+    ) -> dict[int, Any]:
+        """Read map step results from S3."""
+        results = {}
+        for idx in range(count):
+            result_path = store._get_path(
+                flow_name, run_id, f"{step_name}/{idx}", "output.pkl.gz"
+            )
+            results[idx] = store.read(str(result_path))
+        return results
+
     def _run_agg(
         self,
-        store: LocalStore,
+        store: TransientStore,
         flow_name: str,
         run_id: str,
         entry: MapCloseEntry,
