@@ -1366,4 +1366,103 @@ AWS Lambda and Batch support both x86_64 and arm64 (Graviton2) architectures. Cu
 
 ---
 
+## Milestone 49 — New Map API with Direct Pass
+
+_Purpose: Redesign the map API to be cleaner and add direct in-memory passing between map inner steps to reduce S3 API calls for massively parallel flows._
+
+### Background
+
+The current map API uses `.map(step).next(step).agg(step)` which is verbose. Additionally, each inner step writes results to S3, requiring the next step to read from S3, creating unnecessary S3 API calls.
+
+### New API Design
+
+```python
+# Single step in map
+step0.map(process_item).agg(aggregate)
+
+# Multiple steps - list syntax connects them sequentially inside map
+step0.map([step1, step2, step3]).agg(aggregate)
+
+# With direct_pass - pass results in memory between steps (reduces S3 reads)
+step0.map([step1, step2], direct_pass=True).agg(aggregate)
+
+# Without aggregation (M47 feature)
+step0.map([step1, step2], direct_pass=True)
+```
+
+### Breaking Changes
+
+- `.next(step)` method removed - use list syntax instead: `.map([step1, step2])`
+- Old `.map(step1).map(step2)` chaining still works for single steps
+
+### Tasks
+
+- [ ] **T49.1** Update MapBlock.map() to accept single step or list
+  - Accept both `step: StepNode` and `steps: list[StepNode]`
+  - Add `direct_pass: bool = False` parameter
+
+- [ ] **T49.2** Update MapBlock to track direct_pass
+  - Add `direct_pass: bool = False` attribute
+  - Validate direct_pass is used inside map block
+
+- [ ] **T49.3** Update MapOpenEntry with direct_pass field
+  - Add `direct_pass: bool = False` field to dataclass
+  - Update graph resolution to pass the value
+
+- [ ] **T49.4** Update local runner for direct_pass
+  - Modify `_run_map()` to pass results in memory when direct_pass=True
+  - Skip S3 reads for intermediate steps
+
+- [ ] **T49.5** Update state machine for direct_pass
+  - Update ResultPath handling for direct_pass steps
+  - Ensure correct data flow between steps
+
+- [ ] **T49.6** Add unit tests for new map API
+  - Test single step: `.map(step)`
+  - Test list of steps: `.map([step1, step2])`
+  - Test direct_pass parameter
+
+- [ ] **T49.7** Add integration test flow
+
+---
+
+## Milestone 50 — MemoryStore for Local Development
+
+_Purpose: Add MemoryStore as an alternative store for local development that keeps all data in-memory without filesystem I/O. Useful for environments without writable partitions and faster local iteration._
+
+### Background
+
+Currently, the local runner uses LocalStore which writes to the filesystem (`/tmp`). MemoryStore keeps all transient data in memory, avoiding filesystem I/O overhead.
+
+### Configuration Priority
+
+Configuration is resolved in this order (highest to lowest):
+1. **Parameter** - `LocalRunner(store_type="memory")`
+2. **Environment** - `LOKKI_STORE_TYPE=memory`
+3. **Config** - `lokki.toml [local] store_type = "memory"`
+
+### Tasks
+
+- [ ] **T50.1** Create MemoryStore class
+  - Implement `lokki/store/memory.py` following TransientStore interface
+  - Store data in memory dict instead of filesystem
+
+- [ ] **T50.2** Add store_type parameter to LocalRunner
+  - Add `store_type: str = "local"` parameter to `LocalRunner.__init__`
+  - Default to "local" for backward compatibility
+
+- [ ] **T50.3** Implement config priority resolution
+  - Parameter > Environment > Config
+
+- [ ] **T50.4** Add environment variable override
+  - Add `LOKKI_STORE_TYPE` to environment variable handling
+
+- [ ] **T50.5** Add config file support
+  - Add `[local]` section to lokki.toml schema
+  - Add `store_type` field
+
+- [ ] **T50.6** Add unit tests for MemoryStore
+
+---
+
 ## Summary

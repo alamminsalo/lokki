@@ -14,10 +14,11 @@
 - Each step is independently packaged and executed (as an AWS Lambda function).
 - **S3 abstraction**: inputs and outputs are automatically serialised to/from S3. Functions are authored as if they receive and return plain Python objects; lokki handles all S3 URL resolution transparently.
 - Decorated steps expose chaining methods:
-  - `.map(step_fn)` — fan-out: runs the next step in parallel once per item in the current step's output (list). Starts a Map block in the state machine.
+  - `.map(step_fn)` — fan-out: runs a single step in parallel once per item in the current step's output (list). Starts a Map block in the state machine.
+  - `.map([step_fn1, step_fn2, ...])` — fan-out with multiple steps: runs multiple steps sequentially inside the map for each item. Steps are connected in order.
+  - `.map(..., direct_pass=True)` — optional: pass results in memory between inner steps (reduces S3 API calls for massively parallel flows).
   - `.agg(step_fn)` — fan-in: collects all parallel outputs into a list and passes it to the next step as a single input. Ends the current Map block. **Optional** — map blocks can end without aggregation for side-effect-only processing.
-  - `.next(step_fn)` — sequential chaining without parallelism.
-- Steps can be chained: `step_a().map(step_b).agg(step_c)`.
+- Steps can be chained: `step_a().map(step_b).agg(step_c)` or `step_a().map([step_b, step_c]).agg(step_d)`.
 - Map blocks without `.agg()` are valid — useful for event sending, data export, or notification pipelines where each item is processed independently.
 
 ### `@flow` Decorator
@@ -50,9 +51,9 @@ def birds_flow():
     return get_birds().map(flap_bird).agg(join_birds)
 ```
 
-### Simple Chaining with `.next()`
+### Multiple Steps Inside Map
 
-In addition to `.map()` and `.agg()`, steps can be chained sequentially using `.next()`:
+Use a list to run multiple steps sequentially inside a map for each item:
 
 ```python
 @step
@@ -60,27 +61,52 @@ def get_data() -> list[int]:
     return [1, 2, 3]
 
 @step
-def process(items: list[int]) -> int:
-    return sum([item * 2 for item in items])
+def transform(item: int) -> int:
+    return item * 2
 
 @step
-def save(result: int) -> str:
-    return f"Result: {result}"
+def validate(item: int) -> bool:
+    return item > 0
+
+@step
+def enrich(item: int) -> dict:
+    return {"value": item, "processed": True}
+
+@step
+def aggregate(results: list[dict]) -> int:
+    return len(results)
 
 @flow
-def linear_flow():
-    # Simple sequential chain: A → B → C
-    return get_data().next(process).next(save)
+def pipeline_flow():
+    # Run transform, validate, enrich sequentially for each item
+    return get_data().map([transform, validate, enrich]).agg(aggregate)
 ```
 
 **Behavior:**
-- `.next(step)` chains a step after the current one without parallelism
-- The output of the previous step becomes the input to the next step
-- This is equivalent to a simple linear pipeline without map/aggregation
-- Multiple `.next()` calls create a linear chain: `A.next(B).next(C)` → A → B → C
-- Calling `.next(step)` after `.map(step)` continues the chain inside the mapped section until `.agg(step)` is called (or the flow ends):
-- Map blocks can end without `.agg()` — useful for side-effect-only processing (event sending, notifications, etc.)
-- Nested .map() calls is not supported and should raise an exception.
+- `.map([step1, step2, step3])` runs multiple steps inside the map block
+- Steps are connected sequentially: step1 output → step2 input → step3 output
+- Each step runs in parallel for each item in the input list
+- Use `.agg()` to aggregate results after all inner steps complete
+
+### With direct_pass
+
+For massively parallel flows, use `direct_pass=True` to pass results in memory between inner steps (reduces S3 API calls):
+
+```python
+@flow
+def fast_pipeline():
+    # direct_pass=True passes results in memory between steps
+    return get_data().map([step1, step2], direct_pass=True).agg(aggregate)
+```
+
+### Without Aggregation
+
+Map blocks can end without `.agg()` — useful for side-effect-only processing:
+
+```python
+@flow
+def event_flow():
+    return get_events().map([send_webhook, log_event], direct_pass=True)
 
 ```python
 @step
@@ -102,17 +128,20 @@ def collect(result: list[int]) -> str:
 
 @flow
 def complex_flow():
-    # Chain A -> Map(B -> C) -> Agg(D)
-    return get_data().map(mult_item).next(pow_item).agg(collect)
+    # Chain A -> Map(B -> C -> D) -> Agg(E)
+    return get_data().map([mult_item, pow_item, add_item]).agg(collect)
 ```
 
 **Comparison:**
 
 | Method | Input | Output | Use Case |
 |--------|-------|--------|------------|
-| `.map(step)` | list | list (per-item) | Parallel processing |
+| `.map(step)` | list | list (per-item) | Parallel processing (single step) |
+| `.map([step1, step2])` | list | list (per-item) | Parallel processing (multiple steps) |
+| `.map(..., direct_pass=True)` | list | list (per-item) | Direct in-memory passing between steps |
 | `.agg(step)` | list | single value | Aggregation |
-| `.next(step)` | any | any | Sequential/linear chain |
+
+Note: Use list syntax `.map([step1, step2])` for multiple steps inside a map block. This replaces the old `.map(step).next(step)` syntax.
 
 ---
 

@@ -12,10 +12,11 @@ lokki reads configuration from a `lokki.toml` file in your project root. You can
 
 Configuration values are resolved in the following order (highest to lowest):
 
-1. Environment variables
-2. Local `lokki.toml`
-3. Global `~/.lokki/lokki.toml`
-4. Default values
+1. Code/Parameter (e.g., `LocalRunner(store_type="memory")`)
+2. Environment variables
+3. Local `lokki.toml`
+4. Global `~/.lokki/lokki.toml`
+5. Default values
 
 ---
 
@@ -81,6 +82,19 @@ Custom environment variables injected into every Batch job:
 ```toml
 [batch.env]
 MY_VAR = "value"
+```
+
+---
+
+## Local Configuration `[local]`
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `store_type` | `str` | `"local"` | Store type for local runner: `"local"` (filesystem) or `"memory"` (in-memory) |
+
+```toml
+[local]
+store_type = "memory"  # Use in-memory store for faster local development
 ```
 
 ---
@@ -164,6 +178,7 @@ show_timestamps = true
 | `LOKKI_LOG_LEVEL` | Logging level |
 | `LOKKI_BATCH_JOB_QUEUE` | AWS Batch job queue |
 | `LOKKI_BATCH_JOB_DEFINITION` | AWS Batch job definition |
+| `LOKKI_STORE_TYPE` | Store type for local runner: `"local"` or `"memory"` |
 
 ---
 

@@ -80,7 +80,7 @@ The flow name is derived from the function name (snake_case → kebab-case).
 
 After decorating a function with `@step`, it returns a `StepNode` with the following chaining methods:
 
-### `.map(step_node, concurrency_limit=None, **kwargs)`
+### `.map(step_node, concurrency_limit=None, direct_pass=False, **kwargs)`
 
 Starts a Map block for parallel processing. The step runs for each item in the source list.
 
@@ -88,13 +88,14 @@ Starts a Map block for parallel processing. The step runs for each item in the s
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `step_node` | `StepNode` | Required | The step to run for each item |
+| `step_node` | `StepNode` | Required | The step to run for each item (or list of steps) |
 | `concurrency_limit` | `int \| None` | `None` | Maximum parallel iterations (AWS Step Functions MaxConcurrency) |
+| `direct_pass` | `bool` | `False` | Pass results in memory between inner steps (reduces S3 API calls) |
 | `**kwargs` | `Any` | `{}` | Flow-level parameters passed to the step |
 
 **Returns:** `MapBlock`
 
-**Example:**
+**Examples:**
 
 ```python
 @step
@@ -105,41 +106,11 @@ def get_items():
 def process_item(item, multiplier):
     return item * multiplier
 
-# Map with flow parameters
+# Single step in map
 get_items().map(process_item, concurrency_limit=10, multiplier=2)
-```
 
----
-
-### `.next(step_node, **kwargs)`
-
-Chains a step sequentially after the current step.
-
-**Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `step_node` | `StepNode` | Required | The next step to run |
-| `**kwargs` | `Any` | `{}` | Flow-level parameters passed to the step |
-
-**Returns:** `StepNode`
-
-**Example:**
-
-```python
-@step
-def step1():
-    return [1, 2, 3]
-
-@step
-def step2(data):
-    return [x * 2 for x in data]
-
-@step
-def step3(data):
-    return sum(data)
-
-step1().next(step2).next(step3)
+# Multiple steps inside map (list syntax)
+get_items().map([process_item, enrich_item], direct_pass=True)
 ```
 
 ---
@@ -157,7 +128,7 @@ Closes a Map block and aggregates results from parallel execution. **Optional** 
 
 **Returns:** `StepNode`
 
-**Example with aggregation:**
+**Example with single step:**
 
 ```python
 @step
@@ -172,8 +143,38 @@ def process(item):
 def aggregate(items):
     return sum(items)
 
-# With aggregation - collect results
+# Single step in map
 get_items().map(process).agg(aggregate)
+```
+
+**Example with multiple steps (list syntax):**
+
+```python
+@step
+def get_items():
+    return [1, 2, 3]
+
+@step
+def transform(item):
+    return item * 2
+
+@step
+def validate(item):
+    return item > 0
+
+@step
+def aggregate(items):
+    return sum(items)
+
+# Multiple steps inside map - connected sequentially for each item
+get_items().map([transform, validate]).agg(aggregate)
+```
+
+**Example with direct_pass:**
+
+```python
+# direct_pass=True passes results in memory between steps (reduces S3 API calls)
+get_items().map([transform, validate], direct_pass=True).agg(aggregate)
 ```
 
 **Example without aggregation (side-effect only):**
@@ -185,9 +186,9 @@ def get_events():
 
 @step
 def send_webhook(event):
-    # Send webhook, no return value needed
     requests.post("https://example.com/webhook", json=event)
-    return None  # Optional - None results are not written to store
+
+get_events().map([send_webhook, log_event], direct_pass=True)
 
 # Without aggregation - each event processed independently
 get_events().map(send_webhook)

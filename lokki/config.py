@@ -13,11 +13,10 @@ Configuration precedence (highest to lowest):
 __all__ = [
     "LambdaConfig",
     "BatchConfig",
-    "LokkiConfig",
+    "LocalConfig",
     "LoggingConfig",
+    "LokkiConfig",
     "load_config",
-    "GLOBAL_CONFIG_PATH",
-    "LOCAL_CONFIG_PATH",
 ]
 
 import os
@@ -141,6 +140,23 @@ class BatchConfig:
 
 
 @dataclass(slots=True)
+class LocalConfig:
+    """Local development configuration.
+
+    Attributes:
+        store_type: Store type for local runner: "local" or "memory".
+    """
+
+    store_type: str = "local"
+
+    def __post_init__(self) -> None:
+        if self.store_type not in ("local", "memory"):
+            raise ValueError(
+                f"store_type must be 'local' or 'memory', got '{self.store_type}'"
+            )
+
+
+@dataclass(slots=True)
 class LokkiConfig:
     """Main lokki configuration.
 
@@ -172,6 +188,7 @@ class LokkiConfig:
     # Nested config
     lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
     batch_cfg: BatchConfig = field(default_factory=BatchConfig)
+    local_cfg: LocalConfig = field(default_factory=LocalConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -182,6 +199,7 @@ class LokkiConfig:
         lambda_config = d.get("lambda", {})
         batch_config = d.get("batch", {})
         logging_config = d.get("logging", {})
+        local_config = d.get("local", {})
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
@@ -207,6 +225,9 @@ class LokkiConfig:
             architecture=batch_config.get("architecture", "x86_64"),
             env=batch_config.get("env", {}),
         )
+        local_cfg = LocalConfig(
+            store_type=local_config.get("store_type", "local"),
+        )
         logging_cfg = LoggingConfig(
             level=logging_config.get("level", "INFO"),
             format=logging_config.get("format", "human"),
@@ -223,6 +244,7 @@ class LokkiConfig:
             lambda_execution_role=aws_config.get("lambda_execution_role", ""),
             lambda_cfg=lambda_cfg,
             batch_cfg=batch_cfg,
+            local_cfg=local_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )
@@ -257,5 +279,7 @@ def load_config() -> LokkiConfig:
         config.batch_cfg.job_queue = env_batch_queue
     if env_batch_def := os.environ.get("LOKKI_BATCH_JOB_DEFINITION"):
         config.batch_cfg.job_definition_name = env_batch_def
+    if env_store_type := os.environ.get("LOKKI_STORE_TYPE"):
+        config.local_cfg.store_type = env_store_type
 
     return config

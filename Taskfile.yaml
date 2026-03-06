@@ -6,7 +6,7 @@ env:
   AWS_SECRET_ACCESS_KEY: test
 
 tasks:
-  ollama-signin:
+  ollama:refresh:
     cmds:
       - ollama signout
       - ollama signin

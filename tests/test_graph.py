@@ -116,7 +116,8 @@ class TestFlowGraphMapBlock:
         def aggregate(results: list[bool]) -> int:
             return sum(results)
 
-        get_items().map(transform).next(validate).agg(aggregate)
+        # Using list syntax
+        get_items().map([transform, validate]).agg(aggregate)
 
         graph = FlowGraph(name="test-flow", head=aggregate)
 
@@ -125,6 +126,81 @@ class TestFlowGraphMapBlock:
         assert len(graph.entries[1].inner_steps) == 2
         assert graph.entries[1].inner_steps[0].name == "transform"
         assert graph.entries[1].inner_steps[1].name == "validate"
+
+    def test_map_block_with_list_syntax(self) -> None:
+        """Test map block with list syntax."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def step1(item: str) -> str:
+            return item.upper()
+
+        @step
+        def step2(item: str) -> str:
+            return item + "!"
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        head = get_items().map([step1, step2]).agg(aggregate)
+        graph = FlowGraph(name="test-flow", head=head)
+
+        assert len(graph.entries) == 3
+        assert isinstance(graph.entries[1], MapOpenEntry)
+        assert len(graph.entries[1].inner_steps) == 2
+
+    def test_map_block_direct_pass(self) -> None:
+        """Test map block with direct_pass=True."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def step1(item: str) -> str:
+            return item.upper()
+
+        @step
+        def step2(item: str) -> str:
+            return item + "!"
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        head = get_items().map([step1, step2], direct_pass=True).agg(aggregate)
+        graph = FlowGraph(name="test-flow", head=head)
+
+        assert graph.entries[1].direct_pass is True
+
+    def test_map_block_direct_pass_false_by_default(self) -> None:
+        """Test map block direct_pass defaults to False."""
+
+        @step
+        def get_items() -> list[str]:
+            return ["a", "b"]
+
+        @step
+        def process(item: str) -> str:
+            return item.upper()
+
+        @step
+        def process2(item: str) -> str:
+            return item + "!"
+
+        @step
+        def aggregate(results: list[str]) -> str:
+            return ",".join(results)
+
+        head = get_items().map([process, process2]).agg(aggregate)
+        graph = FlowGraph(name="test-flow", head=head)
+
+        assert graph.entries[1].direct_pass is False
+        assert len(graph.entries[1].inner_steps) == 2
 
     def test_map_block_concurrency_limit(self) -> None:
         """Test that concurrency_limit is preserved in MapOpenEntry."""

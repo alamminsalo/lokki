@@ -104,22 +104,40 @@ class StepNode:
 
     def map(
         self,
-        step_node: StepNode,
+        step_or_steps: StepNode | list[StepNode],
         concurrency_limit: int | None = None,
+        direct_pass: bool = False,
     ) -> MapBlock:
-        """Start a Map block with optional concurrency limit.
+        """Start a Map block for parallel processing.
 
         Args:
-            step_node: The step to run for each item
+            step_or_steps: Single step or list of steps to run for each item.
+                          If list, steps are connected sequentially inside the map.
             concurrency_limit: Optional limit on parallel iterations
+            direct_pass: Pass results in memory between steps (reduces S3 API calls)
 
         Note:
             Flow parameters are passed via **kwargs to the step function.
         """
+        if isinstance(step_or_steps, list):
+            if not step_or_steps:
+                raise ValueError("step list cannot be empty")
+            inner_head = step_or_steps[0]
+            inner_tail = step_or_steps[-1]
+            # Connect steps sequentially
+            for i in range(len(step_or_steps) - 1):
+                step_or_steps[i]._next = step_or_steps[i + 1]
+                step_or_steps[i + 1]._prev = step_or_steps[i]
+        else:
+            inner_head = step_or_steps
+            inner_tail = step_or_steps
+
         block = MapBlock(
             source=self,
-            inner_head=step_node,
+            inner_head=inner_head,
+            inner_tail=inner_tail,
             concurrency_limit=concurrency_limit,
+            direct_pass=direct_pass,
         )
         self._map_block = block
         return block
@@ -146,12 +164,12 @@ class MapBlock:
 
     Created by calling `.map()` on a StepNode. Contains:
     - source: The step that produces the list of items to process
-    - inner_steps: Steps to run for each item (chain via `.map()` or `.next()`)
+    - inner_steps: Steps to run for each item (chain via `.map()` or list)
     - concurrency_limit: Optional limit on parallel iterations
+    - direct_pass: Pass results in memory between inner steps
 
     Methods:
-        .map(step) - Add step to run for each item
-        .next(step) - Add step to run for each item (alias for .map())
+        .map(step) - Add step(s) to run for each item
         .agg(step) - Close block and aggregate results
     """
 
@@ -159,14 +177,17 @@ class MapBlock:
         self,
         source: StepNode,
         inner_head: StepNode,
+        inner_tail: StepNode | None = None,
         concurrency_limit: int | None = None,
+        direct_pass: bool = False,
     ) -> None:
         self.source = source
         self.inner_head = inner_head
-        self.inner_tail = inner_head
+        self.inner_tail = inner_tail if inner_tail is not None else inner_head
         self._next: StepNode | None = None
         self._flow_kwargs: dict[str, Any] = {}
         self.concurrency_limit = concurrency_limit
+        self.direct_pass = direct_pass
         self._closed: bool = False  # Track if block is closed with .agg()
 
     @property
@@ -181,27 +202,31 @@ class MapBlock:
             current = current._next
         return steps
 
-    def map(self, step_node: StepNode) -> MapBlock:
-        """Add another step to the inner chain.
+    def map(self, step_or_steps: StepNode | list[StepNode]) -> MapBlock:
+        """Add step(s) to the inner chain.
 
-        Note:
-            Flow parameters are passed via **kwargs to the step function.
+        Args:
+            step_or_steps: Single step or list of steps to add.
+                          If list, steps are connected sequentially.
         """
-        step_node._prev = self.inner_tail
-        self.inner_tail._next = step_node
-        self.inner_tail = step_node
+        if isinstance(step_or_steps, list):
+            for step_node in step_or_steps:
+                step_node._prev = self.inner_tail
+                self.inner_tail._next = step_node
+                self.inner_tail = step_node
+        else:
+            step_or_steps._prev = self.inner_tail
+            self.inner_tail._next = step_or_steps
+            self.inner_tail = step_or_steps
         return self
 
     def next(self, step_node: StepNode) -> MapBlock:
-        """Add step to inner chain (before agg).
+        """Add step to inner chain (alias for .map()).
 
         Note:
             Flow parameters are passed via **kwargs to the step function.
         """
-        step_node._prev = self.inner_tail
-        self.inner_tail._next = step_node
-        self.inner_tail = step_node
-        return self
+        return self.map(step_node)
 
     def agg(self, step_node: StepNode) -> StepNode:
         """Close the Map block and attach an aggregation step.

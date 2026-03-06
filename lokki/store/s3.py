@@ -71,6 +71,12 @@ class S3Store(TransientStore):
     def cleanup(self) -> None:
         pass
 
+    def _get_path(
+        self, flow_name: str, run_id: str, step_name: str, filename: str
+    ) -> str:
+        key = f"{flow_name}/{run_id}/{step_name}/{filename}"
+        return f"s3://{self.bucket}/{key}"
+
     @staticmethod
     def _parse_url(url: str) -> tuple[str, str]:
         if not url.startswith("s3://"):

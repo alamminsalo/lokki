@@ -215,9 +215,9 @@ def flow(fn):
 
 `.map(b)` always returns a `MapBlock`, not a `StepNode`. `.agg(c)` closes the `MapBlock` and returns a `StepNode` (the aggregation step), allowing further chaining after the fan-in. This means the chain `a().map(b).agg(c).map(d).agg(e)` is valid and produces nested Map blocks.
 
-### `.next()` method for linear chaining
+### Multiple Steps Inside Map (List Syntax)
 
-In addition to `.map()` and `.agg()`, steps can be chained sequentially using `.next()`:
+Use a list to run multiple steps sequentially inside a map for each item:
 
 ```python
 @step
@@ -225,17 +225,43 @@ def get_data():
     return [1, 2, 3]
 
 @step
-def process(items):
-    return sum(item * 2 for item in items)
+def transform(item):
+    return item * 2
 
 @step
-def save(result):
-    return f"Result: {result}"
+def validate(item):
+    return item > 0
+
+@step
+def enrich(item):
+    return {"value": item, "valid": validate(item)}
 
 @flow
-def linear_flow():
-    return get_data().next(process).next(save)
+def complex_flow():
+    # Run transform, validate, enrich sequentially for each item
+    return get_data().map([transform, validate, enrich])
 ```
+
+**Behavior:**
+- `.map([step1, step2, step3])` runs multiple steps inside the map block
+- Steps are connected sequentially: step1 output → step2 input → step3 output
+- Each step runs in parallel for each item in the input list
+
+### With `direct_pass`
+
+For massively parallel flows, use `direct_pass=True` to pass results in memory between inner steps:
+
+```python
+@flow
+def fast_pipeline():
+    # direct_pass=True passes results in memory between steps
+    return get_data().map([transform, validate], direct_pass=True).agg(aggregate)
+```
+
+**Behavior:**
+- `direct_pass=True` reduces S3 API calls by passing results in memory
+- Available on both single step and list syntax
+- Default is `direct_pass=False` (current behavior)
 
 **Behavior:**
 - `.next(step)` chains a step after the current one without parallelism
@@ -368,12 +394,12 @@ def agg_flow(seed=100):
 | Method | Input | Flow params via | Output | Use Case |
 |--------|-------|----------------|--------|------------|
 | `.map(step)` | list | **kwargs | list (per-item) | Parallel processing |
+| `.map([step1, step2])` | list | **kwargs | list (per-item) | Multiple steps inside map |
+| `.map(..., direct_pass=True)` | list | **kwargs | list (per-item) | Direct in-memory passing |
 | `.agg(step)` | list | **kwargs | single value | Aggregation (optional) |
-| `.next(step)` | previous output | **kwargs | any | Sequential chain |
 
 **Error conditions:**
 - Map blocks can end without `.agg()` — useful for side-effect-only processing
-- Nested `.map()` calls are not supported and should raise an exception
 
 ---
 

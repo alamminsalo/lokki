@@ -20,6 +20,7 @@ class TransientStore(Protocol):
 
         For S3Store: reads LOKKI_ARTIFACT_BUCKET from env internally.
         For LocalStore: uses base_dir or creates temp directory.
+        For MemoryStore: in-memory storage.
         """
         ...
 
@@ -49,4 +50,10 @@ class TransientStore(Protocol):
 
     def cleanup(self) -> None:
         """Clean up resources (NOP for S3, removes temp dir for LocalStore)."""
+        ...
+
+    def _get_path(
+        self, flow_name: str, run_id: str, step_name: str, filename: str
+    ) -> Any:
+        """Get storage path for a file. Returns Path-like object."""
         ...
