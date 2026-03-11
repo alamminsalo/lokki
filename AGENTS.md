@@ -175,5 +175,7 @@ class TestClassName:
 | docs/config.md | Complete configuration reference |
 | docs/requirements.md | User requirements and configuration reference |
 | docs/design.md | Architecture and implementation details |
-| docs/tasks.md | Planned milestones |
+| docs/tasks/ | Implementation milestones (index + individual files) |
+| docs/tasks/README.md | Index of all milestones |
+| docs/tasks/m*.md | Individual milestone files (m1.md, m2.md, etc.) |
 | docs/tasks-completed.md | Completed milestones |
