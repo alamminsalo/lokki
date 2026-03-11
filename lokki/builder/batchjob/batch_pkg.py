@@ -89,6 +89,48 @@ def _get_flow_module_path(
     return None
 
 
+def _get_python_version_from_pyproject(
+    flow_fn: Callable[[], FlowGraph] | None,
+) -> str:
+    """Extract Python version from flow module's pyproject.toml.
+
+    Args:
+        flow_fn: The flow function to detect project path
+
+    Returns:
+        Python version as major.minor string (e.g., "3.10"), or "3.13" as fallback
+    """
+    flow_module_path = _get_flow_module_path(flow_fn)
+    if not flow_module_path:
+        return "3.13"
+
+    pyproject_path = flow_module_path.parent / "pyproject.toml"
+    if not pyproject_path.exists():
+        return "3.13"
+
+    try:
+        import tomllib
+
+        with pyproject_path.open("rb") as f:
+            data = tomllib.load(f)
+
+        requires_python = data.get("project", {}).get("requires-python", "")
+        if not requires_python:
+            return "3.13"
+
+        import re
+
+        match = re.search(r"(\d+)\.(\d+)", requires_python)
+        if match:
+            major = match.group(1)
+            minor = match.group(2)
+            return f"{major}.{minor}"
+
+        return "3.13"
+    except Exception:
+        return "3.13"
+
+
 def generate_batch_files(
     build_dir: Path,
     config: LokkiConfig | None = None,
@@ -110,9 +152,8 @@ def generate_batch_files(
     if config and config.batch_cfg.base_image:
         base_image = config.batch_cfg.base_image
     else:
-        from lokki.config import BatchConfig
-
-        base_image = BatchConfig().base_image
+        python_version = _get_python_version_from_pyproject(flow_fn)
+        base_image = f"python:{python_version}-slim"
 
     included_files = _copy_included_files(config, batch_dir, flow_fn)
 

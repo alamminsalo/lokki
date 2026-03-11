@@ -135,6 +135,10 @@ def _generate_docker_packages(
     """Generate Docker-based Lambda packages (container images)."""
     base_image = config.lambda_cfg.base_image
 
+    if not base_image or base_image == "public.ecr.aws/lambda/python:3.13":
+        python_version = _get_python_version_from_pyproject(flow_fn)
+        base_image = f"public.ecr.aws/lambda/python:{python_version}"
+
     included_files = _copy_included_files(
         config, lambdas_dir, flow_fn, target_subdir="included"
     )
@@ -238,6 +242,48 @@ def _copy_project_files(
                 shutil.copy(flow_uv_lock, uv_lock_target)
 
     # Note: lokki is installed via pyproject.toml dependencies, not copied as source
+
+
+def _get_python_version_from_pyproject(
+    flow_fn: Callable[[], FlowGraph] | None,
+) -> str:
+    """Extract Python version from flow module's pyproject.toml.
+
+    Args:
+        flow_fn: The flow function to detect project path
+
+    Returns:
+        Python version as major.minor string (e.g., "3.10"), or "3.13" as fallback
+    """
+    flow_module_path = _get_flow_module_path(flow_fn)
+    if not flow_module_path:
+        return "3.13"
+
+    pyproject_path = flow_module_path.parent / "pyproject.toml"
+    if not pyproject_path.exists():
+        return "3.13"
+
+    try:
+        import tomllib
+
+        with pyproject_path.open("rb") as f:
+            data = tomllib.load(f)
+
+        requires_python = data.get("project", {}).get("requires-python", "")
+        if not requires_python:
+            return "3.13"
+
+        import re
+
+        match = re.search(r"(\d+)\.(\d+)", requires_python)
+        if match:
+            major = match.group(1)
+            minor = match.group(2)
+            return f"{major}.{minor}"
+
+        return "3.13"
+    except Exception:
+        return "3.13"
 
 
 def _get_flow_module_path(

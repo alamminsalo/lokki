@@ -295,3 +295,132 @@ def test_get_flow_module_path_with__fn_attribute():
     with patch("sys.modules", {"test_module": mock_module}):
         result = _get_flow_module_path(wrapper_flow)
         assert result == Path("/test/path.py")
+
+
+class TestGetPythonVersionFromPyproject:
+    """Tests for _get_python_version_from_pyproject function."""
+
+    def test_parses_requires_python_minimum(self):
+        """Test parsing requires-python with >= specifier."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _get_python_version_from_pyproject,
+        )
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_file = tmpdir / "flow.py"
+            flow_file.write_text("# flow")
+
+            pyproject = tmpdir / "pyproject.toml"
+            pyproject.write_text("[project]\nrequires-python = '>=3.10'")
+
+            import sys
+            from types import ModuleType
+
+            mock_module = ModuleType("test_flow")
+            mock_module.__file__ = str(flow_file)
+            sys.modules["test_flow"] = mock_module
+
+            try:
+                result = _get_python_version_from_pyproject(mock_flow_fn)
+                assert result == "3.10"
+            finally:
+                del sys.modules["test_flow"]
+
+    def test_parses_requires_python_exact(self):
+        """Test parsing exact Python version."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _get_python_version_from_pyproject,
+        )
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow2"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_file = tmpdir / "flow.py"
+            flow_file.write_text("# flow")
+
+            pyproject = tmpdir / "pyproject.toml"
+            pyproject.write_text("[project]\nrequires-python = '==3.11'")
+
+            import sys
+            from types import ModuleType
+
+            mock_module = ModuleType("test_flow2")
+            mock_module.__file__ = str(flow_file)
+            sys.modules["test_flow2"] = mock_module
+
+            try:
+                result = _get_python_version_from_pyproject(mock_flow_fn)
+                assert result == "3.11"
+            finally:
+                del sys.modules["test_flow2"]
+
+    def test_no_pyproject_returns_default(self):
+        """Test fallback when no pyproject.toml exists."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _get_python_version_from_pyproject,
+        )
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow3"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_file = tmpdir / "flow.py"
+            flow_file.write_text("# flow")
+
+            import sys
+            from types import ModuleType
+
+            mock_module = ModuleType("test_flow3")
+            mock_module.__file__ = str(flow_file)
+            sys.modules["test_flow3"] = mock_module
+
+            try:
+                result = _get_python_version_from_pyproject(mock_flow_fn)
+                assert result == "3.13"
+            finally:
+                del sys.modules["test_flow3"]
+
+    def test_no_requires_python_returns_default(self):
+        """Test fallback when requires-python is not specified."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _get_python_version_from_pyproject,
+        )
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow4"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            flow_file = tmpdir / "flow.py"
+            flow_file.write_text("# flow")
+
+            pyproject = tmpdir / "pyproject.toml"
+            pyproject.write_text("[project]\nname = 'test'")
+
+            import sys
+            from types import ModuleType
+
+            mock_module = ModuleType("test_flow4")
+            mock_module.__file__ = str(flow_file)
+            sys.modules["test_flow4"] = mock_module
+
+            try:
+                result = _get_python_version_from_pyproject(mock_flow_fn)
+                assert result == "3.13"
+            finally:
+                del sys.modules["test_flow4"]
