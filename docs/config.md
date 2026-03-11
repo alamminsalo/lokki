@@ -99,6 +99,36 @@ store_type = "memory"  # Use in-memory store for faster local development
 
 ---
 
+## Include Configuration `[include]`
+
+Static files to include in Docker images. Only applies to container images (`package_type = "image"`), not ZIP packages.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `paths` | `list[str]` | `[]` | Glob patterns for files to include (relative to flow script directory) |
+
+```toml
+[include]
+paths = ["data/*.parquet", "models/*.pkl", "config/*.json"]
+```
+
+Glob patterns are relative to the flow script directory. Files are copied to:
+- Lambda: `${LAMBDA_TASK_ROOT}/` (i.e., `/var/task/`)
+- Batch: Same working directory
+
+Example directory structure:
+```
+my-flow/
+├── flow.py
+├── data/
+│   ├── train.parquet
+│   └── test.parquet
+└── models/
+    └── model.pkl
+```
+
+---
+
 ## Logging Configuration `[logging]`
 
 | Setting | Type | Default | Description |
@@ -179,6 +209,7 @@ show_timestamps = true
 | `LOKKI_BATCH_JOB_QUEUE` | AWS Batch job queue |
 | `LOKKI_BATCH_JOB_DEFINITION` | AWS Batch job definition |
 | `LOKKI_STORE_TYPE` | Store type for local runner: `"local"` or `"memory"` |
+| `LOKKI_INCLUDE_PATHS` | Include paths (comma-separated glob patterns) |
 
 ---
 

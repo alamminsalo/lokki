@@ -413,3 +413,298 @@ class TestBuilderBuild:
             content = template_path.read_text()
             assert "PlatformCapabilities" in content
             assert "ARM64" in content
+
+
+class TestIncludeConfiguration:
+    """Tests for include configuration in builder."""
+
+    def test_lambda_dockerfile_with_include(self, tmp_path: Path) -> None:
+        """Test that Lambda Dockerfile includes COPY command for included files."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _generate_docker_packages,
+        )
+        from lokki.config import IncludeConfig, LambdaConfig, LokkiConfig
+
+        flow_dir = tmp_path / "flow_dir"
+        flow_dir.mkdir()
+
+        data_dir = flow_dir / "data"
+        data_dir.mkdir()
+        (data_dir / "test.parquet").write_text("test data")
+        (data_dir / "train.parquet").write_text("train data")
+
+        flow_file = flow_dir / "flow.py"
+        flow_file.write_text("# flow module")
+
+        config = LokkiConfig()
+        config.lambda_cfg = LambdaConfig(package_type="image")
+        config.include = IncludeConfig(paths=["data/*.parquet"])
+
+        lambdas_dir = tmp_path / "lambdas"
+        lambdas_dir.mkdir()
+
+        from types import FunctionType
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow"
+
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_flow")
+        mock_module.__file__ = str(flow_file)
+        sys.modules["test_flow"] = mock_module
+
+        try:
+            _generate_docker_packages(
+                graph=FlowGraph(name="test", head=None),
+                config=config,
+                lambdas_dir=lambdas_dir,
+                flow_fn=mock_flow_fn,
+            )
+
+            dockerfile_content = (lambdas_dir / "Dockerfile").read_text()
+            assert "COPY included/" in dockerfile_content
+            assert "${LAMBDA_TASK_ROOT}" in dockerfile_content
+
+            included_dir = lambdas_dir / "included"
+            assert included_dir.exists()
+            assert (included_dir / "test.parquet").exists()
+            assert (included_dir / "train.parquet").exists()
+        finally:
+            del sys.modules["test_flow"]
+
+    def test_lambda_dockerfile_without_include(self, tmp_path: Path) -> None:
+        """Test that Lambda Dockerfile has no COPY command when no includes."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _generate_docker_packages,
+        )
+        from lokki.config import LambdaConfig, LokkiConfig
+
+        config = LokkiConfig()
+        config.lambda_cfg = LambdaConfig(package_type="image")
+        config.include.paths = []
+
+        lambdas_dir = tmp_path / "lambdas"
+        lambdas_dir.mkdir()
+
+        _generate_docker_packages(
+            graph=FlowGraph(name="test", head=None),
+            config=config,
+            lambdas_dir=lambdas_dir,
+            flow_fn=None,
+        )
+
+        dockerfile_content = (lambdas_dir / "Dockerfile").read_text()
+        assert "COPY included/" not in dockerfile_content
+
+    def test_batch_dockerfile_with_include(self, tmp_path: Path) -> None:
+        """Test that Batch Dockerfile includes COPY command for included files."""
+        from lokki.builder.batchjob.batch_pkg import (
+            generate_batch_files,
+        )
+        from lokki.config import BatchConfig, IncludeConfig, LokkiConfig
+
+        flow_dir = tmp_path / "flow_dir"
+        flow_dir.mkdir()
+
+        config_dir = flow_dir / "config"
+        config_dir.mkdir()
+        (config_dir / "settings.json").write_text('{"key": "value"}')
+
+        flow_file = flow_dir / "flow.py"
+        flow_file.write_text("# flow module")
+
+        config = LokkiConfig()
+        config.batch_cfg = BatchConfig()
+        config.include = IncludeConfig(paths=["config/*.json"])
+
+        batch_dir = tmp_path / "batch"
+        batch_dir.mkdir()
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow"
+
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_flow")
+        mock_module.__file__ = str(flow_file)
+        sys.modules["test_flow"] = mock_module
+
+        try:
+            generate_batch_files(
+                build_dir=batch_dir,
+                config=config,
+                flow_fn=mock_flow_fn,
+            )
+
+            dockerfile_content = (batch_dir / "Dockerfile").read_text()
+            assert "COPY included/" in dockerfile_content
+
+            included_dir = batch_dir / "included"
+            assert included_dir.exists()
+            assert (included_dir / "settings.json").exists()
+        finally:
+            del sys.modules["test_flow"]
+
+    def test_include_no_files_match(self, tmp_path: Path, capsys) -> None:
+        """Test that warning is printed when include pattern matches no files."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _copy_included_files,
+        )
+        from lokki.config import IncludeConfig, LokkiConfig
+
+        flow_dir = tmp_path / "flow_dir"
+        flow_dir.mkdir()
+
+        flow_file = flow_dir / "flow.py"
+        flow_file.write_text("# flow module")
+
+        config = LokkiConfig()
+        config.include = IncludeConfig(paths=["nonexistent/*.txt"])
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow"
+
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_flow")
+        mock_module.__file__ = str(flow_file)
+        sys.modules["test_flow"] = mock_module
+
+        try:
+            result = _copy_included_files(
+                config=config,
+                build_dir=tmp_path / "build",
+                flow_fn=mock_flow_fn,
+            )
+
+            assert result == []
+            captured = capsys.readouterr()
+            assert "Warning" in captured.out
+            assert "nonexistent/*.txt" in captured.out
+        finally:
+            del sys.modules["test_flow"]
+
+    def test_lambda_dockerfile_without_include(self, tmp_path: Path) -> None:
+        """Test that Lambda Dockerfile has no COPY command when no includes."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _generate_docker_packages,
+        )
+        from lokki.config import LambdaConfig, LokkiConfig
+
+        config = LokkiConfig()
+        config.lambda_cfg = LambdaConfig(package_type="image")
+        config.include.paths = []
+
+        lambdas_dir = tmp_path / "lambdas"
+        lambdas_dir.mkdir()
+
+        _generate_docker_packages(
+            graph=FlowGraph(name="test", head=None),
+            config=config,
+            lambdas_dir=lambdas_dir,
+            flow_fn=None,
+        )
+
+        dockerfile_content = (lambdas_dir / "Dockerfile").read_text()
+        assert "COPY included/" not in dockerfile_content
+
+    def test_batch_dockerfile_with_include(self, tmp_path: Path) -> None:
+        """Test that Batch Dockerfile includes COPY command for included files."""
+        from lokki.builder.batchjob.batch_pkg import (
+            generate_batch_files,
+        )
+        from lokki.config import BatchConfig, IncludeConfig, LokkiConfig
+
+        flow_dir = tmp_path / "flow_dir"
+        flow_dir.mkdir()
+
+        config_dir = flow_dir / "config"
+        config_dir.mkdir()
+        (config_dir / "settings.json").write_text('{"key": "value"}')
+
+        flow_file = flow_dir / "flow.py"
+        flow_file.write_text("# flow module")
+
+        config = LokkiConfig()
+        config.batch_cfg = BatchConfig()
+        config.include = IncludeConfig(paths=["config/*.json"])
+
+        batch_dir = tmp_path / "batch"
+        batch_dir.mkdir()
+
+        def mock_flow_fn() -> None:
+            pass
+
+        mock_flow_fn.__module__ = "test_flow"
+
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_flow")
+        mock_module.__file__ = str(flow_file)
+        sys.modules["test_flow"] = mock_module
+
+        try:
+            generate_batch_files(
+                build_dir=batch_dir,
+                config=config,
+                flow_fn=mock_flow_fn,
+            )
+
+            dockerfile_content = (batch_dir / "Dockerfile").read_text()
+            assert "COPY included/" in dockerfile_content
+
+            included_dir = batch_dir / "included"
+            assert included_dir.exists()
+            assert (included_dir / "settings.json").exists()
+        finally:
+            del sys.modules["test_flow"]
+
+    def test_include_no_files_match(self, tmp_path: Path, capsys) -> None:
+        """Test that warning is printed when include pattern matches no files."""
+        from lokki.builder.lambdafunction.lambda_pkg import (
+            _copy_included_files,
+        )
+        from lokki.config import IncludeConfig, LokkiConfig
+
+        flow_dir = tmp_path / "flow_dir"
+        flow_dir.mkdir()
+
+        config = LokkiConfig()
+        config.include = IncludeConfig(paths=["nonexistent/*.txt"])
+
+        def mock_flow_fn():
+            from lokki.graph import FlowGraph
+
+            return FlowGraph(name="test", head=None)
+
+        import sys
+        from types import ModuleType
+
+        mock_module = ModuleType("test_flow")
+        mock_module.__file__ = str(flow_dir / "flow.py")
+        sys.modules["test_flow"] = mock_module
+
+        try:
+            result = _copy_included_files(
+                config=config,
+                build_dir=tmp_path / "build",
+                flow_fn=mock_flow_fn,
+            )
+
+            assert result == []
+            captured = capsys.readouterr()
+            assert "Warning" in captured.out
+            assert "nonexistent/*.txt" in captured.out
+        finally:
+            del sys.modules["test_flow"]

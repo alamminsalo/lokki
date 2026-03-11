@@ -19,6 +19,7 @@
 15. [Logging \& Observability](#15-logging--observability)
 16. [Deploy Command](#16-deploy-command)
 17. [AWS Batch Support](#17-aws-batch-support)
+18. [Include Configuration](#18-include-configuration)
 
 ---
 
@@ -2406,3 +2407,54 @@ Code:
   S3Bucket: !Ref S3Bucket
   S3Key: !Sub "${FlowName}/artifacts/lambdas/function.zip"
 ```
+
+---
+
+## 18. Include Configuration
+
+The include configuration allows adding static files to Docker images for both Lambda and Batch container deployments.
+
+### Configuration
+
+The `include` section in `lokki.toml`:
+
+```toml
+[include]
+paths = ["data/*.parquet", "models/*.pkl", "config/*.json"]
+```
+
+### Glob Pattern Resolution
+
+1. Patterns are resolved relative to the flow script directory
+2. `pathlib.Path.glob()` is used to expand patterns
+3. All matching files are copied to the build directory
+
+### File Copying
+
+At build time:
+1. For each glob pattern in `include.paths`
+2. Expand pattern relative to flow module directory
+3. Copy matched files to `<build_dir>/lambdas/included/` (Lambda) or `<build_dir>/batch/included/` (Batch)
+4. Add COPY commands to Dockerfile
+
+### Dockerfile Integration
+
+For Lambda images, the Dockerfile includes:
+
+```dockerfile
+# Include static files
+COPY included/ ${LAMBDA_TASK_ROOT}/
+```
+
+For Batch images:
+
+```dockerfile
+# Include static files
+COPY included/ ./
+```
+
+### Validation
+
+- Patterns must match existing files (build fails if no files match)
+- Only applies to `package_type = "image"` (not ZIP)
+- A warning is logged if no include configuration is provided

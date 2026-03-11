@@ -27,6 +27,8 @@ COPY --from=builder /build/deps ${{LAMBDA_TASK_ROOT}}/
 
 COPY handler.py ${{LAMBDA_TASK_ROOT}}/handler.py
 
+{include_copy}
+
 ENV LAMBDA_TASK_ROOT=/var/task
 
 CMD ["handler.lambda_handler"]
@@ -132,7 +134,19 @@ def _generate_docker_packages(
 ) -> Path:
     """Generate Docker-based Lambda packages (container images)."""
     base_image = config.lambda_cfg.base_image
-    dockerfile_content = SHARED_DOCKERFILE_TEMPLATE.format(base_image=base_image)
+
+    included_files = _copy_included_files(
+        config, lambdas_dir, flow_fn, target_subdir="included"
+    )
+
+    if included_files:
+        include_copy = "COPY included/ ${LAMBDA_TASK_ROOT}/"
+    else:
+        include_copy = ""
+
+    dockerfile_content = SHARED_DOCKERFILE_TEMPLATE.format(
+        base_image=base_image, include_copy=include_copy
+    )
     (lambdas_dir / "Dockerfile").write_text(dockerfile_content)
 
     handler_content = SHARED_HANDLER_TEMPLATE
@@ -141,6 +155,57 @@ def _generate_docker_packages(
     _copy_project_files(lambdas_dir, flow_fn)
 
     return lambdas_dir
+
+
+def _copy_included_files(
+    config: LokkiConfig,
+    build_dir: Path,
+    flow_fn: Callable[[], FlowGraph] | None,
+    target_subdir: str = "included",
+) -> list[Path]:
+    """Copy included files to build directory based on glob patterns.
+
+    Args:
+        config: LokkiConfig with include.paths
+        build_dir: The build directory to copy files to
+        flow_fn: The flow function to detect flow module path
+        target_subdir: Subdirectory name for included files
+
+    Returns:
+        List of copied file paths
+    """
+    import shutil
+
+    included_files: list[Path] = []
+
+    if not config.include.paths:
+        return included_files
+
+    flow_module_path = _get_flow_module_path(flow_fn)
+    if not flow_module_path:
+        return included_files
+
+    flow_module_dir = flow_module_path.parent.resolve()
+    target_dir = build_dir / target_subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for pattern in config.include.paths:
+        matched = list(flow_module_dir.glob(pattern))
+
+        if not matched:
+            print(f"Warning: Include pattern '{pattern}' matched no files")
+            continue
+
+        for src_file in matched:
+            if src_file.is_file():
+                rel_path = src_file.relative_to(flow_module_dir)
+                dest_file = target_dir / rel_path.name
+                dest_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dest_file)
+                included_files.append(dest_file)
+                print(f"  +include {rel_path}")
+
+    return included_files
 
 
 def _copy_project_files(

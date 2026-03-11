@@ -346,3 +346,50 @@ class TestLoadConfig:
             assert config.batch_cfg.job_definition_name == "env-definition"
             assert config.aws_region == "us-west-2"
             assert config.logging.level == "DEBUG"
+
+    def test_load_config_include_env_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that LOKKI_INCLUDE_PATHS environment variable is parsed."""
+        monkeypatch.setenv("LOKKI_INCLUDE_PATHS", "data/*.parquet,models/*.pkl")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "lokki.config.GLOBAL_CONFIG_PATH", Path("/nonexistent/global.toml")
+            )
+            mp.setattr(
+                "lokki.config.LOCAL_CONFIG_PATH", Path("/nonexistent/local.toml")
+            )
+
+            config = load_config()
+            assert config.include.paths == ["data/*.parquet", "models/*.pkl"]
+
+
+class TestIncludeConfig:
+    """Tests for IncludeConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test IncludeConfig default values."""
+        from lokki.config import IncludeConfig
+
+        config = IncludeConfig()
+        assert config.paths == []
+
+    def test_from_dict(self) -> None:
+        """Test IncludeConfig from_dict."""
+        from lokki.config import IncludeConfig, LokkiConfig
+
+        d = {
+            "include": {
+                "paths": ["data/*.parquet", "config/*.json"],
+            }
+        }
+        config = LokkiConfig.from_dict(d)
+        assert config.include.paths == ["data/*.parquet", "config/*.json"]
+
+    def test_from_dict_empty(self) -> None:
+        """Test IncludeConfig from dict with no include section."""
+        from lokki.config import IncludeConfig, LokkiConfig
+
+        config = LokkiConfig.from_dict({})
+        assert config.include.paths == []

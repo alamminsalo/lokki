@@ -15,6 +15,7 @@ __all__ = [
     "BatchConfig",
     "LocalConfig",
     "LoggingConfig",
+    "IncludeConfig",
     "LokkiConfig",
     "load_config",
 ]
@@ -140,6 +141,17 @@ class BatchConfig:
 
 
 @dataclass(slots=True)
+class IncludeConfig:
+    """Include configuration for static files in Docker images.
+
+    Attributes:
+        paths: List of glob patterns for files to include.
+    """
+
+    paths: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class LocalConfig:
     """Local development configuration.
 
@@ -172,6 +184,7 @@ class LokkiConfig:
         batch_cfg: AWS Batch job configuration.
         flow_name: Name of the flow (derived from function name).
         logging: Logging configuration.
+        include: Include configuration for static files.
     """
 
     # Top-level fields
@@ -189,6 +202,7 @@ class LokkiConfig:
     lambda_cfg: LambdaConfig = field(default_factory=LambdaConfig)
     batch_cfg: BatchConfig = field(default_factory=BatchConfig)
     local_cfg: LocalConfig = field(default_factory=LocalConfig)
+    include: IncludeConfig = field(default_factory=IncludeConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -200,6 +214,7 @@ class LokkiConfig:
         batch_config = d.get("batch", {})
         logging_config = d.get("logging", {})
         local_config = d.get("local", {})
+        include_config = d.get("include", {})
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
@@ -228,6 +243,9 @@ class LokkiConfig:
         local_cfg = LocalConfig(
             store_type=local_config.get("store_type", "local"),
         )
+        include_cfg = IncludeConfig(
+            paths=include_config.get("paths", []),
+        )
         logging_cfg = LoggingConfig(
             level=logging_config.get("level", "INFO"),
             format=logging_config.get("format", "human"),
@@ -245,6 +263,7 @@ class LokkiConfig:
             lambda_cfg=lambda_cfg,
             batch_cfg=batch_cfg,
             local_cfg=local_cfg,
+            include=include_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )
@@ -281,5 +300,7 @@ def load_config() -> LokkiConfig:
         config.batch_cfg.job_definition_name = env_batch_def
     if env_store_type := os.environ.get("LOKKI_STORE_TYPE"):
         config.local_cfg.store_type = env_store_type
+    if env_include := os.environ.get("LOKKI_INCLUDE_PATHS"):
+        config.include.paths = [p.strip() for p in env_include.split(",") if p.strip()]
 
     return config
