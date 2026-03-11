@@ -41,12 +41,21 @@ class LocalStore(TransientStore):
         run_id: str,
         step_name: str,
         obj: Any,
+        input_hash: str | None = None,
     ) -> str:
         path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
         path.parent.mkdir(parents=True, exist_ok=True)
         data = gzip.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
         path.write_bytes(data)
         return str(path)
+
+    def get_input_hash(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> str | None:
+        return None
 
     def write_manifest(
         self,
@@ -63,6 +72,25 @@ class LocalStore(TransientStore):
 
     def read(self, location: str) -> Any:
         data = Path(location).read_bytes()
+        return pickle.loads(gzip.decompress(data))
+
+    def exists(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> bool:
+        path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
+        return path.exists()
+
+    def read_cached(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> Any:
+        path = self._get_path(flow_name, run_id, step_name, "output.pkl.gz")
+        data = path.read_bytes()
         return pickle.loads(gzip.decompress(data))
 
     def cleanup(self) -> None:

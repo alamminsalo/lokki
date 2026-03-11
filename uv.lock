@@ -507,7 +507,7 @@ wheels = [
 
 [[package]]
 name = "lokkiflow"
-version = "0.5.115"
+version = "0.5.133"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },

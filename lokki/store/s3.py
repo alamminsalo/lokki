@@ -8,6 +8,7 @@ import os
 import pickle
 from typing import TYPE_CHECKING, Any
 
+from botocore.exceptions import ClientError
 from lokki._aws import get_s3_client
 from lokki.store.protocol import TransientStore
 
@@ -41,15 +42,70 @@ class S3Store(TransientStore):
         run_id: str,
         step_name: str,
         obj: Any,
+        input_hash: str | None = None,
     ) -> str:
         key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
         data = gzip.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
-        self._client.put_object(Bucket=self.bucket, Key=key, Body=data)
+
+        if input_hash:
+            self._client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=data,
+                Tagging="input_hash=" + input_hash,
+            )
+        else:
+            self._client.put_object(Bucket=self.bucket, Key=key, Body=data)
+
         return f"s3://{self.bucket}/{key}"
+
+    def get_input_hash(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> str | None:
+        key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
+        try:
+            response = self._client.get_object_tagging(
+                Bucket=self.bucket,
+                Key=key,
+            )
+            for tag in response.get("TagSet", []):
+                if tag["Key"] == "input_hash":
+                    return tag["Value"]
+            return None
+        except self._client.exceptions.NoSuchKey:
+            return None
 
     def read(self, location: str) -> Any:
         bucket, key = self._parse_url(location)
         data = self._client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        return pickle.loads(gzip.decompress(data))
+
+    def exists(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> bool:
+        key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
+        try:
+            self._client.head_object(Bucket=self.bucket, Key=key)
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                return False
+            raise
+
+    def read_cached(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> Any:
+        key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
+        data = self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
         return pickle.loads(gzip.decompress(data))
 
     def write_manifest(

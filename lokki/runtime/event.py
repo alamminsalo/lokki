@@ -13,14 +13,16 @@ class FlowContext:
     Contains execution metadata and flow parameters.
     """
 
-    run_id: str
+    run_id: str | None
+    cache_enabled: bool = False
     params: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FlowContext:
         """Create FlowContext from dictionary."""
         return cls(
-            run_id=data.get("run_id", "unknown"),
+            run_id=data.get("run_id"),
+            cache_enabled=data.get("cache_enabled", False),
             params=data.get("params", {}),
         )
 
@@ -28,6 +30,7 @@ class FlowContext:
         """Convert to dictionary."""
         return {
             "run_id": self.run_id,
+            "cache_enabled": self.cache_enabled,
             "params": self.params,
         }
 
@@ -51,7 +54,7 @@ class LambdaEvent:
         elif isinstance(flow_data, dict):
             flow = FlowContext.from_dict(flow_data)
         else:
-            flow = FlowContext(run_id="unknown", params={})
+            flow = FlowContext(run_id=None, cache_enabled=False, params={})
 
         return cls(
             flow=flow,

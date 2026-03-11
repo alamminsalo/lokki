@@ -640,8 +640,9 @@ class TestDistributedMapFlowChaining:
         assert "Parameters" in init_flow
         params = init_flow["Parameters"]
         assert "flow" in params
-        assert params["flow"]["run_id.$"] == "$$.Execution.Id"
+        assert params["flow"]["run_id"] == "{% run_id %}"
         assert params["flow"]["params.$"] == "$$.Execution.Input"
+        assert "cache_enabled" in params["flow"]
 
     def test_initflow_startat_points_to_source(self) -> None:
         """Test that StartAt points to InitFlow which then goes to source step."""

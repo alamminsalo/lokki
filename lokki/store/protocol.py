@@ -30,12 +30,52 @@ class TransientStore(Protocol):
         run_id: str,
         step_name: str,
         obj: Any,
+        input_hash: str | None = None,
     ) -> str:
-        """Write an object to storage and return the storage location URL."""
+        """Write an object to storage and return the storage location URL.
+
+        Args:
+            input_hash: Optional hash of input data. If provided, stored as S3 tag
+                for cache validation.
+        """
+        ...
+
+    def get_input_hash(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> str | None:
+        """Get the stored input hash for a step's output.
+
+        Returns the input_hash stored as S3 tag, or None if not set.
+        Used for cache validation.
+        """
         ...
 
     def read(self, location: str) -> Any:
         """Read an object from storage (path or s3:// URL)."""
+        ...
+
+    def exists(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> bool:
+        """Check if output already exists for this step in this run.
+
+        Used for caching within a single run execution.
+        """
+        ...
+
+    def read_cached(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> Any:
+        """Read cached output for this step."""
         ...
 
     def write_manifest(

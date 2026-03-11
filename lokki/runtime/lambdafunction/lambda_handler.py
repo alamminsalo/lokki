@@ -61,10 +61,17 @@ def make_handler(
         lambda_event = _parse_event(event)
 
         run_id = lambda_event.flow.run_id
+        cache_enabled = lambda_event.flow.cache_enabled
         flow_params = lambda_event.flow.params
         input_data = lambda_event.input
 
-        # If input_data is None (first step with no prior output), use empty marker
+        # If run_id is not provided, use a unique placeholder for this execution
+        # This ensures S3 writes work, but cache won't match across runs
+        if run_id is None:
+            import uuid
+
+            run_id = f"nocache-{uuid.uuid4().hex[:8]}"
+
         is_first_step = input_data is None
         if is_first_step:
             input_data = {}
@@ -72,6 +79,26 @@ def make_handler(
         store = _get_store()
 
         start_time = datetime.now()
+
+        # Compute input hash for cache validation
+        from lokki.store.utils import _hash_input
+
+        input_hash = _hash_input(input_data)
+
+        # Cache: check if enabled and output exists with matching input hash
+        stored_input_hash = None
+        if cache_enabled and store.exists(flow_name, run_id, step_name):
+            stored_input_hash = store.get_input_hash(flow_name, run_id, step_name)
+            if stored_input_hash == input_hash:
+                logger.info(
+                    f"Cache hit for step '{step_name}', returning cached result",
+                    extra={"event": "cache_skip", "step": step_name},
+                )
+                cached_result = store.read_cached(flow_name, run_id, step_name)
+                return {
+                    "input": cached_result,
+                    "flow": lambda_event.flow.to_dict(),
+                }
 
         try:
             # Read input from S3 if it's a URL string or list of URLs
@@ -110,8 +137,10 @@ def make_handler(
                 )
                 return {"input": None, "flow": lambda_event.flow.to_dict()}
 
-            # Write output to S3
-            output_url = store.write(flow_name, run_id, step_name, result)
+            # Write output to S3 (always with input_hash for cache validation)
+            output_url = store.write(
+                flow_name, run_id, step_name, result, input_hash=input_hash
+            )
 
             # Handle map results (list) - write manifest as list of URLs
             if isinstance(result, list):

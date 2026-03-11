@@ -37,9 +37,6 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     states: dict[str, Any] = {}
     state_order: list[str] = []
 
-    # InitFlow Pass state to prepare input for first step
-    # Transforms execution input -> {"flow": {...}, "input": {...}, "step_name": "..."}
-    # Passes through the original input so Batch tasks can access flow params
     first_step_name: str | None = None
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
@@ -54,10 +51,14 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
     init_flow_state: dict[str, Any] = {
         "Type": "Pass",
-        "InputPath": "$",
+        "Assign": {
+            "run_id": "{% $states.input.run_id ?? $states.context.Execution.Id %}",
+            "cache_enabled": "{% $exists($states.input.run_id) %}",
+        },
         "Parameters": {
             "flow": {
-                "run_id.$": "$$.Execution.Id",
+                "run_id": "{% run_id %}",
+                "cache_enabled": "{% cache_enabled %}",
                 "params.$": "$$.Execution.Input",
             },
             "input": None,
@@ -69,19 +70,21 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
     states["InitFlow"] = init_flow_state
 
     first_state: str | None = None
-
     prev_state: str | None = None
 
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             state_name = to_pascal(entry.node.name)
-            if first_state is None:
-                first_state = state_name
+
             job_type = entry.job_type or "lambda"
             if job_type == "batch":
                 state = _batch_task_state(entry, config, graph.name)
             else:
                 state = _task_state(entry.node, config, graph.name)
+
+            if first_state is None:
+                first_state = state_name
+
             states[state_name] = state
             state_order.append(state_name)
 
@@ -92,6 +95,7 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
 
         elif isinstance(entry, MapOpenEntry):
             source_name = to_pascal(entry.source.name)
+
             if first_state is None:
                 first_state = f"{source_name}Map"
             inner_states = {}
@@ -118,7 +122,6 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 else:
                     inner_states[step_name]["End"] = True
 
-            # ItemSelector for passing execution context to each iteration
             item_selector = {
                 "input.$": "$",
                 "flow": {
@@ -127,7 +130,6 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
                 },
             }
 
-            # Distributed Map: use S3 ItemReader/ItemWriter
             map_state: dict[str, Any] = {
                 "Type": "Map",
                 "ItemReader": {
@@ -170,23 +172,20 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             if prev_state:
                 states[prev_state]["Next"] = map_state_name
 
-            # Determine what comes after the map
             has_agg = getattr(entry, "has_aggregation", True)
             next_step = getattr(entry, "next_step", None)
 
             if not has_agg and next_step:
-                # Map without agg has a next step in the outer chain via .next()
                 next_state_name = to_pascal(next_step.name)
                 map_state["Next"] = next_state_name
-                del map_state["End"]  # Don't end the flow, continue to next step
+                del map_state["End"]
                 prev_state = next_state_name
             else:
-                # Map with agg OR map without agg that ends the flow
-                # will be handled by final "End" marking
                 prev_state = map_state_name
 
         elif isinstance(entry, MapCloseEntry):
             state_name = to_pascal(entry.agg_step.name)
+
             job_type = getattr(entry.agg_step, "job_type", "lambda") or "lambda"
             if job_type == "batch":
                 state = _batch_task_state(entry.agg_step, config, graph.name)
@@ -205,7 +204,6 @@ def build_state_machine(graph: FlowGraph, config: LokkiConfig) -> dict[str, Any]
             del states[prev_state]["Next"]
         states[prev_state]["End"] = True
 
-    # Connect InitFlow to first state
     assert first_state, "No first state found"
     states["InitFlow"]["Next"] = first_state
 
@@ -232,16 +230,7 @@ def _task_state(step_node: Any, config: LokkiConfig, flow_name: str) -> dict[str
 
 
 def _batch_task_state(node: Any, config: LokkiConfig, flow_name: str) -> dict[str, Any]:
-    """Generate a Task state for a Batch step.
-
-    Args:
-        node: TaskEntry or StepNode with vcpu, memory_mb, and retry attributes
-        config: Lokki configuration
-        flow_name: Flow name for job naming
-
-    Returns:
-        Step Functions Task state dict for Batch job
-    """
+    """Generate a Task state for a Batch step."""
     vcpu = node.vcpu if node.vcpu is not None else config.batch_cfg.vcpu
     memory_mb = (
         node.memory_mb if node.memory_mb is not None else config.batch_cfg.memory_mb

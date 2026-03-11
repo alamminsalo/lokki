@@ -326,6 +326,7 @@ Invoke the deployed flow on AWS via Step Functions.
 
 ```bash
 python flow.py invoke [--param1 value1] [--param2 value2]
+python flow.py invoke --run-id my-cache-key  # Enable caching
 ```
 
 **Options:**
@@ -333,6 +334,11 @@ python flow.py invoke [--param1 value1] [--param2 value2]
 | Option | Description |
 |--------|-------------|
 | `--param` | Flow parameters (passed to the deployed flow) |
+| `--run-id` | Optional run ID for enabling caching across multiple runs |
+
+**Caching:** When `--run-id` is provided, step outputs are cached in S3 using the run ID as the key. Subsequent runs with the same `--run-id` will skip steps that already have cached output. This is useful for retrying failed flows or running the same flow with the same inputs.
+
+Without `--run-id`, each invocation runs fresh (no caching).
 
 ---
 

@@ -427,3 +427,36 @@ class TestBatchJobTypes:
         inner_states = map_state["ItemProcessor"]["States"]
         assert "BatchProcess" in inner_states
         assert "batch:submitJob.sync" in inner_states["BatchProcess"]["Resource"]
+
+
+class TestAutomaticCaching:
+    """Tests for automatic caching behavior.
+
+    Caching is automatic in the Lambda handler - output is checked
+    before execution. These tests verify state machine is standard.
+    """
+
+    def test_state_machine_standard(self) -> None:
+        """Test that state machine has standard structure."""
+
+        @step
+        def step1() -> str:
+            return "a"
+
+        @step
+        def step2(x: str) -> str:
+            return x.upper()
+
+        step1().next(step2)
+
+        graph = FlowGraph(name="test-flow", head=step2)
+
+        config = LokkiConfig()
+        sm = build_state_machine(graph, config)
+
+        assert "Step1" in sm["States"]
+        assert "Step2" in sm["States"]
+        assert sm["States"]["Step1"]["Type"] == "Task"
+        assert sm["States"]["Step2"]["Type"] == "Task"
+        assert sm["States"]["Step1"]["Next"] == "Step2"
+        assert sm["States"]["Step2"]["End"] is True

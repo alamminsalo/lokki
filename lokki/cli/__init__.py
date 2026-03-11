@@ -14,13 +14,25 @@ from lokki.graph import FlowGraph
 logger = logging.getLogger(__name__)
 
 
+RESERVED_PARAMS = {"run_id", "cache_enabled"}
+
+
 def _get_flow_params(
     flow_fn: Callable[..., FlowGraph],
 ) -> dict[str, inspect.Parameter]:
     """Get the parameters of the flow function."""
     fn = getattr(flow_fn, "_fn", flow_fn)
     sig = inspect.signature(fn)
-    return dict(sig.parameters)
+    params = dict(sig.parameters)
+
+    # Check for reserved parameter names
+    for name in params:
+        if name in RESERVED_PARAMS:
+            raise ValueError(
+                f"'{name}' is a reserved parameter name and cannot be used in @flow"
+            )
+
+    return params
 
 
 def _coerce_value(value: str, param_type: type) -> Any:
@@ -237,6 +249,10 @@ def _handle_invoke(args: argparse.Namespace, flow_fn: Callable[..., FlowGraph]) 
         logger.error(str(e))
         sys.exit(1)
 
+    # Add run_id to input if provided
+    if getattr(args, "run_id", None):
+        flow_params = {"run_id": args.run_id, **flow_params}
+
     with cli_context(flow_fn, require_bucket=False) as (graph, config):
         result = invoke_flow(
             flow_name=graph.name,
@@ -350,6 +366,12 @@ def main(flow_fn: Callable[..., FlowGraph]) -> None:
     # invoke parser
     invoke_parser = subparsers.add_parser(
         "invoke", help="Invoke the deployed flow on AWS"
+    )
+    invoke_parser.add_argument(
+        "--run-id",
+        dest="run_id",
+        type=str,
+        help="Run ID for caching (enables cache across multiple runs)",
     )
     for name, param in params.items():
         has_default = param.default is not inspect.Parameter.empty

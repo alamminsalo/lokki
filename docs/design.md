@@ -2458,3 +2458,100 @@ COPY included/ ./
 - Patterns must match existing files (build fails if no files match)
 - Only applies to `package_type = "image"` (not ZIP)
 - A warning is logged if no include configuration is provided
+
+---
+
+## 19. Caching
+
+Caching enables step outputs to be reused across multiple flow executions. When enabled, if a step's output already exists in S3, the step execution is skipped and the cached result is returned.
+
+### How It Works
+
+1. User provides `--run-id` when invoking the flow
+2. The InitFlow Pass state extracts the run ID from input
+3. Lambda handlers check if output exists at `s3://{bucket}/lokki/{flow}/runs/{run_id}/{step}/output.pkl.gz`
+4. If exists → return cached result (skip execution)
+5. If not exists → execute step and write to S3
+
+### State Machine Implementation
+
+The InitFlow Pass state uses JSONata to set run_id and cache_enabled:
+
+```json
+{
+  "Type": "Pass",
+  "Assign": {
+    "run_id": "{% $states.input.run_id ?? $states.context.Execution.Id %}",
+    "cache_enabled": "{% $exists($states.input.run_id) %}"
+  },
+  "Parameters": {
+    "flow": {
+      "run_id.$": "$.run_id",
+      "cache_enabled.$": "$.cache_enabled",
+      "params.$": "$$.Execution.Input"
+    },
+    "input": null
+  },
+  "Next": "FirstStep"
+}
+```
+
+**Key points:**
+- `$.run_id` uses input value if provided, otherwise falls back to Execution.Id
+- `$.cache_enabled` is `true` only when run_id is explicitly provided in input
+- Flow context is passed to all Lambda handlers with run_id and cache_enabled
+
+### Handler Logic
+
+In the Lambda handler:
+
+```python
+# Compute input hash for cache validation
+input_hash = _hash_input(input_data)
+
+# Check cache: exists AND input hash matches
+stored_input_hash = store.get_input_hash(flow_name, run_id, step_name)
+if cache_enabled and store.exists(flow_name, run_id, step_name):
+    if stored_input_hash == input_hash:
+        # Return cached result (input hasn't changed)
+        return {"input": cached_result, "flow": lambda_event.flow.to_dict()}
+
+# Execute step normally...
+
+# Always write output with input_hash tag
+store.write(flow_name, run_id, step_name, result, input_hash=input_hash)
+```
+
+### Input Hash Validation
+
+To ensure cached outputs are only used when input hasn't changed:
+1. **On write**: Compute hash of input data using `_hash_input()` and store as S3 tag `input_hash`
+2. **On cache check**: Read stored `input_hash` tag and compare with current input hash
+3. **If mismatch**: Don't use cache, execute step normally
+4. **If tag missing**: Treat as hash mismatch (backward compatibility for old cached objects)
+
+The input hash is computed deterministically from the input data using JSON serialization, ensuring the same input produces the same hash.
+
+### Usage
+
+```bash
+# Enable caching - subsequent runs with same run-id will use cached outputs
+python flow.py invoke --run-id my-cache-key
+
+# Disable caching (default) - fresh execution each time
+python flow.py invoke
+```
+
+### Reserved Parameters
+
+The following parameter names are reserved and cannot be used in `@flow` functions:
+- `run_id` - Used for cache key
+- `cache_enabled` - Used to enable/disable caching
+
+### Design Decisions
+
+- **Disabled by default**: Caching requires explicit `--run-id` to avoid unintended cache hits
+- **Per-run-id isolation**: Different run IDs use different S3 paths, enabling parallel runs
+- **S3 HeadObject**: Uses cheap HeadObject calls to check cache existence
+- **Input hash validation**: Ensures cached outputs are only used when input data hasn't changed
+- **Always store input hash**: Even when cache is disabled, input_hash is stored as S3 tag for future cache hits

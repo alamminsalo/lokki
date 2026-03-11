@@ -71,11 +71,20 @@ class MemoryStore(TransientStore):
         run_id: str,
         step_name: str,
         obj: Any,
+        input_hash: str | None = None,
     ) -> str:
         key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
         serialized = gzip.compress(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
         self._data[key] = serialized
         return f"memory://{key}"
+
+    def get_input_hash(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> str | None:
+        return None
 
     def write_manifest(
         self,
@@ -95,6 +104,25 @@ class MemoryStore(TransientStore):
             data = self._data[key]
             return pickle.loads(gzip.decompress(data))
         raise ValueError(f"Invalid location: {location}")
+
+    def exists(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> bool:
+        key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
+        return key in self._data
+
+    def read_cached(
+        self,
+        flow_name: str,
+        run_id: str,
+        step_name: str,
+    ) -> Any:
+        key = self._make_key(flow_name, run_id, step_name, "output.pkl.gz")
+        data = self._data[key]
+        return pickle.loads(gzip.decompress(data))
 
     def cleanup(self) -> None:
         self._data.clear()
