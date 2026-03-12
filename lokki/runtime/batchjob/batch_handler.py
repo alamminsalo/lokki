@@ -59,7 +59,7 @@ def make_batch_handler(
                 input=event,
             )
 
-        run_id = lambda_event.flow.run_id
+        run_id = lambda_event.flow.run_id or "unknown"
         flow_params = lambda_event.flow.params
         input_data = lambda_event.input
 

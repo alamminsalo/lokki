@@ -51,4 +51,4 @@ jobs:
       - name: Run CI Pipeline
         working-directory: tests/flows/ci_pipeline
         run: |
-          task ci-pipeline
+          task ci:pipeline

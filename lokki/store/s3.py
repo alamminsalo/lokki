@@ -6,9 +6,10 @@ import gzip
 import json
 import os
 import pickle
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from botocore.exceptions import ClientError
+
 from lokki._aws import get_s3_client
 from lokki.store.protocol import TransientStore
 
@@ -73,7 +74,7 @@ class S3Store(TransientStore):
             )
             for tag in response.get("TagSet", []):
                 if tag["Key"] == "input_hash":
-                    return tag["Value"]
+                    return cast(str, tag["Value"])
             return None
         except self._client.exceptions.NoSuchKey:
             return None
