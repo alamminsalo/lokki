@@ -48,15 +48,6 @@ def make_handler(
         flow_name = os.environ.get("LOKKI_FLOW_NAME", "unknown")
         step_name = fn.__name__
 
-        logger.info(
-            f"Lambda invoked: flow={flow_name}, step={step_name}",
-            extra={
-                "event": "lambda_invoke",
-                "flow": flow_name,
-                "step": step_name,
-            },
-        )
-
         # Parse event - try new format first, fall back to old format
         lambda_event = _parse_event(event)
 
@@ -71,6 +62,16 @@ def make_handler(
             import uuid
 
             run_id = f"nocache-{uuid.uuid4().hex[:8]}"
+
+        logger.info(
+            f"Lambda invoked: flow={flow_name}, step={step_name}",
+            extra={
+                "event": "lambda_invoke",
+                "flow": flow_name,
+                "step": step_name,
+                "run_id": run_id,
+            },
+        )
 
         is_first_step = input_data is None
         if is_first_step:
@@ -92,7 +93,7 @@ def make_handler(
             if stored_input_hash == input_hash:
                 logger.info(
                     f"Cache hit for step '{step_name}', returning cached result",
-                    extra={"event": "cache_skip", "step": step_name},
+                    extra={"event": "cache_skip", "step": step_name, "run_id": run_id},
                 )
                 cached_result = store.read_cached(flow_name, run_id, step_name)
                 return {
@@ -105,7 +106,7 @@ def make_handler(
             if isinstance(input_data, str):
                 logger.info(
                     f"Reading input from {input_data}",
-                    extra={"event": "input_read", "step": step_name},
+                    extra={"event": "input_read", "step": step_name, "run_id": run_id},
                 )
                 input_data = store.read(input_data)
             elif isinstance(input_data, list) and all(
@@ -113,7 +114,7 @@ def make_handler(
             ):
                 logger.info(
                     f"Reading {len(input_data)} inputs from S3",
-                    extra={"event": "input_read", "step": step_name},
+                    extra={"event": "input_read", "step": step_name, "run_id": run_id},
                 )
                 input_data = [store.read(url) for url in input_data]
 
@@ -133,6 +134,7 @@ def make_handler(
                         "step": step_name,
                         "duration": (datetime.now() - start_time).total_seconds(),
                         "status": "success",
+                        "run_id": run_id,
                     },
                 )
                 return {"input": None, "flow": lambda_event.flow.to_dict()}
@@ -161,6 +163,7 @@ def make_handler(
                         "step": step_name,
                         "duration": (datetime.now() - start_time).total_seconds(),
                         "status": "success",
+                        "run_id": run_id,
                     },
                 )
                 return {"input": manifest_url, "flow": lambda_event.flow.to_dict()}
@@ -173,6 +176,7 @@ def make_handler(
                     "step": step_name,
                     "duration": (datetime.now() - start_time).total_seconds(),
                     "status": "success",
+                    "run_id": run_id,
                 },
             )
             return {"input": output_url, "flow": lambda_event.flow.to_dict()}
@@ -186,6 +190,7 @@ def make_handler(
                     "step": step_name,
                     "duration": (datetime.now() - start_time).total_seconds(),
                     "error": str(e),
+                    "run_id": run_id,
                 },
             )
             raise

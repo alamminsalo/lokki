@@ -13,6 +13,14 @@ from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
+def _get_tags(flow_name: str) -> list[dict[str, str]]:
+    """Get standard lokki tags for resources."""
+    return [
+        {"Key": "lokki:managed", "Value": "true"},
+        {"Key": "lokki:flow-name", "Value": flow_name},
+    ]
+
+
 def build_template(
     graph: FlowGraph,
     config: LokkiConfig,
@@ -84,6 +92,7 @@ def build_template(
                     },
                 }
             ],
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
@@ -158,6 +167,9 @@ def build_template(
         }
         env_vars.update(config.lambda_cfg.env)
 
+        log_group = {"Fn::Sub": f"/aws/lambda/${{FlowName}}-{step_name}"}
+        log_stream = "${aws:executionId}"
+
         if package_type == "zip":
             resources[to_pascal(step_name) + "Function"] = {
                 "Type": "AWS::Lambda::Function",
@@ -177,6 +189,11 @@ def build_template(
                     "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
                     "Handler": "handler.lambda_handler",
+                    "Tags": _get_tags("${FlowName}"),
+                    "LoggingConfig": {
+                        "LogGroup": log_group,
+                        "LogStream": log_stream,
+                    },
                 },
             }
         else:
@@ -193,6 +210,11 @@ def build_template(
                     "Timeout": timeout,
                     "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
+                    "Tags": _get_tags("${FlowName}"),
+                    "LoggingConfig": {
+                        "LogGroup": log_group,
+                        "LogStream": log_stream,
+                    },
                 },
             }
             if job_type == "batch":
@@ -261,6 +283,7 @@ def build_template(
                     },
                 },
             ],
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
@@ -321,6 +344,7 @@ def build_template(
                         },
                     },
                 ],
+                "Tags": _get_tags("${FlowName}"),
             },
         }
 
@@ -345,6 +369,7 @@ def build_template(
                         },
                     },
                 },
+                "Tags": _get_tags("${FlowName}"),
                 "RetryStrategy": {"Attempts": 1},
             },
         }
@@ -380,6 +405,7 @@ def build_template(
             "DefinitionString": {"Fn::Sub": definition_string},
             "RoleArn": {"Fn::GetAtt": ["StepFunctionsExecutionRole", "Arn"]},
             "StateMachineName": {"Fn::Sub": "${FlowName}"},
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
@@ -436,6 +462,16 @@ def build_template(
         "Description": f"Lokki flow: {graph.name}",
         "Parameters": parameters,
         "Resources": resources,
+        "Outputs": {
+            "StateMachineArn": {
+                "Description": "Step Functions State Machine ARN",
+                "Value": {"Fn::GetAtt": ["StateMachine", "Arn"]},
+            },
+            "StateMachineName": {
+                "Description": "Step Functions State Machine Name",
+                "Value": {"Ref": "FlowName"},
+            },
+        },
     }
 
     return yaml.dump(template, default_flow_style=False, sort_keys=False)

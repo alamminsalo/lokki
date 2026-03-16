@@ -60,6 +60,7 @@ This directory contains implementation tasks grouped by milestone. Each mileston
 | 49 | [x] | New Map API with Direct Pass | Simplified map syntax |
 | 50 | [x] | MemoryStore for Local Development | In-memory store |
 | 51 | [x] | Include Configuration for Static Files | Include files in Docker images |
+| 52 | [x] | UI Console | TUI for browsing flows, runs, and logs |
 
 ## Adding New Milestones
 

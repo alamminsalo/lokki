@@ -14,10 +14,10 @@ def get_s3_client() -> Any:
     return boto3.client("s3", **kwargs)
 
 
-def get_sfn_client(region: str = "us-east-1") -> Any:
+def get_sfn_client(region: str = "us-east-1", endpoint: str | None = None) -> Any:
     """Get Step Functions client with endpoint from AWS_ENDPOINT_URL env var."""
     kwargs: dict[str, str] = {"region_name": region}
-    if endpoint := os.environ.get("AWS_ENDPOINT_URL"):
+    if endpoint or (endpoint := os.environ.get("AWS_ENDPOINT_URL")):
         kwargs["endpoint_url"] = endpoint
     return boto3.client("stepfunctions", **kwargs)
 
@@ -30,10 +30,10 @@ def get_cf_client(region: str = "us-east-1") -> Any:
     return boto3.client("cloudformation", **kwargs)
 
 
-def get_logs_client(region: str = "us-east-1") -> Any:
+def get_logs_client(region: str = "us-east-1", endpoint: str | None = None) -> Any:
     """Get CloudWatch Logs client with endpoint from AWS_ENDPOINT_URL env var."""
     kwargs: dict[str, str] = {"region_name": region}
-    if endpoint := os.environ.get("AWS_ENDPOINT_URL"):
+    if endpoint or (endpoint := os.environ.get("AWS_ENDPOINT_URL")):
         kwargs["endpoint_url"] = endpoint
     return boto3.client("logs", **kwargs)
 
@@ -60,3 +60,11 @@ def get_batch_client(region: str = "us-east-1") -> Any:
     if endpoint := os.environ.get("AWS_ENDPOINT_URL"):
         kwargs["endpoint_url"] = endpoint
     return boto3.client("batch", **kwargs)
+
+
+def get_dynamodb_client(region: str = "us-east-1", endpoint: str | None = None) -> Any:
+    """Get DynamoDB client with endpoint from AWS_ENDPOINT_URL env var."""
+    kwargs: dict[str, str] = {"region_name": region}
+    if endpoint or (endpoint := os.environ.get("AWS_ENDPOINT_URL")):
+        kwargs["endpoint_url"] = endpoint
+    return boto3.client("dynamodb", **kwargs)

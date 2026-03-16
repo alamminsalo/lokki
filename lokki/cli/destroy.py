@@ -76,8 +76,13 @@ def destroy(
     region: str = "us-east-1",
     endpoint: str | None = None,
     confirm: bool = False,
+    flow_name: str | None = None,
 ) -> None:
     """Destroy a flow's CloudFormation stack."""
+    # Derive flow_name from stack_name if not provided
+    if flow_name is None:
+        flow_name = stack_name.replace("-stack", "")
+
     try:
         destroy_stack(
             stack_name=stack_name,
@@ -85,6 +90,20 @@ def destroy(
             endpoint=endpoint,
             confirm=confirm,
         )
+
+        # Remove flow metadata from DynamoDB
+        try:
+            from lokki._aws import get_dynamodb_client
+
+            dynamodb_client = get_dynamodb_client(region, endpoint)
+            dynamodb_client.delete_item(
+                TableName="lokki-flows",
+                Key={"flow_name": {"S": flow_name}},
+            )
+            print("  Removed flow metadata from DynamoDB")
+        except Exception as e:
+            logger.warning(f"Failed to remove flow metadata: {e}")
+
     except DestroyError as e:
         logger.error(str(e))
         sys.exit(1)

@@ -235,6 +235,7 @@ def _handle_destroy(
             region=config.aws_region,
             endpoint=config.aws_endpoint,
             confirm=args.confirm,
+            flow_name=graph.name,
         )
 
 

@@ -20,6 +20,7 @@
 16. [Deploy Command](#16-deploy-command)
 17. [AWS Batch Support](#17-aws-batch-support)
 18. [Include Configuration](#18-include-configuration)
+19. [UI Console](#19-ui-console)
 
 ---
 
@@ -2555,3 +2556,272 @@ The following parameter names are reserved and cannot be used in `@flow` functio
 - **S3 HeadObject**: Uses cheap HeadObject calls to check cache existence
 - **Input hash validation**: Ensures cached outputs are only used when input data hasn't changed
 - **Always store input hash**: Even when cache is disabled, input_hash is stored as S3 tag for future cache hits
+
+---
+
+## 19. UI Console
+
+The UI Console is a Textual-based TUI application that provides a unified interface for browsing lokki flows, viewing run history, and accessing logs.
+
+### 19.1 Command
+
+```bash
+# Default (uses LocalStack or AWS configured in environment)
+python flow.py ui
+
+# With explicit region
+python flow.py ui --region eu-west-1
+
+# With explicit endpoint (e.g., LocalStack)
+python flow.py ui --endpoint http://localhost:4566
+```
+
+### 19.2 Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  lokki console                              [←] [→] Page    │
+├────────────────┬────────────────────────────────────────────┤
+│                │  Runs for: weather                         │
+│  ─ Flows ─     │  ┌─────────────────────────────────────┐   │
+│  □ weather     │  │  run-123  │ SUCCEEDED │ 2m 30s │ ...│   │
+│  □ etl-pipeline│  │  run-122  │ FAILED    │ 30s    │ ...│   │
+│  □ ml-training │  │  run-121  │ RUNNING   │ --     │ ...│   │
+│                │  │  ...                                   │   │
+│                │  └─────────────────────────────────────┘   │
+│                │                                            │
+│                │  Run: run-123                               │
+│                │  ┌─────────────────────────────────────┐   │
+│                │  │ [fetch]──►[process]──►[save]       │   │
+│                │  │   ✓          ✓          ✓          │   │
+│                │  └─────────────────────────────────────┘   │
+│                │                                            │
+│                │  [Shift+L] View Logs                        │
+└────────────────┴────────────────────────────────────────────┘
+```
+
+### 19.3 Components
+
+**Flow List Sidebar**
+- Located on the left side
+- Lists all deployed Step Functions state machines matching `lokki-*`
+- Single selection
+- Auto-refreshes on focus
+
+**Run List**
+- Main panel, top section
+- Paginated list (10 runs per page)
+- Columns: Run ID, Status, Duration, Start Time
+- Sorted by newest first
+- Navigation: Left/Right arrows for pagination
+
+**Run Detail**
+- Main panel, bottom section
+- ASCII flow graph visualization
+- Step status color coding:
+  - Green: SUCCEEDED
+  - Red: FAILED
+  - Yellow: RUNNING
+  - Gray: Not started/sKIPPED
+
+**Log Popover**
+- Triggered by pressing Shift+L
+- Fetches CloudWatch logs for the selected run
+- Modal overlay with scrollable log output
+- Close with Escape or click outside
+
+### 19.4 Key Bindings
+
+| Key | Action |
+|-----|--------|
+| ↑/↓ | Navigate flow/runs list |
+| Enter | Select flow / View run details |
+| ←/→ | Navigate run list pages |
+| Shift+L | Open log popover for selected run |
+| Escape | Close popover / Go back |
+| q | Quit |
+
+### 19.5 Data Sources
+
+**Flow List**
+- API: `list_state_machines`
+- Filter: State machines starting with `lokki-`
+- Cached for session, refresh on focus
+
+**Run List**
+- API: `list_executions`
+- Parameters: `stateMachineArn`, `maxResults=10`
+- Pagination via `nextToken`
+
+**Run Detail**
+- API: `get_execution_history`
+- Parses `events` for step-level status
+- Maps execution events to flow graph
+
+**Logs**
+- API: `filter_log_events`
+- Log Group: `/aws/lambda/{flow_name}-{step_name}`
+- Filter: Run ID in log stream
+
+### 19.6 Error Handling
+
+- **No flows**: Display "No deployed flows found" message
+- **No runs**: Display "No runs found for this flow"
+- **API errors**: Display error message with retry option
+- **Log fetch failure**: Display "Unable to fetch logs" with error details
+
+### 19.7 File Structure
+
+```
+lokki/ui/
+├── __init__.py        # CLI command registration
+├── console.py         # Main Textual app
+├── screens.py         # Screen definitions
+├── widgets.py         # Reusable widgets
+└── api.py             # AWS API wrappers
+```
+
+### 19.8 Standalone CLI Entry Point
+
+The UI console is available as a standalone CLI after installing lokkiflow:
+
+```bash
+pip install lokkiflow
+lokki ui --flow weather
+lokki ui --flow weather --region eu-west-1
+lokki ui --flow weather --endpoint http://localhost:4566
+```
+
+Without installation, run via Python module:
+
+```bash
+python -m lokki.ui --flow weather
+```
+
+The `lokki` command is registered in `pyproject.toml`:
+
+```toml
+[project.scripts]
+lokki = "lokki.cli:main"
+```
+
+### 19.9 DynamoDB Metadata Storage
+
+Flow metadata is stored in DynamoDB for fast flow discovery and listing.
+
+**DynamoDB Table: `lokki-flows`**
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `flow_name` | String | Partition key - the flow name |
+| `arn` | String | Step Functions state machine ARN |
+| `region` | String | AWS region |
+| `stack_name` | String | CloudFormation stack name |
+| `deployed_at` | String | ISO timestamp of deployment |
+
+**Table Creation**
+
+The DynamoDB table must be created before deploying flows. It can be created via:
+
+```bash
+aws dynamodb create-table \
+  --table-name lokki-flows \
+  --attribute-definitions AttributeName=flow_name,AttributeType=S \
+  --key-schema AttributeName=flow_name,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+```
+
+Or via CloudFormation as a one-time setup.
+
+**Writing Metadata**
+
+On deployment, the CLI writes flow metadata to DynamoDB:
+
+```python
+dynamodb = boto3.client('dynamodb')
+dynamodb.put_item(
+    TableName='lokki-flows',
+    Item={
+        'flow_name': {'S': flow_name},
+        'arn': {'S': state_machine_arn},
+        'region': {'S': region},
+        'stack_name': {'S': stack_name},
+        'deployed_at': {'S': datetime.now().isoformat()},
+    }
+)
+```
+
+On destroy, the CLI removes flow metadata:
+
+```python
+dynamodb.delete_item(
+    TableName='lokki-flows',
+    Key={'flow_name': {'S': flow_name}}
+)
+```
+
+**Reading Metadata**
+
+The CLI lists flows by querying DynamoDB:
+
+```python
+response = dynamodb.scan(TableName='lokki-flows')
+flows = [item['flow_name']['S'] for item in response['Items']]
+```
+
+### 19.10 Run Log Isolation
+
+Each run uses a dedicated CloudWatch log stream for complete isolation:
+
+**Log Group**: `/aws/lambda/{flow_name}-{step_name}`
+
+**Log Stream**: `{run_id}`
+
+The Lambda function is configured with `awslogs-stream` environment variable:
+
+```json
+{
+  "Environment": {
+    "Variables": {
+      "LOKKI_RUN_ID": "$${Execution.Id}",
+      "AWS_LAMBDA_EXEC_WRAPPER": "/var/task/exec_wrapper.sh"
+    }
+  },
+  "LoggingConfig": {
+    "LogGroup": "/aws/lambda/${FlowName}-" + step_name,
+    "LogStream": "$${Execution.Id}"
+  }
+}
+```
+
+**Note**: `$$` in CloudFormation resolves to `$` (escaped for Fn::Sub).
+
+With each run having its own log stream:
+1. **Efficient retrieval**: Query specific stream by run_id
+2. **No filtering needed**: Direct stream access, no filter pattern
+3. **Complete isolation**: No interleaved logs from concurrent runs
+4. **Better performance**: Faster log fetch, especially for long runs
+
+The `run_id` is also included in JSON log messages for compatibility:
+
+```json
+{
+  "level": "INFO",
+  "ts": "2024-01-15T10:30:00Z",
+  "event": "step_complete",
+  "run_id": "exec-12345",
+  "step": "fetch",
+  "duration": 0.123,
+  "status": "success"
+}
+```
+
+### 19.11 Backward Compatibility
+
+The UI only queries tagged resources (`lokki:managed=true`). Untagged flows from older deployments are not displayed.
+
+---
+
+### 19.12 Dependencies
+
+- `textual>=0.100` — TUI framework
