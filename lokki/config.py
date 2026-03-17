@@ -27,7 +27,7 @@ import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 from lokki.decorators import PackageType, StoreType
 from lokki.logging import LoggingConfig

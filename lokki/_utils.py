@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Generator, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from lokki.graph import FlowGraph
@@ -41,7 +42,7 @@ def get_step_names(graph: FlowGraph) -> set[str]:
     return graph.step_names
 
 
-def timed(func: Callable[..., T]) -> Callable[..., T]:
+def timed[T](func: Callable[..., T]) -> Callable[..., T]:
     """Decorator that logs function execution duration.
 
     Automatically logs duration and metrics for the decorated function.
@@ -79,7 +80,7 @@ def timed(func: Callable[..., T]) -> Callable[..., T]:
 @contextmanager
 def timing_context(
     context_name: str, logger: logging.Logger | None = None
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Context manager for timing code blocks.
 
     Automatically logs duration and metrics for the code block.

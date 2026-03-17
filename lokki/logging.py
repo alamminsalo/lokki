@@ -217,8 +217,13 @@ class StepLogger:
         extra["exception_message"] = str(error)
         extra["retry_delay"] = delay
         self.logger.warning(
-            f"Step '{self.step_name}' retry {attempt}/{max_attempts} after {delay:.2f}s: {error}",
-            extra=extra,
+            "Step '%s' retry %d/%d after %.2fs: %s",
+            self.step_name,
+            attempt,
+            max_attempts,
+            delay,
+            error,
+            extra={**extra, "error": str(error)},
         )
 
 
@@ -357,7 +362,10 @@ class MapProgressLogger:
         extra["avg_item_time"] = timing_stats["avg_item_time"]
 
         self.logger.info(
-            f"Map '{self.step_name}' completed in {duration:.3f}s (avg={timing_stats['avg_item_time']:.2f}s/item)",
+            "Map '%s' completed in %.3fs (avg=%.2fs/item)",
+            self.step_name,
+            duration,
+            timing_stats["avg_item_time"],
             extra=extra,
         )
 
