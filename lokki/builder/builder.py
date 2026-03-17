@@ -30,7 +30,15 @@ def _get_flow_module_name(
     flow_fn: Callable[[], FlowGraph] | None,
     graph: FlowGraph,
 ) -> str:
-    """Get the flow module name for template generation."""
+    """Get the flow module name for template generation.
+
+    Args:
+        flow_fn: The flow function (optional).
+        graph: The flow graph.
+
+    Returns:
+        str: The module name for the flow.
+    """
     flow_module_path = _get_flow_module_path(flow_fn)
     if flow_module_path:
         return flow_module_path.stem
@@ -38,7 +46,14 @@ def _get_flow_module_name(
 
 
 def _has_lambda_steps(graph: FlowGraph) -> bool:
-    """Check if the graph contains any Lambda job steps."""
+    """Check if the graph contains any Lambda job steps.
+
+    Args:
+        graph: The flow graph to check.
+
+    Returns:
+        bool: True if the graph contains Lambda steps, False otherwise.
+    """
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             if entry.job_type != "batch":
@@ -54,7 +69,14 @@ def _has_lambda_steps(graph: FlowGraph) -> bool:
 
 
 def _has_batch_steps(graph: FlowGraph) -> bool:
-    """Check if the graph contains any Batch job steps."""
+    """Check if the graph contains any Batch job steps.
+
+    Args:
+        graph: The flow graph to check.
+
+    Returns:
+        bool: True if the graph contains Batch steps, False otherwise.
+    """
     for entry in graph.entries:
         if isinstance(entry, TaskEntry):
             if entry.job_type == "batch":
@@ -70,12 +92,19 @@ def _has_batch_steps(graph: FlowGraph) -> bool:
 
 
 def _package_deps(config: LokkiConfig) -> Path:
-    """
-    Collects dependencies into build_dir for ZIP deployments.
-    Returns package dir path.
+    """Collect dependencies into build_dir for ZIP deployments.
 
     For image deployments, this function returns an empty Path since
     dependencies are installed inside the Docker image.
+
+    Args:
+        config: Lokki configuration.
+
+    Returns:
+        Path: Path to the package directory.
+
+    Raises:
+        RuntimeError: If uv is not found or dependency installation fails.
     """
     build_dir = Path(config.build_dir)
 
