@@ -2,19 +2,51 @@
 
 from __future__ import annotations
 
-__all__ = ["step", "flow", "RetryConfig", "JobTypeConfig", "StepNode", "MapBlock"]
+__all__ = [
+    "step",
+    "flow",
+    "RetryConfig",
+    "JobTypeConfig",
+    "StepNode",
+    "MapBlock",
+    "JobType",
+    "PackageType",
+    "StoreType",
+]
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 if TYPE_CHECKING:
     from lokki.graph import FlowGraph
 
+JobType = Literal["lambda", "batch"]
+PackageType = Literal["image", "zip"]
+StoreType = Literal["local", "memory"]
+
+
+class RetryConfigDict(TypedDict, total=False):
+    """TypedDict for retry configuration."""
+
+    retries: int
+    delay: float
+    backoff: float
+    max_delay: float
+    exceptions: tuple[type, ...]
+
 
 @dataclass(slots=True)
 class RetryConfig:
-    """Configuration for step retry behavior."""
+    """Configuration for step retry behavior.
+
+    Attributes:
+        retries: Number of retry attempts (default: 0).
+        delay: Initial delay between retries in seconds (default: 1.0).
+        backoff: Multiplier for delay after each retry (default: 1.0).
+        max_delay: Maximum delay between retries in seconds (default: 60.0).
+        exceptions: Tuple of exception types that trigger retries (default: Exception).
+    """
 
     retries: int = 0
     delay: float = 1.0
@@ -23,6 +55,7 @@ class RetryConfig:
     exceptions: tuple[type, ...] = (Exception,)
 
     def __post_init__(self) -> None:
+        """Validate retry configuration values."""
         if self.retries < 0:
             raise ValueError("retries must be non-negative")
         if self.delay <= 0:
@@ -35,14 +68,22 @@ class RetryConfig:
 
 @dataclass(slots=True)
 class JobTypeConfig:
-    """Configuration for step execution backend (Lambda or Batch)."""
+    """Configuration for step execution backend (Lambda or Batch).
 
-    job_type: str = "lambda"  # "lambda" or "batch"
-    vcpu: int | None = None  # None = use global config
+    Attributes:
+        job_type: Execution backend - "lambda" or "batch" (default: "lambda").
+        vcpu: vCPUs for Batch jobs (default: None = use global config).
+        memory_mb: Memory in MB for Batch jobs (default: None = use global config).
+        timeout_seconds: Timeout for Batch jobs (default: None = use global config).
+    """
+
+    job_type: JobType = "lambda"
+    vcpu: int | None = None
     memory_mb: int | None = None
     timeout_seconds: int | None = None
 
     def __post_init__(self) -> None:
+        """Validate job type configuration values."""
         if self.job_type not in ("lambda", "batch"):
             raise ValueError("job_type must be 'lambda' or 'batch'")
         if self.vcpu is not None and self.vcpu <= 0:
@@ -69,22 +110,32 @@ class StepNode:
         job_type: Execution backend ("lambda" or "batch").
         vcpu: vCPUs for Batch jobs (overrides global config).
         memory_mb: Memory in MB for Batch jobs (overrides global config).
-        timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
+        timeout_seconds: Timeout for Batch jobs (overrides global config).
     """
 
     def __init__(
         self,
         fn: Callable[..., Any],
         retry: RetryConfig | None = None,
-        job_type: str = "lambda",
+        job_type: JobType = "lambda",
         vcpu: int | None = None,
         memory_mb: int | None = None,
         timeout_seconds: int | None = None,
     ) -> None:
+        """Initialize a StepNode.
+
+        Args:
+            fn: The function to wrap as a step.
+            retry: Optional retry configuration (default: RetryConfig()).
+            job_type: Execution backend - "lambda" or "batch".
+            vcpu: vCPUs for Batch jobs (default: None = use global config).
+            memory_mb: Memory in MB for Batch jobs (default: None = use global config).
+            timeout_seconds: Timeout for Batch jobs (default: None = use global config).
+        """
         self.fn = fn
         self.name = fn.__name__
         self.retry = retry or RetryConfig()
-        self.job_type = job_type
+        self.job_type: JobType = job_type
         self.vcpu = vcpu
         self.memory_mb = memory_mb
         self.timeout_seconds = timeout_seconds
@@ -245,7 +296,7 @@ def step(
     fn: Callable[..., Any] | None = None,
     *,
     retry: RetryConfig | dict[str, Any] | None = None,
-    job_type: str = "lambda",
+    job_type: JobType = "lambda",
     vcpu: int | None = None,
     memory_mb: int | None = None,
     timeout_seconds: int | None = None,
@@ -260,6 +311,18 @@ def step(
         vcpu: Number of vCPUs for Batch jobs (overrides global config).
         memory_mb: Memory in MB for Batch jobs (overrides global config).
         timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
+
+    Returns:
+        StepNode: A step node wrapping the function, or a decorator function.
+
+    Example:
+        @step
+        def process_data(data: dict) -> dict:
+            return {"processed": True}
+
+        @step(job_type="batch", vcpu=4, memory_mb=8192)
+        def heavy_computation(data: dict) -> dict:
+            return {"result": sum(data.values())}
     """
 
     def decorator(fn: Callable[..., Any]) -> StepNode:

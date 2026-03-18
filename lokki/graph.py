@@ -4,15 +4,23 @@ __all__ = ["TaskEntry", "MapOpenEntry", "MapCloseEntry", "GraphEntry", "FlowGrap
 
 from dataclasses import dataclass, field
 
-from lokki.decorators import MapBlock, StepNode
+from lokki.decorators import JobType, MapBlock, StepNode
 
 
 @dataclass(slots=True)
 class TaskEntry:
-    """A single task step in the execution graph."""
+    """A single task step in the execution graph.
+
+    Attributes:
+        node: The step node to execute.
+        job_type: Execution backend - "lambda" or "batch".
+        vcpu: vCPUs for Batch jobs (overrides global config).
+        memory_mb: Memory in MB for Batch jobs (overrides global config).
+        timeout_seconds: Timeout in seconds for Batch jobs (overrides global config).
+    """
 
     node: StepNode
-    job_type: str = "lambda"
+    job_type: JobType = "lambda"
     vcpu: int | None = None
     memory_mb: int | None = None
     timeout_seconds: int | None = None
@@ -20,18 +28,30 @@ class TaskEntry:
 
 @dataclass(slots=True)
 class MapOpenEntry:
-    """Opens a Map block with source and inner steps."""
+    """Opens a Map block with source and inner steps.
+
+    Attributes:
+        source: The step that produces the list of items to process.
+        inner_steps: Steps to run for each item in parallel.
+        concurrency_limit: Optional limit on parallel iterations.
+        has_aggregation: True if map block has .agg() step, False otherwise.
+        direct_pass: Pass results in memory between inner steps.
+    """
 
     source: StepNode
     inner_steps: list[StepNode] = field(default_factory=list)
     concurrency_limit: int | None = None
-    has_aggregation: bool = True  # False when map ends without .agg()
-    direct_pass: bool = False  # Pass results in memory between inner steps
+    has_aggregation: bool = True
+    direct_pass: bool = False
 
 
 @dataclass(slots=True, frozen=True)
 class MapCloseEntry:
-    """Closes a Map block with an aggregation step."""
+    """Closes a Map block with an aggregation step.
+
+    Attributes:
+        agg_step: The aggregation step that processes all map results.
+    """
 
     agg_step: StepNode
 
@@ -63,7 +83,14 @@ class FlowGraph:
         self._resolve_from_head(chain_start)
 
     def _find_chain_start(self, node: StepNode | MapBlock) -> StepNode:
-        """Find the true start of the chain by following back-references."""
+        """Find the true start of the chain by following back-references.
+
+        Args:
+            node: The starting node (StepNode or MapBlock).
+
+        Returns:
+            StepNode: The first node in the chain.
+        """
         if isinstance(node, MapBlock):
             return node.source
         if isinstance(node, StepNode):
@@ -83,7 +110,11 @@ class FlowGraph:
         return node
 
     def _resolve_from_head(self, head: StepNode) -> None:
-        """Walk the chain from the head and populate entries in execution order."""
+        """Walk the chain from the head and populate entries in execution order.
+
+        Args:
+            head: The starting StepNode of the chain.
+        """
         processed_nodes: set[int] = set()
         processed_blocks: set[int] = set()
 
@@ -131,7 +162,11 @@ class FlowGraph:
         self._validate()
 
     def _resolve_map_block(self, block: MapBlock) -> None:
-        """Resolve a MapBlock into MapOpenEntry and MapCloseEntry."""
+        """Resolve a MapBlock into MapOpenEntry and MapCloseEntry.
+
+        Args:
+            block: The MapBlock to resolve.
+        """
         inner_steps: list[StepNode] = []
         step: StepNode | None = block.inner_head
         while step is not None:
@@ -140,7 +175,7 @@ class FlowGraph:
                 break
             step = step._next
 
-        has_aggregation = block._closed  # True if .agg() was called
+        has_aggregation = block._closed
 
         self.entries.append(
             MapOpenEntry(
@@ -156,10 +191,37 @@ class FlowGraph:
             self.entries.append(MapCloseEntry(agg_step=block._next))
 
     def _validate(self) -> None:
-        """Validate the resolved graph for common errors."""
-        # Note: Nested .map() calls are not supported
-        # Each map must be closed with .agg() or end the flow
-        # Map blocks can end without .agg() for side-effect-only processing
+        """Validate the resolved graph for common errors.
+
+        Checks:
+        - No empty graphs (no entries)
+        - Map blocks have inner steps
+
+        Raises:
+            GraphValidationError: If graph validation fails
+        """
+        errors: list[str] = []
+
+        # Check for empty map blocks
+        for entry in self.entries:
+            if isinstance(entry, MapOpenEntry):
+                if not entry.inner_steps:
+                    errors.append(f"Map block '{entry.source.name}' has no inner steps")
+
+        # Check for unreachable steps (steps not in the main chain)
+        # This is already prevented by the graph resolution logic, but we check anyway
+        if not self.entries:
+            errors.append(
+                "Graph has no entries - flow function must return a step chain"
+            )
+
+        if errors:
+            from lokki._errors import GraphValidationError
+
+            raise GraphValidationError(
+                f"Graph validation failed for '{self.name}'",
+                errors,
+            )
 
     @property
     def step_names(self) -> set[str]:

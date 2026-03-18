@@ -155,8 +155,19 @@ The flow script is the entry point for all lokki operations.
 | `python flow_script.py build` | Package and generate all deployment artifacts for AWS Cloudformation |
 | `python flow_script.py deploy` | Build and deploy to AWS Cloudformation |
 | `python flow_script.py destroy` | Destroys the AWS Cloudformation stack of the flow |
-| `python flow_script.py status` | Retrieve and show information of last 10 flow runs on AWS |
+| `python flow_script.py show` | Retrieve and show information of last 10 flow runs on AWS |
 | `python flow_script.py logs` | Fetch the logs of a run or start log tailing |
+
+After installing lokkiflow with `pip install lokkiflow`, the standalone CLI provides additional commands:
+
+| Command | Description |
+|---|---|
+
+| `lokki list` | List all deployed flows |
+| `lokki runs <flow>` | List recent runs for a flow |
+| `lokki logs <flow> <run_id>` | Show logs for a specific run |
+
+The standalone CLI uses DynamoDB to track deployed flow metadata for fast listing.
 
 ---
 
@@ -219,6 +230,26 @@ ecr_repo_prefix = "123456789.dkr.ecr.eu-west-1.amazonaws.com/myproject"
        ImageTag=<image-tag>
    ```
 5. **Report** - Display stack status and output
+6. **Register Metadata** - Store flow metadata in DynamoDB for CLI discovery:
+   ```python
+   dynamodb.put_item(TableName='lokki-flows', Item={
+       'flow_name': flow_name,
+       'arn': state_machine_arn,
+       'deployed_at': timestamp,
+       'region': region,
+       'stack_name': stack_name,
+   })
+   ```
+
+### Metadata Storage
+
+lokki uses DynamoDB to store metadata about deployed flows for fast discovery and listing. The metadata table is created automatically during the first deployment.
+
+**DynamoDB Table: `lokki-flows`**
+- Partition Key: `flow_name` (String)
+- Attributes: `arn`, `deployed_at`, `region`, `stack_name`
+
+This enables the standalone CLI (`lokki list`, `lokki runs`) to quickly list flows without querying the Step Functions API.
 
 ### Output
 

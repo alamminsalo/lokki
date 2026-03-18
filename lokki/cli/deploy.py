@@ -12,10 +12,16 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from lokki._aws import get_cf_client, get_ecr_client, get_sts_client
+from lokki._aws import (
+    get_cf_client,
+    get_dynamodb_client,
+    get_ecr_client,
+    get_sts_client,
+)
 from lokki._errors import DeployError, DockerNotAvailableError
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,7 @@ class Deployer:
         self.cf_client = get_cf_client(region)
         self.ecr_client = get_ecr_client(region)
         self.sts_client = get_sts_client(region)
+        self.dynamodb_client = get_dynamodb_client(region, endpoint)
         self._account_id: str | None = None
 
     @property
@@ -325,6 +332,9 @@ class Deployer:
             self._wait_for_stack()
 
             outputs = self._get_stack_outputs()
+
+            self._register_flow_metadata(flow_name, outputs)
+
             print(f"✓ Deployed stack '{self.stack_name}'")
             for output in outputs:
                 if output["OutputKey"] == "StateMachineArn":
@@ -332,10 +342,16 @@ class Deployer:
 
         except self.cf_client.exceptions.AlreadyExistsException:
             print(f"Stack '{self.stack_name}' already exists")
+            # Still register metadata
+            outputs = self._get_stack_outputs()
+            self._register_flow_metadata(flow_name, outputs)
         except self.cf_client.exceptions.ClientError as e:
             error_message = str(e)
             if "No updates" in error_message:
                 print(f"Stack '{self.stack_name}' is up to date")
+                # Still register metadata
+                outputs = self._get_stack_outputs()
+                self._register_flow_metadata(flow_name, outputs)
             else:
                 raise DeployError(f"CloudFormation error: {error_message}") from e
 
@@ -373,3 +389,32 @@ class Deployer:
         stack = self.cf_client.describe_stacks(StackName=self.stack_name)["Stacks"][0]
         outputs: list[dict[str, Any]] = stack.get("Outputs", []) or []
         return outputs
+
+    def _register_flow_metadata(
+        self, flow_name: str, outputs: list[dict[str, Any]]
+    ) -> None:
+        """Register flow metadata in DynamoDB for CLI discovery."""
+        state_machine_arn = None
+        for output in outputs:
+            if output.get("OutputKey") == "StateMachineArn":
+                state_machine_arn = output.get("OutputValue")
+                break
+
+        if not state_machine_arn:
+            return
+
+        try:
+            self.dynamodb_client.put_item(
+                TableName="lokki-flows",
+                Item={
+                    "flow_name": {"S": flow_name},
+                    "arn": {"S": state_machine_arn},
+                    "region": {"S": self.region},
+                    "stack_name": {"S": self.stack_name},
+                    "deployed_at": {"S": datetime.now().isoformat()},
+                },
+            )
+            print("  Registered flow metadata in DynamoDB")
+        except Exception as e:
+            print(f"  DEBUG: Exception: {type(e).__name__}: {e}")
+            logger.warning(f"Failed to register flow metadata: {e}")

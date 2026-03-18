@@ -425,10 +425,6 @@ class TestIncludeConfiguration:
         )
         from lokki.config import IncludeConfig, LambdaConfig, LokkiConfig
 
-        @step
-        def dummy_step() -> int:
-            return 0
-
         flow_dir = tmp_path / "flow_dir"
         flow_dir.mkdir()
 
@@ -462,8 +458,15 @@ class TestIncludeConfiguration:
         sys.modules["test_flow"] = mock_module
 
         try:
+            # Create a minimal valid graph for testing - graph is not used by this function
+            # but we need a valid FlowGraph instance
+            @step
+            def dummy_step() -> int:
+                return 1
+
+            graph = FlowGraph(name="test", head=dummy_step)
             _generate_docker_packages(
-                graph=FlowGraph(name="test", head=dummy_step),
+                graph=graph,
                 config=config,
                 lambdas_dir=lambdas_dir,
                 flow_fn=mock_flow_fn,
@@ -487,10 +490,6 @@ class TestIncludeConfiguration:
         )
         from lokki.config import LambdaConfig, LokkiConfig
 
-        @step
-        def dummy_step() -> int:
-            return 0
-
         config = LokkiConfig()
         config.lambda_cfg = LambdaConfig(package_type="image")
         config.include.paths = []
@@ -499,7 +498,7 @@ class TestIncludeConfiguration:
         lambdas_dir.mkdir()
 
         _generate_docker_packages(
-            graph=FlowGraph(name="test", head=dummy_step),
+            graph=FlowGraph(name="test", head=None),
             config=config,
             lambdas_dir=lambdas_dir,
             flow_fn=None,
@@ -609,10 +608,6 @@ class TestIncludeConfiguration:
         )
         from lokki.config import LambdaConfig, LokkiConfig
 
-        @step
-        def dummy_step() -> int:
-            return 0
-
         config = LokkiConfig()
         config.lambda_cfg = LambdaConfig(package_type="image")
         config.include.paths = []
@@ -621,7 +616,7 @@ class TestIncludeConfiguration:
         lambdas_dir.mkdir()
 
         _generate_docker_packages(
-            graph=FlowGraph(name="test", head=dummy_step),
+            graph=FlowGraph(name="test", head=None),
             config=config,
             lambdas_dir=lambdas_dir,
             flow_fn=None,
@@ -636,10 +631,6 @@ class TestIncludeConfiguration:
             generate_batch_files,
         )
         from lokki.config import BatchConfig, IncludeConfig, LokkiConfig
-
-        @step
-        def dummy_step() -> int:
-            return 0
 
         flow_dir = tmp_path / "flow_dir"
         flow_dir.mkdir()
@@ -693,10 +684,6 @@ class TestIncludeConfiguration:
         )
         from lokki.config import IncludeConfig, LokkiConfig
 
-        @step
-        def dummy_step() -> int:
-            return 0
-
         flow_dir = tmp_path / "flow_dir"
         flow_dir.mkdir()
 
@@ -706,7 +693,7 @@ class TestIncludeConfiguration:
         def mock_flow_fn():
             from lokki.graph import FlowGraph
 
-            return FlowGraph(name="test", head=dummy_step)
+            return FlowGraph(name="test", head=None)
 
         import sys
         from types import ModuleType

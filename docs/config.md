@@ -99,6 +99,59 @@ store_type = "memory"  # Use in-memory store for faster local development
 
 ---
 
+## Secrets Configuration `[secrets]`
+
+AWS Secrets Manager integration for injecting secrets as environment variables into Lambda and Batch steps.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `secret_arns` | `dict[str, str]` | `{}` | Mapping of environment variable names to Secrets Manager ARNs |
+
+Secrets are fetched at CloudFormation deployment time and injected as environment variables. You can reference:
+- **Plain text secrets**: The entire secret value is injected
+- **JSON secrets with keys**: Specific keys from JSON secrets are injected
+
+```toml
+[secrets.secret_arns]
+# Plain text secret - entire secret value becomes DB_PASSWORD env var
+DB_PASSWORD = "arn:aws:secretsmanager:us-east-1:123456789:secret:my-db-password"
+
+# JSON secret with key - extracts "api_key" field and becomes API_KEY env var
+API_KEY = "arn:aws:secretsmanager:us-east-1:123456789:secret:my-api-config:SecretString:api_key"
+
+# Another JSON secret key
+DATABASE_URL = "arn:aws:secretsmanager:us-east-1:123456789:secret:my-db-config:SecretString:connection_string"
+```
+
+### Accessing Secrets in Steps
+
+Secrets are automatically available as environment variables in your step functions:
+
+```python
+import os
+from lokki import step
+
+@step
+def use_secret():
+    # Access secret via environment variable
+    db_password = os.environ["DB_PASSWORD"]
+    api_key = os.environ["API_KEY"]
+    return connect_to_database(password=db_password, api_key=api_key)
+```
+
+### IAM Permissions
+
+The Lambda and Batch execution roles are automatically granted `secretsmanager:GetSecretValue` permissions for the configured secrets.
+
+### Security Notes
+
+- Secret values are resolved at CloudFormation deployment time
+- Secrets are stored as environment variables in Lambda/Batch
+- Use secret ARNs (not names) for better security and versioning
+- Consider using secret rotation for sensitive credentials
+
+---
+
 ## Include Configuration `[include]`
 
 Static files to include in Docker images. Only applies to container images (`package_type = "image"`), not ZIP packages.
@@ -187,6 +240,10 @@ memory_mb = 8192
 [batch.env]
 BATCH_VAR = "value"
 
+[secrets.secret_arns]
+DB_PASSWORD = "arn:aws:secretsmanager:us-west-2:123456789:secret:my-db-password"
+API_KEY = "arn:aws:secretsmanager:us-west-2:123456789:secret:my-api-config:SecretString:api_key"
+
 [logging]
 level = "DEBUG"
 format = "json"
@@ -210,6 +267,8 @@ show_timestamps = true
 | `LOKKI_BATCH_JOB_DEFINITION` | AWS Batch job definition |
 | `LOKKI_STORE_TYPE` | Store type for local runner: `"local"` or `"memory"` |
 | `LOKKI_INCLUDE_PATHS` | Include paths (comma-separated glob patterns) |
+
+Note: Secrets configuration is only loaded from TOML files, not from environment variables, for security reasons.
 
 ---
 

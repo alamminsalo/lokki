@@ -13,6 +13,14 @@ from lokki.config import LokkiConfig
 from lokki.graph import FlowGraph, MapCloseEntry, MapOpenEntry, TaskEntry
 
 
+def _get_tags(flow_name: str) -> list[dict[str, str]]:
+    """Get standard lokki tags for resources."""
+    return [
+        {"Key": "lokki:managed", "Value": "true"},
+        {"Key": "lokki:flow-name", "Value": flow_name},
+    ]
+
+
 def build_template(
     graph: FlowGraph,
     config: LokkiConfig,
@@ -43,6 +51,50 @@ def build_template(
             "Default": config.batch_cfg.job_definition_name,
         }
 
+    lambda_policies = [
+        {
+            "PolicyName": "S3Access",
+            "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:PutObject",
+                            "s3:HeadObject",
+                        ],
+                        "Resource": [
+                            {
+                                "Fn::Sub": (
+                                    "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
+                                )
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+    ]
+
+    if config.secrets.secret_arns:
+        secret_arns = list(config.secrets.secret_arns.values())
+        lambda_policies.append(
+            {
+                "PolicyName": "SecretsManagerAccess",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": ["secretsmanager:GetSecretValue"],
+                            "Resource": secret_arns,
+                        }
+                    ],
+                },
+            }
+        )
+
     resources["LambdaExecutionRole"] = {
         "Type": "AWS::IAM::Role",
         "Properties": {
@@ -59,31 +111,8 @@ def build_template(
             "ManagedPolicyArns": [
                 "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
             ],
-            "Policies": [
-                {
-                    "PolicyName": "S3Access",
-                    "PolicyDocument": {
-                        "Version": "2012-10-17",
-                        "Statement": [
-                            {
-                                "Effect": "Allow",
-                                "Action": [
-                                    "s3:GetObject",
-                                    "s3:PutObject",
-                                    "s3:HeadObject",
-                                ],
-                                "Resource": [
-                                    {
-                                        "Fn::Sub": (
-                                            "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
-                                        )
-                                    }
-                                ],
-                            }
-                        ],
-                    },
-                }
-            ],
+            "Policies": lambda_policies,
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
@@ -157,6 +186,11 @@ def build_template(
             "LOKKI_MODULE_NAME": module_name,
         }
         env_vars.update(config.lambda_cfg.env)
+        if config.secrets.secret_arns:
+            env_vars.update(_build_secrets_environment(config))
+
+        log_group = {"Fn::Sub": f"/aws/lambda/${{FlowName}}-{step_name}"}
+        log_stream = "${aws:executionId}"
 
         if package_type == "zip":
             resources[to_pascal(step_name) + "Function"] = {
@@ -177,6 +211,11 @@ def build_template(
                     "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
                     "Handler": "handler.lambda_handler",
+                    "Tags": _get_tags("${FlowName}"),
+                    "LoggingConfig": {
+                        "LogGroup": log_group,
+                        "LogStream": log_stream,
+                    },
                 },
             }
         else:
@@ -193,6 +232,11 @@ def build_template(
                     "Timeout": timeout,
                     "MemorySize": memory,
                     "Environment": {"Variables": env_vars},
+                    "Tags": _get_tags("${FlowName}"),
+                    "LoggingConfig": {
+                        "LogGroup": log_group,
+                        "LogStream": log_stream,
+                    },
                 },
             }
             if job_type == "batch":
@@ -261,11 +305,74 @@ def build_template(
                     },
                 },
             ],
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
     if has_batch_steps:
         batch_image = config.batch_cfg.image or "${ECRRepoPrefix}/lokki:${ImageTag}"
+
+        batch_policies = [
+            {
+                "PolicyName": "S3Access",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetObject",
+                                "s3:PutObject",
+                                "s3:HeadObject",
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Sub": (
+                                        "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
+                                    )
+                                }
+                            ],
+                        }
+                    ],
+                },
+            },
+            {
+                "PolicyName": "LogsAccess",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                            ],
+                            "Resource": "*",
+                        }
+                    ],
+                },
+            },
+        ]
+
+        if config.secrets.secret_arns:
+            secret_arns = list(config.secrets.secret_arns.values())
+            batch_policies.append(
+                {
+                    "PolicyName": "SecretsManagerAccess",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": ["secretsmanager:GetSecretValue"],
+                                "Resource": secret_arns,
+                            }
+                        ],
+                    },
+                }
+            )
+
         resources["BatchExecutionRole"] = {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -279,48 +386,8 @@ def build_template(
                         }
                     ],
                 },
-                "Policies": [
-                    {
-                        "PolicyName": "S3Access",
-                        "PolicyDocument": {
-                            "Version": "2012-10-17",
-                            "Statement": [
-                                {
-                                    "Effect": "Allow",
-                                    "Action": [
-                                        "s3:GetObject",
-                                        "s3:PutObject",
-                                        "s3:HeadObject",
-                                    ],
-                                    "Resource": [
-                                        {
-                                            "Fn::Sub": (
-                                                "arn:aws:s3:::${S3Bucket}/lokki/${FlowName}/*"
-                                            )
-                                        }
-                                    ],
-                                }
-                            ],
-                        },
-                    },
-                    {
-                        "PolicyName": "LogsAccess",
-                        "PolicyDocument": {
-                            "Version": "2012-10-17",
-                            "Statement": [
-                                {
-                                    "Effect": "Allow",
-                                    "Action": [
-                                        "logs:CreateLogGroup",
-                                        "logs:CreateLogStream",
-                                        "logs:PutLogEvents",
-                                    ],
-                                    "Resource": "*",
-                                }
-                            ],
-                        },
-                    },
-                ],
+                "Policies": batch_policies,
+                "Tags": _get_tags("${FlowName}"),
             },
         }
 
@@ -345,6 +412,7 @@ def build_template(
                         },
                     },
                 },
+                "Tags": _get_tags("${FlowName}"),
                 "RetryStrategy": {"Attempts": 1},
             },
         }
@@ -380,6 +448,7 @@ def build_template(
             "DefinitionString": {"Fn::Sub": definition_string},
             "RoleArn": {"Fn::GetAtt": ["StepFunctionsExecutionRole", "Arn"]},
             "StateMachineName": {"Fn::Sub": "${FlowName}"},
+            "Tags": _get_tags("${FlowName}"),
         },
     }
 
@@ -436,6 +505,16 @@ def build_template(
         "Description": f"Lokki flow: {graph.name}",
         "Parameters": parameters,
         "Resources": resources,
+        "Outputs": {
+            "StateMachineArn": {
+                "Description": "Step Functions State Machine ARN",
+                "Value": {"Fn::GetAtt": ["StateMachine", "Arn"]},
+            },
+            "StateMachineName": {
+                "Description": "Step Functions State Machine Name",
+                "Value": {"Ref": "FlowName"},
+            },
+        },
     }
 
     return yaml.dump(template, default_flow_style=False, sort_keys=False)
@@ -466,4 +545,33 @@ def _build_batch_environment(config: LokkiConfig) -> list[dict[str, Any]]:
     ]
     for key, value in config.batch_cfg.env.items():
         env.append({"Name": key, "Value": value})
+    for key, value in _build_secrets_environment(config).items():
+        env.append({"Name": key, "Value": value})
     return env
+
+
+def _build_secrets_environment(config: LokkiConfig) -> dict[str, Any]:
+    """Build environment variables from Secrets Manager ARNs.
+
+    Returns a dict mapping env var names to CloudFormation dynamic
+    reference strings. Supports both plain secrets and JSON secrets
+    with specific keys.
+
+    Example secret_arns config:
+        MY_PASSWORD = "arn:aws:secretsmanager:...:secret:my-secret"
+        API_KEY = "arn:aws:secretsmanager:...:secret:my-secret:SecretString:api_key"
+    """
+    secret_env_vars = {}
+    for env_var_name, secret_arn in config.secrets.secret_arns.items():
+        if ":SecretString:" in secret_arn:
+            parts = secret_arn.split(":SecretString:", 1)
+            arn = parts[0]
+            key = parts[1]
+            secret_env_vars[env_var_name] = (
+                f"{{{{resolve:secretsmanager:{arn}:SecretString:{key}}}}}"
+            )
+        else:
+            secret_env_vars[env_var_name] = (
+                f"{{{{resolve:secretsmanager:{secret_arn}:SecretString}}}}"
+            )
+    return secret_env_vars

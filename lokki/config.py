@@ -16,17 +16,24 @@ __all__ = [
     "LocalConfig",
     "LoggingConfig",
     "IncludeConfig",
+    "SecretsConfig",
     "LokkiConfig",
     "load_config",
+    "PackageType",
+    "Architecture",
+    "StoreType",
 ]
 
 import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from lokki.decorators import PackageType, StoreType
 from lokki.logging import LoggingConfig
+
+Architecture = Literal["x86_64", "arm64"]
 
 GLOBAL_CONFIG_PATH = Path.home() / ".lokki" / "lokki.toml"
 LOCAL_CONFIG_PATH = Path.cwd() / "lokki.toml"
@@ -69,16 +76,17 @@ class LambdaConfig:
         env: Environment variables passed to Lambda functions.
     """
 
-    package_type: str = "image"  # "image" or "zip"
+    package_type: PackageType = "image"
     base_image: str = "public.ecr.aws/lambda/python:3.13"
     python_version: str = "3.13"
     timeout: int = 900
     memory: int = 512
     image_tag: str = "latest"
-    architecture: str = "x86_64"
+    architecture: Architecture = "x86_64"
     env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Validate Lambda configuration values."""
         if self.package_type not in ("image", "zip"):
             raise ValueError(
                 f"package_type must be 'image' or 'zip', got '{self.package_type}'"
@@ -122,10 +130,11 @@ class BatchConfig:
     vcpu: int = 2
     memory_mb: int = 4096
     image: str = ""
-    architecture: str = "x86_64"
+    architecture: Architecture = "x86_64"
     env: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Validate Batch configuration values."""
         if self.vcpu <= 0:
             raise ValueError(f"vcpu must be positive, got {self.vcpu}")
         if self.memory_mb <= 0:
@@ -159,13 +168,25 @@ class LocalConfig:
         store_type: Store type for local runner: "local" or "memory".
     """
 
-    store_type: str = "local"
+    store_type: StoreType = "local"
 
     def __post_init__(self) -> None:
+        """Validate local configuration values."""
         if self.store_type not in ("local", "memory"):
             raise ValueError(
                 f"store_type must be 'local' or 'memory', got '{self.store_type}'"
             )
+
+
+@dataclass(slots=True)
+class SecretsConfig:
+    """AWS Secrets Manager configuration.
+
+    Attributes:
+        secret_arns: Mapping of env var names to Secrets Manager ARNs.
+    """
+
+    secret_arns: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -203,6 +224,7 @@ class LokkiConfig:
     batch_cfg: BatchConfig = field(default_factory=BatchConfig)
     local_cfg: LocalConfig = field(default_factory=LocalConfig)
     include: IncludeConfig = field(default_factory=IncludeConfig)
+    secrets: SecretsConfig = field(default_factory=SecretsConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -215,6 +237,7 @@ class LokkiConfig:
         logging_config = d.get("logging", {})
         local_config = d.get("local", {})
         include_config = d.get("include", {})
+        secrets_config = d.get("secrets", {})
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
@@ -252,6 +275,9 @@ class LokkiConfig:
             progress_interval=logging_config.get("progress_interval", 10),
             show_timestamps=logging_config.get("show_timestamps", True),
         )
+        secrets_cfg = SecretsConfig(
+            secret_arns=secrets_config.get("secret_arns", {}),
+        )
         return cls(
             build_dir=d.get("build_dir", "lokki-build"),
             artifact_bucket=aws_config.get("artifact_bucket", ""),
@@ -264,6 +290,7 @@ class LokkiConfig:
             batch_cfg=batch_cfg,
             local_cfg=local_cfg,
             include=include_cfg,
+            secrets=secrets_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )
@@ -299,7 +326,7 @@ def load_config() -> LokkiConfig:
     if env_batch_def := os.environ.get("LOKKI_BATCH_JOB_DEFINITION"):
         config.batch_cfg.job_definition_name = env_batch_def
     if env_store_type := os.environ.get("LOKKI_STORE_TYPE"):
-        config.local_cfg.store_type = env_store_type
+        config.local_cfg.store_type = env_store_type  # type: ignore[assignment]
     if env_include := os.environ.get("LOKKI_INCLUDE_PATHS"):
         config.include.paths = [p.strip() for p in env_include.split(",") if p.strip()]
 
