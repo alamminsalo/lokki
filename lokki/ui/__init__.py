@@ -25,9 +25,6 @@ def main() -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # ui command - interactive TUI
-    subparsers.add_parser("ui", help="Open interactive UI console")
-
     # list command - list flows
     list_parser = subparsers.add_parser("list", help="List all deployed flows")
     list_parser.add_argument(
@@ -76,16 +73,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        if args.command == "ui":
-            from lokki.ui.console import run_ui
-
-            return run_ui(
-                flow_name=None,
-                region=args.region,
-                endpoint=args.endpoint,
-            )
-
-        elif args.command == "list":
+        if args.command == "list":
             from lokki.ui.api import list_flows
 
             flows = list_flows(

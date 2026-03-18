@@ -162,7 +162,7 @@ After installing lokkiflow with `pip install lokkiflow`, the standalone CLI prov
 
 | Command | Description |
 |---|---|
-| `lokki ui` | Open interactive UI console for browsing flows, runs, and logs |
+
 | `lokki list` | List all deployed flows |
 | `lokki runs <flow>` | List recent runs for a flow |
 | `lokki logs <flow> <run_id>` | Show logs for a specific run |

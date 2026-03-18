@@ -16,6 +16,7 @@ __all__ = [
     "LocalConfig",
     "LoggingConfig",
     "IncludeConfig",
+    "SecretsConfig",
     "LokkiConfig",
     "load_config",
     "PackageType",
@@ -178,6 +179,17 @@ class LocalConfig:
 
 
 @dataclass(slots=True)
+class SecretsConfig:
+    """AWS Secrets Manager configuration.
+
+    Attributes:
+        secret_arns: Mapping of env var names to Secrets Manager ARNs.
+    """
+
+    secret_arns: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class LokkiConfig:
     """Main lokki configuration.
 
@@ -212,6 +224,7 @@ class LokkiConfig:
     batch_cfg: BatchConfig = field(default_factory=BatchConfig)
     local_cfg: LocalConfig = field(default_factory=LocalConfig)
     include: IncludeConfig = field(default_factory=IncludeConfig)
+    secrets: SecretsConfig = field(default_factory=SecretsConfig)
     flow_name: str = ""
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -224,6 +237,7 @@ class LokkiConfig:
         logging_config = d.get("logging", {})
         local_config = d.get("local", {})
         include_config = d.get("include", {})
+        secrets_config = d.get("secrets", {})
 
         lambda_cfg = LambdaConfig(
             package_type=lambda_config.get("package_type", "image"),
@@ -261,6 +275,9 @@ class LokkiConfig:
             progress_interval=logging_config.get("progress_interval", 10),
             show_timestamps=logging_config.get("show_timestamps", True),
         )
+        secrets_cfg = SecretsConfig(
+            secret_arns=secrets_config.get("secret_arns", {}),
+        )
         return cls(
             build_dir=d.get("build_dir", "lokki-build"),
             artifact_bucket=aws_config.get("artifact_bucket", ""),
@@ -273,6 +290,7 @@ class LokkiConfig:
             batch_cfg=batch_cfg,
             local_cfg=local_cfg,
             include=include_cfg,
+            secrets=secrets_cfg,
             flow_name=d.get("flow_name", ""),
             logging=logging_cfg,
         )

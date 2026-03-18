@@ -2681,22 +2681,7 @@ lokki/ui/
 └── api.py             # AWS API wrappers
 ```
 
-### 19.8 Standalone CLI Entry Point
-
-The UI console is available as a standalone CLI after installing lokkiflow:
-
-```bash
-pip install lokkiflow
-lokki ui --flow weather
-lokki ui --flow weather --region eu-west-1
-lokki ui --flow weather --endpoint http://localhost:4566
-```
-
-Without installation, run via Python module:
-
-```bash
-python -m lokki.ui --flow weather
-```
+### 19.8 CLI Entry Point
 
 The `lokki` command is registered in `pyproject.toml`:
 

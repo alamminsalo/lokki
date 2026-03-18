@@ -393,3 +393,51 @@ class TestIncludeConfig:
 
         config = LokkiConfig.from_dict({})
         assert config.include.paths == []
+
+
+class TestSecretsConfig:
+    """Tests for SecretsConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test SecretsConfig default values."""
+        from lokki.config import SecretsConfig
+
+        config = SecretsConfig()
+        assert config.secret_arns == {}
+
+    def test_from_dict_with_secrets(self) -> None:
+        """Test SecretsConfig from_dict with secret ARNs."""
+        from lokki.config import LokkiConfig
+
+        db_pwd_arn = "arn:aws:secretsmanager:us-east-1:123:secret:my-db-password"
+        api_key_arn = (
+            "arn:aws:secretsmanager:us-east-1:123:secret:my-api-config"
+            ":SecretString:api_key"
+        )
+        d = {
+            "secrets": {
+                "secret_arns": {
+                    "DB_PASSWORD": db_pwd_arn,
+                    "API_KEY": api_key_arn,
+                }
+            }
+        }
+        config = LokkiConfig.from_dict(d)
+        assert config.secrets.secret_arns == {
+            "DB_PASSWORD": db_pwd_arn,
+            "API_KEY": api_key_arn,
+        }
+
+    def test_from_dict_no_secrets(self) -> None:
+        """Test SecretsConfig from_dict with no secrets section."""
+        from lokki.config import LokkiConfig
+
+        config = LokkiConfig.from_dict({})
+        assert config.secrets.secret_arns == {}
+
+    def test_from_dict_empty_secrets(self) -> None:
+        """Test SecretsConfig from_dict with empty secrets section."""
+        from lokki.config import LokkiConfig
+
+        config = LokkiConfig.from_dict({"secrets": {}})
+        assert config.secrets.secret_arns == {}

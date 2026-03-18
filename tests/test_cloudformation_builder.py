@@ -503,3 +503,154 @@ class TestBuildTemplateOutputs:
         output = template["Outputs"]["StateMachineName"]
 
         assert output["Description"] == "Step Functions State Machine Name"
+
+
+class TestBuildTemplateWithSecrets:
+    """Tests for build_template with AWS Secrets Manager integration."""
+
+    def test_template_with_secrets_lambda_env_vars(self) -> None:
+        """Test that secrets are added to Lambda environment variables."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        db_pwd_arn = "arn:aws:secretsmanager:us-east-1:123:secret:my-db-password"
+        api_key_arn = (
+            "arn:aws:secretsmanager:us-east-1:123:secret:my-api-config"
+            ":SecretString:api_key"
+        )
+        config = LokkiConfig.from_dict(
+            {
+                "secrets": {
+                    "secret_arns": {"DB_PASSWORD": db_pwd_arn, "API_KEY": api_key_arn}
+                }
+            }
+        )
+        template_str = build_template(graph, config, "test_module", create_build_dir())
+        template = yaml.safe_load(template_str)
+
+        step1_func = template["Resources"]["Step1Function"]["Properties"]
+        env_vars = step1_func["Environment"]["Variables"]
+
+        assert "DB_PASSWORD" in env_vars
+        assert "API_KEY" in env_vars
+        assert "secretsmanager" in env_vars["DB_PASSWORD"]
+        assert "secretsmanager" in env_vars["API_KEY"]
+
+    def test_template_with_secrets_iam_policy(self) -> None:
+        """Test that IAM policy is added for Secrets Manager access."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        db_pwd_arn = "arn:aws:secretsmanager:us-east-1:123:secret:my-db-password"
+        config = LokkiConfig.from_dict(
+            {"secrets": {"secret_arns": {"DB_PASSWORD": db_pwd_arn}}}
+        )
+        template_str = build_template(graph, config, "test_module", create_build_dir())
+        template = yaml.safe_load(template_str)
+
+        lambda_role = template["Resources"]["LambdaExecutionRole"]["Properties"]
+        policies = lambda_role["Policies"]
+
+        secrets_policy = None
+        for policy in policies:
+            if policy["PolicyName"] == "SecretsManagerAccess":
+                secrets_policy = policy
+                break
+
+        assert secrets_policy is not None
+        assert secrets_policy["PolicyDocument"]["Statement"][0]["Action"] == [
+            "secretsmanager:GetSecretValue"
+        ]
+        assert (
+            db_pwd_arn in secrets_policy["PolicyDocument"]["Statement"][0]["Resource"]
+        )
+
+    def test_template_without_secrets_no_policy(self) -> None:
+        """Test that no Secrets Manager policy is added when no secrets configured."""
+
+        @step
+        def step1() -> None:
+            pass
+
+        graph = FlowGraph(name="test-flow", head=step1)
+        config = LokkiConfig()
+        template_str = build_template(graph, config, "test_module", create_build_dir())
+        template = yaml.safe_load(template_str)
+
+        lambda_role = template["Resources"]["LambdaExecutionRole"]["Properties"]
+        policies = lambda_role["Policies"]
+
+        for policy in policies:
+            assert policy["PolicyName"] != "SecretsManagerAccess"
+
+    def test_template_with_secrets_batch_env_vars(self) -> None:
+        """Test that secrets are added to Batch environment variables."""
+
+        @step(job_type="batch")
+        def batch_step() -> None:
+            pass
+
+        @step
+        def get_items() -> list[str]:
+            return ["a"]
+
+        get_items().map(batch_step).agg(batch_step)
+        graph = FlowGraph(name="test-flow", head=batch_step)
+        db_pwd_arn = "arn:aws:secretsmanager:us-east-1:123:secret:my-db-password"
+        config = LokkiConfig.from_dict(
+            {"secrets": {"secret_arns": {"DB_PASSWORD": db_pwd_arn}}}
+        )
+        template_str = build_template(graph, config, "test_module", create_build_dir())
+        template = yaml.safe_load(template_str)
+
+        batch_job_def = template["Resources"]["BatchJobDefinition"]["Properties"]
+        env_vars = batch_job_def["ContainerProperties"]["Environment"]
+
+        db_password_env = None
+        for env_var in env_vars:
+            if env_var["Name"] == "DB_PASSWORD":
+                db_password_env = env_var
+                break
+
+        assert db_password_env is not None
+        assert "secretsmanager" in db_password_env["Value"]
+
+    def test_template_with_secrets_batch_iam_policy(self) -> None:
+        """Test that IAM policy is added for Batch Secrets Manager access."""
+
+        @step(job_type="batch")
+        def batch_step() -> None:
+            pass
+
+        @step
+        def get_items() -> list[str]:
+            return ["a"]
+
+        get_items().map(batch_step).agg(batch_step)
+        graph = FlowGraph(name="test-flow", head=batch_step)
+        db_pwd_arn = "arn:aws:secretsmanager:us-east-1:123:secret:my-db-password"
+        config = LokkiConfig.from_dict(
+            {"secrets": {"secret_arns": {"DB_PASSWORD": db_pwd_arn}}}
+        )
+        template_str = build_template(graph, config, "test_module", create_build_dir())
+        template = yaml.safe_load(template_str)
+
+        batch_role = template["Resources"]["BatchExecutionRole"]["Properties"]
+        policies = batch_role["Policies"]
+
+        secrets_policy = None
+        for policy in policies:
+            if policy["PolicyName"] == "SecretsManagerAccess":
+                secrets_policy = policy
+                break
+
+        assert secrets_policy is not None
+        assert secrets_policy["PolicyDocument"]["Statement"][0]["Action"] == [
+            "secretsmanager:GetSecretValue"
+        ]
